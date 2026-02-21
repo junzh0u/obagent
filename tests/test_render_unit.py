@@ -131,6 +131,26 @@ def test_no_llm_json_no_entries(runner, vault):
     assert "Title:" not in result.output
 
 
+def test_render_single_sha256(runner, vault):
+    """When sha256 argument is given, only that entry is rendered."""
+    _setup_entry_with_llm(
+        vault, sha="target", merchant="Target Shop", date="2024-03-01", total="$20.00"
+    )
+    _setup_entry_with_llm(
+        vault, sha="other", merchant="Other Shop", date="2024-04-01", total="$30.00"
+    )
+
+    result = runner.invoke(
+        render,
+        ["target"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert (vault / "papers" / "2024-03-01 - Target Shop - $20.00.md").exists()
+    assert not (vault / "papers" / "2024-04-01 - Other Shop - $30.00.md").exists()
+
+
 def test_render_picks_newest_llm_json(runner, vault):
     """When multiple LLM json files exist, the newest by mtime is used."""
     target_dir = vault / "papers" / "_assets_" / "sha6"

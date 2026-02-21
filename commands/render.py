@@ -61,14 +61,19 @@ def render_note(target_dir):
     is_flag=True,
     help="Delete all .md notes and re-render from LLM metadata.",
 )
+@click.argument("sha256", required=False)
 @click.pass_context
-def render(ctx, overwrite):
+def render(ctx, overwrite, sha256):
     """Render Obsidian notes from LLM-extracted metadata."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    if overwrite:
-        clear_notes(vault / path)
-    for target_dir in iter_entries(vault, path):
+    if sha256:
+        entries = [vault / path / ASSETS_DIR / sha256]
+    else:
+        if overwrite:
+            clear_notes(vault / path)
+        entries = iter_entries(vault, path)
+    for target_dir in entries:
         click.secho(f"Render: {target_dir}", bold=True)
         try:
             render_note(target_dir)
