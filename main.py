@@ -1,6 +1,7 @@
 import click
 
 from commands.consume import consume
+from commands.remove import remove
 from commands.ingest import ingest
 from commands.llm import llm
 from commands.ocr import ocr
@@ -35,6 +36,7 @@ def receipt(ctx, path):
 
 
 receipt.add_command(consume)
+receipt.add_command(remove)
 receipt.add_command(ingest)
 receipt.add_command(ocr)
 receipt.add_command(llm)
