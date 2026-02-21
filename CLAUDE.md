@@ -24,3 +24,10 @@ uv run obagent       # Run the CLI
 - Formatter/linter: **ruff** (dev dependency)
 - Pre-commit hook runs `ruff format --check` and `ruff check`
 - Always run `uv run ruff format .` before committing
+
+## Testing
+
+- Always write unit tests and integration tests whenever applicable
+- Test framework: **pytest** (dev dependency)
+- Tests live in `tests/` with shared fixtures in `tests/conftest.py`
+- Run tests: `uv run pytest tests/ -v`
