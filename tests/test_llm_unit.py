@@ -136,6 +136,26 @@ def test_llm_custom_model(mock_openai_cls, runner, vault):
 
 
 @patch("commands.llm.OpenAI")
+def test_llm_single_sha256(mock_openai_cls, runner, vault):
+    """When sha256 argument is given, only that entry is processed."""
+    setup_mock_openai(mock_openai_cls)
+    _setup_entry_with_ocr(vault, sha="target")
+    _setup_entry_with_ocr(vault, sha="other")
+
+    result = runner.invoke(
+        llm,
+        ["--openai-api-key", "test-key", "target"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert (
+        vault / "papers" / "_assets_" / "target" / "llm" / f"{LLM_MODEL}.json"
+    ).exists()
+    assert not (vault / "papers" / "_assets_" / "other" / "llm").exists()
+
+
+@patch("commands.llm.OpenAI")
 def test_llm_picks_newest_ocr_txt(mock_openai_cls, runner, vault):
     """When multiple OCR txt files exist, the newest by mtime is used."""
     setup_mock_openai(mock_openai_cls)

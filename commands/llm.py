@@ -4,7 +4,7 @@ from pathlib import Path
 import click
 from openai import OpenAI
 
-from constants import LLM_MODEL
+from constants import ASSETS_DIR, LLM_MODEL
 from utils import iter_entries, newest_file
 
 
@@ -70,12 +70,17 @@ def extract_fields(target_dir, api_key, path, *, model=LLM_MODEL, overwrite=Fals
     help="OpenAI model name for field extraction.",
 )
 @click.option("--overwrite", is_flag=True, help="Overwrite existing markdown files.")
+@click.argument("sha256", required=False)
 @click.pass_context
-def llm(ctx, openai_api_key, llm_model, overwrite):
+def llm(ctx, openai_api_key, llm_model, overwrite, sha256):
     """Extract metadata via LLM from OCR'd entries in the vault."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    for target_dir in iter_entries(vault, path):
+    if sha256:
+        entries = [vault / path / ASSETS_DIR / sha256]
+    else:
+        entries = iter_entries(vault, path)
+    for target_dir in entries:
         click.secho(f"LLM: {target_dir}", bold=True)
         try:
             extract_fields(
