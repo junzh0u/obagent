@@ -5,13 +5,14 @@ from commands.consume import consume
 from tests.conftest import BOTH_KEYS
 
 
-@patch("commands.consume.extract_title")
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
-def test_calls_all_three_steps(
-    mock_ingest, mock_ocr, mock_llm, runner, vault, source_dir
+def test_calls_all_four_steps(
+    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
 ):
-    """consume calls ingest_pdf, run_ocr, and extract_title in sequence."""
+    """consume calls ingest_pdf, run_ocr, extract_fields, and render_note in sequence."""
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     target_dir = vault / "papers" / "sha"
@@ -30,15 +31,17 @@ def test_calls_all_three_steps(
     mock_llm.assert_called_once_with(
         target_dir, "test-oai-key", "ocr text", "papers", overwrite=False
     )
+    mock_render.assert_called_once_with(target_dir, overwrite=False)
 
 
-@patch("commands.consume.extract_title")
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
-def test_skips_ocr_and_llm_when_ingest_returns_none(
-    mock_ingest, mock_ocr, mock_llm, runner, vault, source_dir
+def test_skips_ocr_llm_render_when_ingest_returns_none(
+    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
 ):
-    """When ingest_pdf returns None (duplicate), OCR and LLM are skipped."""
+    """When ingest_pdf returns None (duplicate), OCR, LLM, and render are skipped."""
     pdf = source_dir / "dup.pdf"
     pdf.write_bytes(b"dup")
     mock_ingest.return_value = None
@@ -53,15 +56,17 @@ def test_skips_ocr_and_llm_when_ingest_returns_none(
     mock_ingest.assert_called_once()
     mock_ocr.assert_not_called()
     mock_llm.assert_not_called()
+    mock_render.assert_not_called()
 
 
-@patch("commands.consume.extract_title")
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
 def test_handles_llm_exception(
-    mock_ingest, mock_ocr, mock_llm, runner, vault, source_dir
+    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
 ):
-    """LLM exceptions are caught and printed as warnings."""
+    """LLM exceptions are caught, render is skipped for that entry."""
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     mock_ingest.return_value = vault / "papers" / "sha"
@@ -75,13 +80,42 @@ def test_handles_llm_exception(
     )
 
     assert result.exit_code == 0
-    assert "Warning: title extraction failed: API error" in result.output
+    assert "Warning: field extraction failed: API error" in result.output
+    mock_render.assert_not_called()
 
 
-@patch("commands.consume.extract_title")
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
-def test_forwards_flags(mock_ingest, mock_ocr, mock_llm, runner, vault, source_dir):
+def test_handles_render_exception(
+    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+):
+    """Render exceptions are caught and printed as warnings."""
+    pdf = source_dir / "doc.pdf"
+    pdf.write_bytes(b"test")
+    mock_ingest.return_value = vault / "papers" / "sha"
+    mock_ocr.return_value = "ocr text"
+    mock_render.side_effect = ValueError("Template error")
+
+    result = runner.invoke(
+        consume,
+        [*BOTH_KEYS, str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert "Warning: note rendering failed: Template error" in result.output
+    mock_llm.assert_called_once()
+
+
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
+@patch("commands.consume.run_ocr")
+@patch("commands.consume.ingest_pdf")
+def test_forwards_flags(
+    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+):
     """--keep-original and --overwrite are forwarded to sub-functions."""
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
@@ -103,15 +137,17 @@ def test_forwards_flags(mock_ingest, mock_ocr, mock_llm, runner, vault, source_d
     mock_llm.assert_called_once_with(
         target_dir, "test-oai-key", "ocr text", "papers", overwrite=True
     )
+    mock_render.assert_called_once_with(target_dir, overwrite=True)
 
 
-@patch("commands.consume.extract_title")
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
 def test_processes_multiple_pdfs(
-    mock_ingest, mock_ocr, mock_llm, runner, vault, source_dir
+    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
 ):
-    """Multiple PDFs are each processed through all 3 steps."""
+    """Multiple PDFs are each processed through all 4 steps."""
     for name in ["a.pdf", "b.pdf", "c.pdf"]:
         (source_dir / name).write_bytes(name.encode())
 
@@ -129,13 +165,15 @@ def test_processes_multiple_pdfs(
     assert mock_ingest.call_count == 3
     assert mock_ocr.call_count == 3
     assert mock_llm.call_count == 3
+    assert mock_render.call_count == 3
 
 
-@patch("commands.consume.extract_title")
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
 def test_no_pdfs_does_nothing(
-    mock_ingest, mock_ocr, mock_llm, runner, vault, source_dir
+    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
 ):
     """An empty source directory calls nothing."""
     result = runner.invoke(
@@ -148,3 +186,4 @@ def test_no_pdfs_does_nothing(
     mock_ingest.assert_not_called()
     mock_ocr.assert_not_called()
     mock_llm.assert_not_called()
+    mock_render.assert_not_called()

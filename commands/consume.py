@@ -3,8 +3,9 @@ from pathlib import Path
 import click
 
 from commands.ingest import ingest_pdf
-from commands.llm import extract_title
+from commands.llm import extract_fields
 from commands.ocr import run_ocr
+from commands.render import render_note
 
 
 @click.command()
@@ -38,8 +39,13 @@ def consume(ctx, mistral_api_key, openai_api_key, keep_original, overwrite, dire
             continue
         ocr_text = run_ocr(target_dir, mistral_api_key, overwrite=overwrite)
         try:
-            extract_title(
+            extract_fields(
                 target_dir, openai_api_key, ocr_text, path, overwrite=overwrite
             )
         except Exception as e:
-            click.echo(f"  Warning: title extraction failed: {e}")
+            click.echo(f"  Warning: field extraction failed: {e}")
+            continue
+        try:
+            render_note(target_dir, overwrite=overwrite)
+        except Exception as e:
+            click.echo(f"  Warning: note rendering failed: {e}")

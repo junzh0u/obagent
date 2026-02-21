@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 from main import cli
 
+from constants import LLM_MODEL, OCR_MODEL
+
 from tests.conftest import BOTH_KEYS, setup_mock_mistral, setup_mock_openai
 
 
@@ -333,7 +335,7 @@ def test_overwrite_re_ocrs_via_cli(
     ocr_dir = target / "ocr"
     ocr_dir.mkdir(parents=True)
     (target / "original.pdf").write_bytes(content)
-    (ocr_dir / "mistral-ocr-latest.txt").write_text("stale")
+    (ocr_dir / f"{OCR_MODEL}.txt").write_text("stale")
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(content)
@@ -355,7 +357,7 @@ def test_overwrite_re_ocrs_via_cli(
 
     assert result.exit_code == 0
     assert "OCR completed" in result.output
-    txt = (ocr_dir / "mistral-ocr-latest.txt").read_text()
+    txt = (ocr_dir / f"{OCR_MODEL}.txt").read_text()
     assert "stale" not in txt
     assert "# Page 1" in txt
 
@@ -391,8 +393,8 @@ def test_ocr_via_cli_flag(mock_mistral_cls, mock_openai_cls, runner, vault, sour
     assert result.exit_code == 0
     assert "OCR completed" in result.output
     ocr_dir = vault / "reports" / sha / "ocr"
-    assert (ocr_dir / "mistral-ocr-latest.json").exists()
-    assert (ocr_dir / "mistral-ocr-latest.txt").exists()
+    assert (ocr_dir / f"{OCR_MODEL}.json").exists()
+    assert (ocr_dir / f"{OCR_MODEL}.txt").exists()
     mock_mistral_cls.assert_any_call(api_key="sk-test-key")
 
 
@@ -424,8 +426,8 @@ def test_ocr_via_env_var(mock_mistral_cls, mock_openai_cls, runner, vault, sourc
     assert result.exit_code == 0
     assert "OCR completed" in result.output
     ocr_dir = vault / "envtest" / sha / "ocr"
-    assert (ocr_dir / "mistral-ocr-latest.json").exists()
-    assert (ocr_dir / "mistral-ocr-latest.txt").exists()
+    assert (ocr_dir / f"{OCR_MODEL}.json").exists()
+    assert (ocr_dir / f"{OCR_MODEL}.txt").exists()
     mock_mistral_cls.assert_any_call(api_key="sk-env-key")
 
 
@@ -457,14 +459,14 @@ def test_ocr_files_content_via_cli(
     )
 
     ocr_dir = vault / "check" / sha / "ocr"
-    txt = (ocr_dir / "mistral-ocr-latest.txt").read_text()
+    txt = (ocr_dir / f"{OCR_MODEL}.txt").read_text()
     assert "# Page 1" in txt
     assert "# Page 2" in txt
     assert "Hello world" in txt
     assert "Goodbye world" in txt
 
-    data = json.loads((ocr_dir / "mistral-ocr-latest.json").read_text())
-    assert data["model"] == "mistral-ocr-latest"
+    data = json.loads((ocr_dir / f"{OCR_MODEL}.json").read_text())
+    assert data["model"] == OCR_MODEL
     assert len(data["pages"]) == 2
 
 
@@ -498,8 +500,17 @@ def test_title_md_created_via_cli(
     )
 
     assert result.exit_code == 0
+    target_dir = vault / "papers" / sha
+    # LLM JSON created
+    json_path = target_dir / "llm" / f"{LLM_MODEL}.json"
+    assert json_path.exists()
+    fields = json.loads(json_path.read_text())
+    assert fields["merchant"] == "Bookstore"
+    assert fields["date"] == "2024-09-20"
+    assert fields["total"] == "$29.99"
+    # Rendered markdown
     assert "Title: 2024-09-20 - Bookstore - $29.99" in result.output
-    md_file = vault / "papers" / sha / "2024-09-20 - Bookstore - $29.99.md"
+    md_file = target_dir / "2024-09-20 - Bookstore - $29.99.md"
     assert md_file.exists()
     content = md_file.read_text()
     assert 'merchant: "Bookstore"' in content
