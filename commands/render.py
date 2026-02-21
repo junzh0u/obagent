@@ -3,7 +3,8 @@ from pathlib import Path
 
 import click
 
-from utils import newest_file
+from constants import ASSETS_DIR
+from utils import iter_entries, newest_file
 
 
 def clear_notes(path_dir):
@@ -42,7 +43,7 @@ def render_note(target_dir):
         f'---\nmerchant: "{merchant}"\ndate: "{date}"\ntotal: "{total}"\n---\n'
     )
     md_path.write_text(
-        frontmatter + f"![[_assets_/{target_dir.name}/src/original.pdf#height]]\n"
+        frontmatter + f"![[{ASSETS_DIR}/{target_dir.name}/src/original.pdf#height]]\n"
     )
     click.echo(f"  Title: {safe_title}")
     return safe_title
@@ -59,13 +60,9 @@ def render(ctx, overwrite):
     """Render Obsidian notes from LLM-extracted metadata."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    path_dir = vault / path
     if overwrite:
-        clear_notes(path_dir)
-    assets_dir = path_dir / "_assets_"
-    if not assets_dir.is_dir():
-        return
-    for target_dir in sorted(p for p in assets_dir.iterdir() if p.is_dir()):
+        clear_notes(vault / path)
+    for target_dir in iter_entries(vault, path):
         click.echo(f"Render: {target_dir}")
         try:
             render_note(target_dir)

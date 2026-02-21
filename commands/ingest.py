@@ -6,6 +6,8 @@ from pathlib import Path
 
 import click
 
+from constants import ASSETS_DIR
+
 
 def ingest_pdf(pdf, vault, path, *, keep_original=False, overwrite=False):
     """Ingest a single PDF into the vault.
@@ -13,7 +15,7 @@ def ingest_pdf(pdf, vault, path, *, keep_original=False, overwrite=False):
     Returns target_dir on success, None if duplicate skipped.
     """
     sha256 = hashlib.sha256(pdf.read_bytes()).hexdigest()
-    target_dir = vault / path / "_assets_" / sha256
+    target_dir = vault / path / ASSETS_DIR / sha256
     if target_dir.exists() and not overwrite:
         click.echo(f"Warning: {pdf} already consumed ({sha256}), skipping")
         return None

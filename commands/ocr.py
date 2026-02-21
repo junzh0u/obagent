@@ -6,6 +6,7 @@ import click
 from mistralai import Mistral
 
 from constants import OCR_MODEL
+from utils import iter_entries
 
 
 def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
@@ -58,9 +59,6 @@ def ocr(ctx, mistral_api_key, ocr_model, overwrite):
     """Run OCR on ingested PDFs in the vault."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    assets_dir = vault / path / "_assets_"
-    if not assets_dir.is_dir():
-        return
-    for target_dir in sorted(p for p in assets_dir.iterdir() if p.is_dir()):
+    for target_dir in iter_entries(vault, path):
         click.echo(f"OCR: {target_dir}")
         run_ocr(target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite)
