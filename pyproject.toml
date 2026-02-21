@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = ["click"]
+dependencies = [
+    "click",
+    "mistralai>=1.12.4",
+]
 
 [project.scripts]
 obagent = "main:cli"

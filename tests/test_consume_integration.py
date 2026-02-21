@@ -1,7 +1,25 @@
 import hashlib
 import json
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from main import cli
+
+
+def _mock_ocr_response():
+    """Create a mock OCR response with realistic structure."""
+    page1 = SimpleNamespace(markdown="# Page 1\n\nContent A")
+    page2 = SimpleNamespace(markdown="# Page 2\n\nContent B")
+    response = MagicMock()
+    response.pages = [page1, page2]
+    response.model_dump.return_value = {
+        "pages": [
+            {"markdown": "# Page 1\n\nContent A", "index": 0},
+            {"markdown": "# Page 2\n\nContent B", "index": 1},
+        ],
+        "model": "mistral-ocr-latest",
+    }
+    return response
 
 
 def test_full_consume_via_cli(runner, vault, source_dir):
@@ -120,3 +138,98 @@ def test_non_pdf_files_are_ignored(runner, vault, source_dir):
     assert (source_dir / "image.png").exists()
     assert not pdf.exists()
     assert len(list((vault / "mixed").iterdir())) == 1
+
+
+@patch("commands.consume.Mistral")
+def test_ocr_via_cli_flag(mock_mistral_cls, runner, vault, source_dir):
+    """Full CLI with --mistral-api-key flag runs OCR end-to-end."""
+    mock_client = MagicMock()
+    mock_client.ocr.process.return_value = _mock_ocr_response()
+    mock_mistral_cls.return_value = mock_client
+
+    pdf = source_dir / "report.pdf"
+    pdf.write_bytes(b"cli ocr test")
+    sha = hashlib.sha256(b"cli ocr test").hexdigest()
+
+    result = runner.invoke(
+        cli,
+        [
+            "--vault",
+            str(vault),
+            "consume",
+            "--path",
+            "reports",
+            "--mistral-api-key",
+            "sk-test-key",
+            str(source_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "OCR completed" in result.output
+    ocr_dir = vault / "reports" / sha / "ocr"
+    assert (ocr_dir / "mistral-ocr-latest.json").exists()
+    assert (ocr_dir / "mistral-ocr-latest.txt").exists()
+    mock_mistral_cls.assert_called_once_with(api_key="sk-test-key")
+
+
+@patch("commands.consume.Mistral")
+def test_ocr_via_env_var(mock_mistral_cls, runner, vault, source_dir):
+    """API key from MISTRAL_API_KEY env var is used for OCR."""
+    mock_client = MagicMock()
+    mock_client.ocr.process.return_value = _mock_ocr_response()
+    mock_mistral_cls.return_value = mock_client
+
+    pdf = source_dir / "env.pdf"
+    pdf.write_bytes(b"env var ocr test")
+    sha = hashlib.sha256(b"env var ocr test").hexdigest()
+
+    result = runner.invoke(
+        cli,
+        ["--vault", str(vault), "consume", "--path", "envtest", str(source_dir)],
+        env={"MISTRAL_API_KEY": "sk-env-key"},
+    )
+
+    assert result.exit_code == 0
+    assert "OCR completed" in result.output
+    ocr_dir = vault / "envtest" / sha / "ocr"
+    assert (ocr_dir / "mistral-ocr-latest.json").exists()
+    assert (ocr_dir / "mistral-ocr-latest.txt").exists()
+    mock_mistral_cls.assert_called_once_with(api_key="sk-env-key")
+
+
+@patch("commands.consume.Mistral")
+def test_ocr_files_content_via_cli(mock_mistral_cls, runner, vault, source_dir):
+    """Verify OCR file contents are correct through full CLI invocation."""
+    mock_client = MagicMock()
+    mock_client.ocr.process.return_value = _mock_ocr_response()
+    mock_mistral_cls.return_value = mock_client
+
+    pdf = source_dir / "content.pdf"
+    pdf.write_bytes(b"content check")
+    sha = hashlib.sha256(b"content check").hexdigest()
+
+    runner.invoke(
+        cli,
+        [
+            "--vault",
+            str(vault),
+            "consume",
+            "--path",
+            "check",
+            "--mistral-api-key",
+            "sk-test",
+            str(source_dir),
+        ],
+    )
+
+    ocr_dir = vault / "check" / sha / "ocr"
+    txt = (ocr_dir / "mistral-ocr-latest.txt").read_text()
+    assert "# Page 1" in txt
+    assert "# Page 2" in txt
+    assert "Content A" in txt
+    assert "Content B" in txt
+
+    data = json.loads((ocr_dir / "mistral-ocr-latest.json").read_text())
+    assert data["model"] == "mistral-ocr-latest"
+    assert len(data["pages"]) == 2
