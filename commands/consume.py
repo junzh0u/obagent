@@ -2,12 +2,12 @@ import base64
 import hashlib
 import json
 import shutil
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import click
 from mistralai import Mistral
+from openai import OpenAI
 
 
 @click.command()
@@ -17,8 +17,14 @@ from mistralai import Mistral
 @click.option(
     "--mistral-api-key",
     envvar="MISTRAL_API_KEY",
-    default=None,
+    required=True,
     help="Mistral API key for OCR processing.",
+)
+@click.option(
+    "--openai-api-key",
+    envvar="OPENAI_API_KEY",
+    required=True,
+    help="OpenAI API key for title extraction.",
 )
 @click.option("--keep-original", is_flag=True, help="Copy PDFs instead of moving them.")
 @click.option(
@@ -26,7 +32,9 @@ from mistralai import Mistral
 )
 @click.argument("directory", type=click.Path(exists=True, file_okay=False))
 @click.pass_context
-def consume(ctx, path, mistral_api_key, keep_original, overwrite, directory):
+def consume(
+    ctx, path, mistral_api_key, openai_api_key, keep_original, overwrite, directory
+):
     """Consume PDFs from a directory into the vault."""
     vault = Path(ctx.obj["vault"])
     for pdf in sorted(Path(directory).rglob("*.pdf")):
@@ -48,9 +56,11 @@ def consume(ctx, path, mistral_api_key, keep_original, overwrite, directory):
         (target_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
         click.echo(f"Consumed {pdf} -> {target_dir}")
 
-        if mistral_api_key:
-            ocr_text = _run_ocr(target_dir, mistral_api_key)
-            _extract_title(target_dir, mistral_api_key, ocr_text, path)
+        ocr_text = _run_ocr(target_dir, mistral_api_key)
+        try:
+            _extract_title(target_dir, openai_api_key, ocr_text, path)
+        except Exception as e:
+            click.echo(f"  Warning: title extraction failed: {e}")
 
 
 def _run_ocr(target_dir, api_key):
@@ -80,41 +90,27 @@ def _run_ocr(target_dir, api_key):
 
 
 def _extract_title(target_dir, api_key, ocr_text, path):
-    """Use Mistral LLM to extract a title from OCR text and create a markdown note."""
-    client = Mistral(api_key=api_key)
-    messages = [
-        {
-            "role": "user",
-            "content": (
-                "I will provide you with the content of a document that has been "
-                "partially read by OCR (so it may contain errors).\n"
-                f'The document is stored under the path "{path}".\n'
-                "Your task is to find a suitable document title that I can use as "
-                "the title in Obsidian.\n"
-                "Respond only with the title in plain text, no markdown, "
-                "no additional information!\n\n" + ocr_text[:4000]
-            ),
-        },
-    ]
-    response = _chat_with_retry(client, "mistral-large-latest", messages)
+    """Use OpenAI to extract a title from OCR text and create a markdown note."""
+    client = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model="gpt-5-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "I will provide you with the content of a document that has been "
+                    "partially read by OCR (so it may contain errors).\n"
+                    f'The document is stored under the path "{path}".\n'
+                    "Your task is to find a suitable document title that I can use as "
+                    "the title in Obsidian.\n"
+                    "Respond only with the title in plain text, no markdown, "
+                    "no additional information!\n\n" + ocr_text[:4000]
+                ),
+            },
+        ],
+    )
     title = response.choices[0].message.content.strip()
     # Sanitize for use as filename
     safe_title = "".join(c for c in title if c not in r'\/:*?"<>|').strip()
-    (target_dir / f"{safe_title}.md").write_text("![[original.pdf]]\n")
+    (target_dir / f"{safe_title}.md").write_text("![[original.pdf#height]]\n")
     click.echo(f"  Title: {safe_title}")
-
-
-def _chat_with_retry(client, model, messages, max_retries=3):
-    """Call chat.complete with retry on rate limit (429) errors."""
-    from mistralai.models import SDKError
-
-    for attempt in range(max_retries):
-        try:
-            return client.chat.complete(model=model, messages=messages)
-        except SDKError as e:
-            if "429" in str(e) and attempt < max_retries - 1:
-                wait = 2 ** (attempt + 1)
-                click.echo(f"  Rate limited, retrying in {wait}s...")
-                time.sleep(wait)
-            else:
-                raise

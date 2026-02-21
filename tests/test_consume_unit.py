@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 
 from commands.consume import consume
 
+BOTH_KEYS = ["--mistral-api-key", "test-key", "--openai-api-key", "test-oai-key"]
+
 
 def _mock_ocr_response():
     """Create a mock OCR response with realistic structure."""
@@ -23,7 +25,7 @@ def _mock_ocr_response():
 
 
 def _mock_chat_response(title="My Document Title"):
-    """Create a mock chat completion response for title extraction."""
+    """Create a mock OpenAI chat completion response for title extraction."""
     message = SimpleNamespace(content=title)
     choice = SimpleNamespace(message=message)
     response = MagicMock()
@@ -31,17 +33,31 @@ def _mock_chat_response(title="My Document Title"):
     return response
 
 
-def _setup_mock_client(mock_mistral_cls, title="My Document Title"):
-    """Set up a mock Mistral client with both OCR and chat responses."""
+def _setup_mock_mistral(mock_mistral_cls):
+    """Set up a mock Mistral client with OCR response."""
     mock_client = MagicMock()
     mock_client.ocr.process.return_value = _mock_ocr_response()
-    mock_client.chat.complete.return_value = _mock_chat_response(title)
     mock_mistral_cls.return_value = mock_client
     return mock_client
 
 
-def test_sha256_is_correct(runner, vault, source_dir):
+def _setup_mock_openai(mock_openai_cls, title="My Document Title"):
+    """Set up a mock OpenAI client with chat response."""
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = _mock_chat_response(title)
+    mock_openai_cls.return_value = mock_client
+    return mock_client
+
+
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_sha256_is_correct(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """The stored sha256 matches what hashlib computes."""
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
+
     content = b"hello world pdf content"
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(content)
@@ -49,7 +65,7 @@ def test_sha256_is_correct(runner, vault, source_dir):
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", str(source_dir)],
+        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -61,14 +77,21 @@ def test_sha256_is_correct(runner, vault, source_dir):
     assert meta["sha256"] == expected_hash
 
 
-def test_metadata_structure(runner, vault, source_dir):
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_metadata_structure(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """metadata.json contains all required fields with correct types."""
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
+
     pdf = source_dir / "test.pdf"
     pdf.write_bytes(b"metadata test")
 
     runner.invoke(
         consume,
-        ["--path", "docs", str(source_dir)],
+        ["--path", "docs", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -83,14 +106,21 @@ def test_metadata_structure(runner, vault, source_dir):
     datetime.fromisoformat(meta["consumed_at"])
 
 
-def test_original_file_is_moved(runner, vault, source_dir):
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_original_file_is_moved(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """The source PDF is removed after consuming."""
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
+
     pdf = source_dir / "move_me.pdf"
     pdf.write_bytes(b"will be moved")
 
     runner.invoke(
         consume,
-        ["--path", "inbox", str(source_dir)],
+        ["--path", "inbox", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -100,8 +130,15 @@ def test_original_file_is_moved(runner, vault, source_dir):
     assert originals[0].read_bytes() == b"will be moved"
 
 
-def test_duplicate_is_skipped(runner, vault, source_dir):
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_duplicate_is_skipped(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """A PDF with the same hash as an existing entry is skipped."""
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
+
     content = b"duplicate content"
     sha256 = hashlib.sha256(content).hexdigest()
 
@@ -115,7 +152,7 @@ def test_duplicate_is_skipped(runner, vault, source_dir):
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", str(source_dir)],
+        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -126,11 +163,15 @@ def test_duplicate_is_skipped(runner, vault, source_dir):
     assert pdf.exists()
 
 
-def test_no_pdfs_does_nothing(runner, vault, source_dir):
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_no_pdfs_does_nothing(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """An empty source directory produces no output and no vault entries."""
     result = runner.invoke(
         consume,
-        ["--path", "papers", str(source_dir)],
+        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -139,14 +180,21 @@ def test_no_pdfs_does_nothing(runner, vault, source_dir):
     assert list(vault.iterdir()) == []
 
 
-def test_keep_original_preserves_source(runner, vault, source_dir):
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_keep_original_preserves_source(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """With --keep-original, the source PDF remains after consuming."""
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
+
     pdf = source_dir / "keep_me.pdf"
     pdf.write_bytes(b"copy me")
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", "--keep-original", str(source_dir)],
+        ["--path", "papers", "--keep-original", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -157,8 +205,15 @@ def test_keep_original_preserves_source(runner, vault, source_dir):
     assert originals[0].read_bytes() == b"copy me"
 
 
-def test_overwrite_replaces_existing_entry(runner, vault, source_dir):
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_overwrite_replaces_existing_entry(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """With --overwrite, an existing entry is replaced instead of skipped."""
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
+
     content = b"overwrite content"
     sha = hashlib.sha256(content).hexdigest()
 
@@ -173,7 +228,7 @@ def test_overwrite_replaces_existing_entry(runner, vault, source_dir):
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", "--overwrite", str(source_dir)],
+        ["--path", "papers", "--overwrite", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -188,15 +243,22 @@ def test_overwrite_replaces_existing_entry(runner, vault, source_dir):
     assert meta["sha256"] == sha
 
 
-def test_overwrite_without_existing_works_normally(runner, vault, source_dir):
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_overwrite_without_existing_works_normally(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """--overwrite on a fresh consume works the same as without it."""
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
+
     pdf = source_dir / "fresh.pdf"
     pdf.write_bytes(b"fresh content")
     sha = hashlib.sha256(b"fresh content").hexdigest()
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", "--overwrite", str(source_dir)],
+        ["--path", "papers", "--overwrite", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -205,10 +267,14 @@ def test_overwrite_without_existing_works_normally(runner, vault, source_dir):
     assert (vault / "papers" / sha / "original.pdf").exists()
 
 
+@patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_overwrite_forces_re_ocr(mock_mistral_cls, runner, vault, source_dir):
+def test_overwrite_forces_re_ocr(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """With --overwrite, OCR is re-run even if ocr/ already exists."""
-    _setup_mock_client(mock_mistral_cls)
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
 
     content = b"re-ocr content"
     sha = hashlib.sha256(content).hexdigest()
@@ -226,14 +292,7 @@ def test_overwrite_forces_re_ocr(mock_mistral_cls, runner, vault, source_dir):
 
     result = runner.invoke(
         consume,
-        [
-            "--path",
-            "papers",
-            "--overwrite",
-            "--mistral-api-key",
-            "test-key",
-            str(source_dir),
-        ],
+        ["--path", "papers", "--overwrite", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -247,8 +306,15 @@ def test_overwrite_forces_re_ocr(mock_mistral_cls, runner, vault, source_dir):
     assert "old" not in data
 
 
-def test_keep_original_and_overwrite_together(runner, vault, source_dir):
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_keep_original_and_overwrite_together(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """--keep-original and --overwrite can be used together."""
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
+
     content = b"both flags"
     sha = hashlib.sha256(content).hexdigest()
 
@@ -262,23 +328,32 @@ def test_keep_original_and_overwrite_together(runner, vault, source_dir):
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", "--keep-original", "--overwrite", str(source_dir)],
+        [
+            "--path",
+            "papers",
+            "--keep-original",
+            "--overwrite",
+            *BOTH_KEYS,
+            str(source_dir),
+        ],
         obj={"vault": str(vault)},
     )
 
     assert result.exit_code == 0
-    assert pdf.exists()  # --copy: source preserved
+    assert pdf.exists()  # --keep-original: source preserved
     assert (
         existing_dir / "original.pdf"
     ).read_bytes() == content  # --overwrite: replaced
 
 
+@patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
 def test_ocr_results_saved_to_correct_paths(
-    mock_mistral_cls, runner, vault, source_dir
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
     """OCR results are saved to ocr/ subdirectory with correct filenames."""
-    _setup_mock_client(mock_mistral_cls)
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"ocr test content")
@@ -286,7 +361,7 @@ def test_ocr_results_saved_to_correct_paths(
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", "--mistral-api-key", "test-key", str(source_dir)],
+        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -297,12 +372,14 @@ def test_ocr_results_saved_to_correct_paths(
     assert (ocr_dir / "mistral-ocr-latest.txt").exists()
 
 
+@patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
 def test_ocr_text_contains_concatenated_markdown(
-    mock_mistral_cls, runner, vault, source_dir
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
     """OCR text file contains page markdowns separated by double newlines."""
-    _setup_mock_client(mock_mistral_cls)
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"ocr text test")
@@ -310,7 +387,7 @@ def test_ocr_text_contains_concatenated_markdown(
 
     runner.invoke(
         consume,
-        ["--path", "papers", "--mistral-api-key", "test-key", str(source_dir)],
+        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -318,10 +395,14 @@ def test_ocr_text_contains_concatenated_markdown(
     assert txt == "# Page 1\n\nHello world\n\n# Page 2\n\nGoodbye world"
 
 
+@patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_ocr_json_contains_model_dump(mock_mistral_cls, runner, vault, source_dir):
+def test_ocr_json_contains_model_dump(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """OCR JSON file contains valid JSON from model_dump()."""
-    mock_client = _setup_mock_client(mock_mistral_cls)
+    mock_client = _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls)
     mock_response = mock_client.ocr.process.return_value
 
     pdf = source_dir / "doc.pdf"
@@ -330,7 +411,7 @@ def test_ocr_json_contains_model_dump(mock_mistral_cls, runner, vault, source_di
 
     runner.invoke(
         consume,
-        ["--path", "papers", "--mistral-api-key", "test-key", str(source_dir)],
+        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -341,28 +422,14 @@ def test_ocr_json_contains_model_dump(mock_mistral_cls, runner, vault, source_di
     assert len(data["pages"]) == 2
 
 
+@patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_no_ocr_without_api_key(mock_mistral_cls, runner, vault, source_dir):
-    """OCR is skipped when no API key is provided."""
-    pdf = source_dir / "doc.pdf"
-    pdf.write_bytes(b"no ocr content")
-    sha = hashlib.sha256(b"no ocr content").hexdigest()
-
-    result = runner.invoke(
-        consume,
-        ["--path", "papers", str(source_dir)],
-        obj={"vault": str(vault)},
-    )
-
-    assert result.exit_code == 0
-    assert not (vault / "papers" / sha / "ocr").exists()
-    mock_mistral_cls.assert_not_called()
-
-
-@patch("commands.consume.Mistral")
-def test_title_md_created_after_ocr(mock_mistral_cls, runner, vault, source_dir):
+def test_title_md_created_after_ocr(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """A <title>.md file is created with an Obsidian embed link."""
-    _setup_mock_client(mock_mistral_cls, title="My Research Paper")
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls, title="My Research Paper")
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"title test")
@@ -370,7 +437,7 @@ def test_title_md_created_after_ocr(mock_mistral_cls, runner, vault, source_dir)
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", "--mistral-api-key", "test-key", str(source_dir)],
+        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -382,10 +449,14 @@ def test_title_md_created_after_ocr(mock_mistral_cls, runner, vault, source_dir)
     assert "Title: My Research Paper" in result.output
 
 
+@patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_title_sanitizes_unsafe_characters(mock_mistral_cls, runner, vault, source_dir):
+def test_title_sanitizes_unsafe_characters(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
     """Unsafe filename characters are stripped from the title."""
-    _setup_mock_client(mock_mistral_cls, title='A "Title" with: bad/chars?')
+    _setup_mock_mistral(mock_mistral_cls)
+    _setup_mock_openai(mock_openai_cls, title='A "Title" with: bad/chars?')
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"sanitize test")
@@ -393,7 +464,7 @@ def test_title_sanitizes_unsafe_characters(mock_mistral_cls, runner, vault, sour
 
     runner.invoke(
         consume,
-        ["--path", "papers", "--mistral-api-key", "test-key", str(source_dir)],
+        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
@@ -403,25 +474,27 @@ def test_title_sanitizes_unsafe_characters(mock_mistral_cls, runner, vault, sour
     assert md_file.read_text() == "![[original.pdf]]\n"
 
 
+@patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_title_uses_chat_complete_with_ocr_text(
-    mock_mistral_cls, runner, vault, source_dir
+def test_title_uses_openai_gpt5_mini(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
-    """Title extraction calls chat.complete with mistral-large-latest and OCR text."""
-    mock_client = _setup_mock_client(mock_mistral_cls)
+    """Title extraction calls OpenAI gpt-5-mini with OCR text."""
+    _setup_mock_mistral(mock_mistral_cls)
+    mock_openai_client = _setup_mock_openai(mock_openai_cls)
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"chat model test")
 
     runner.invoke(
         consume,
-        ["--path", "papers", "--mistral-api-key", "test-key", str(source_dir)],
+        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault)},
     )
 
-    mock_client.chat.complete.assert_called_once()
-    call_kwargs = mock_client.chat.complete.call_args
-    assert call_kwargs.kwargs["model"] == "mistral-large-latest"
+    mock_openai_client.chat.completions.create.assert_called_once()
+    call_kwargs = mock_openai_client.chat.completions.create.call_args
+    assert call_kwargs.kwargs["model"] == "gpt-5-mini"
     prompt = call_kwargs.kwargs["messages"][0]["content"]
     assert "partially read by OCR" in prompt
     assert '"papers"' in prompt
