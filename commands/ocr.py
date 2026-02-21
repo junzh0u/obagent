@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 from mistralai import Mistral
 
-from constants import OCR_MODEL
+from constants import ASSETS_DIR, OCR_MODEL
 from utils import iter_entries
 
 
@@ -54,11 +54,16 @@ def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
     "--ocr-model", default=OCR_MODEL, show_default=True, help="Mistral OCR model name."
 )
 @click.option("--overwrite", is_flag=True, help="Overwrite existing OCR results.")
+@click.argument("sha256", required=False)
 @click.pass_context
-def ocr(ctx, mistral_api_key, ocr_model, overwrite):
+def ocr(ctx, mistral_api_key, ocr_model, overwrite, sha256):
     """Run OCR on ingested PDFs in the vault."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    for target_dir in iter_entries(vault, path):
+    if sha256:
+        entries = [vault / path / ASSETS_DIR / sha256]
+    else:
+        entries = iter_entries(vault, path)
+    for target_dir in entries:
         click.secho(f"OCR: {target_dir}", bold=True)
         run_ocr(target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite)

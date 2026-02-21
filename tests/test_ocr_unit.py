@@ -133,6 +133,30 @@ def test_ocr_overwrite_reruns(mock_mistral_cls, runner, vault):
 
 
 @patch("commands.ocr.Mistral")
+def test_ocr_single_sha256(mock_mistral_cls, runner, vault):
+    """When sha256 argument is given, only that entry is OCR'd."""
+    setup_mock_mistral(mock_mistral_cls)
+
+    target = vault / "papers" / "_assets_" / "target"
+    (target / "src").mkdir(parents=True)
+    (target / "src" / "original.pdf").write_bytes(b"target")
+
+    other = vault / "papers" / "_assets_" / "other"
+    (other / "src").mkdir(parents=True)
+    (other / "src" / "original.pdf").write_bytes(b"other")
+
+    result = runner.invoke(
+        ocr,
+        ["--mistral-api-key", "test-key", "target"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert (target / "ocr" / f"{OCR_MODEL}.txt").exists()
+    assert not (other / "ocr").exists()
+
+
+@patch("commands.ocr.Mistral")
 def test_ocr_custom_model(mock_mistral_cls, runner, vault):
     """--ocr-model saves files under the custom model name and calls API with it."""
     mock_client = setup_mock_mistral(mock_mistral_cls)
