@@ -19,19 +19,26 @@ from mistralai import Mistral
     default=None,
     help="Mistral API key for OCR processing.",
 )
+@click.option("--keep-original", is_flag=True, help="Copy PDFs instead of moving them.")
+@click.option(
+    "--overwrite", is_flag=True, help="Overwrite existing entries and force re-OCR."
+)
 @click.argument("directory", type=click.Path(exists=True, file_okay=False))
 @click.pass_context
-def consume(ctx, path, mistral_api_key, directory):
+def consume(ctx, path, mistral_api_key, keep_original, overwrite, directory):
     """Consume PDFs from a directory into the vault."""
     vault = Path(ctx.obj["vault"])
     for pdf in sorted(Path(directory).rglob("*.pdf")):
         sha256 = hashlib.sha256(pdf.read_bytes()).hexdigest()
         target_dir = vault / path / sha256
-        if target_dir.exists():
+        if target_dir.exists() and not overwrite:
             click.echo(f"Warning: {pdf} already consumed ({sha256}), skipping")
             continue
-        target_dir.mkdir(parents=True)
-        shutil.move(pdf, target_dir / "original.pdf")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        if keep_original:
+            shutil.copy2(pdf, target_dir / "original.pdf")
+        else:
+            shutil.move(pdf, target_dir / "original.pdf")
         metadata = {
             "original_filepath": str(pdf.resolve()),
             "sha256": sha256,
@@ -59,7 +66,7 @@ def _run_ocr(target_dir, api_key):
     )
 
     ocr_dir = target_dir / "ocr"
-    ocr_dir.mkdir()
+    ocr_dir.mkdir(exist_ok=True)
     (ocr_dir / "mistral-ocr-latest.json").write_text(
         json.dumps(ocr_response.model_dump(), indent=2)
     )

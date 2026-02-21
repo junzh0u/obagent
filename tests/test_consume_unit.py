@@ -121,6 +121,142 @@ def test_no_pdfs_does_nothing(runner, vault, source_dir):
     assert list(vault.iterdir()) == []
 
 
+def test_keep_original_preserves_source(runner, vault, source_dir):
+    """With --keep-original, the source PDF remains after consuming."""
+    pdf = source_dir / "keep_me.pdf"
+    pdf.write_bytes(b"copy me")
+
+    result = runner.invoke(
+        consume,
+        ["--path", "papers", "--keep-original", str(source_dir)],
+        obj={"vault": str(vault)},
+    )
+
+    assert result.exit_code == 0
+    assert pdf.exists()
+    originals = list(vault.rglob("original.pdf"))
+    assert len(originals) == 1
+    assert originals[0].read_bytes() == b"copy me"
+
+
+def test_overwrite_replaces_existing_entry(runner, vault, source_dir):
+    """With --overwrite, an existing entry is replaced instead of skipped."""
+    content = b"overwrite content"
+    sha = hashlib.sha256(content).hexdigest()
+
+    # Pre-create the target directory with old data
+    existing_dir = vault / "papers" / sha
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "original.pdf").write_bytes(b"old content")
+    (existing_dir / "metadata.json").write_text('{"old": true}')
+
+    pdf = source_dir / "new.pdf"
+    pdf.write_bytes(content)
+
+    result = runner.invoke(
+        consume,
+        ["--path", "papers", "--overwrite", str(source_dir)],
+        obj={"vault": str(vault)},
+    )
+
+    assert result.exit_code == 0
+    assert "Warning" not in result.output
+    assert "Consumed" in result.output
+    # PDF content should be the new content
+    assert (existing_dir / "original.pdf").read_bytes() == content
+    # Metadata should be refreshed
+    meta = json.loads((existing_dir / "metadata.json").read_text())
+    assert "old" not in meta
+    assert meta["sha256"] == sha
+
+
+def test_overwrite_without_existing_works_normally(runner, vault, source_dir):
+    """--overwrite on a fresh consume works the same as without it."""
+    pdf = source_dir / "fresh.pdf"
+    pdf.write_bytes(b"fresh content")
+    sha = hashlib.sha256(b"fresh content").hexdigest()
+
+    result = runner.invoke(
+        consume,
+        ["--path", "papers", "--overwrite", str(source_dir)],
+        obj={"vault": str(vault)},
+    )
+
+    assert result.exit_code == 0
+    assert "Consumed" in result.output
+    assert (vault / "papers" / sha / "original.pdf").exists()
+
+
+@patch("commands.consume.Mistral")
+def test_overwrite_forces_re_ocr(mock_mistral_cls, runner, vault, source_dir):
+    """With --overwrite, OCR is re-run even if ocr/ already exists."""
+    mock_client = MagicMock()
+    mock_client.ocr.process.return_value = _mock_ocr_response()
+    mock_mistral_cls.return_value = mock_client
+
+    content = b"re-ocr content"
+    sha = hashlib.sha256(content).hexdigest()
+
+    # Pre-create target with old OCR data
+    existing_dir = vault / "papers" / sha
+    ocr_dir = existing_dir / "ocr"
+    ocr_dir.mkdir(parents=True)
+    (existing_dir / "original.pdf").write_bytes(content)
+    (ocr_dir / "mistral-ocr-latest.txt").write_text("old ocr text")
+    (ocr_dir / "mistral-ocr-latest.json").write_text('{"old": true}')
+
+    pdf = source_dir / "doc.pdf"
+    pdf.write_bytes(content)
+
+    result = runner.invoke(
+        consume,
+        [
+            "--path",
+            "papers",
+            "--overwrite",
+            "--mistral-api-key",
+            "test-key",
+            str(source_dir),
+        ],
+        obj={"vault": str(vault)},
+    )
+
+    assert result.exit_code == 0
+    assert "OCR completed" in result.output
+    # OCR files should contain new data, not old
+    txt = (ocr_dir / "mistral-ocr-latest.txt").read_text()
+    assert "old ocr text" not in txt
+    assert "# Page 1" in txt
+    data = json.loads((ocr_dir / "mistral-ocr-latest.json").read_text())
+    assert "old" not in data
+
+
+def test_keep_original_and_overwrite_together(runner, vault, source_dir):
+    """--keep-original and --overwrite can be used together."""
+    content = b"both flags"
+    sha = hashlib.sha256(content).hexdigest()
+
+    # Pre-create target
+    existing_dir = vault / "papers" / sha
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "original.pdf").write_bytes(b"old")
+
+    pdf = source_dir / "doc.pdf"
+    pdf.write_bytes(content)
+
+    result = runner.invoke(
+        consume,
+        ["--path", "papers", "--keep-original", "--overwrite", str(source_dir)],
+        obj={"vault": str(vault)},
+    )
+
+    assert result.exit_code == 0
+    assert pdf.exists()  # --copy: source preserved
+    assert (
+        existing_dir / "original.pdf"
+    ).read_bytes() == content  # --overwrite: replaced
+
+
 @patch("commands.consume.Mistral")
 def test_ocr_results_saved_to_correct_paths(
     mock_mistral_cls, runner, vault, source_dir

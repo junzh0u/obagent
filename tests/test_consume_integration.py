@@ -140,6 +140,106 @@ def test_non_pdf_files_are_ignored(runner, vault, source_dir):
     assert len(list((vault / "mixed").iterdir())) == 1
 
 
+def test_keep_original_via_cli(runner, vault, source_dir):
+    """--keep-original preserves source PDFs through full CLI."""
+    pdf = source_dir / "keep.pdf"
+    pdf.write_bytes(b"keep me via cli")
+
+    result = runner.invoke(
+        cli,
+        [
+            "--vault",
+            str(vault),
+            "consume",
+            "--path",
+            "kept",
+            "--keep-original",
+            str(source_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Consumed" in result.output
+    assert pdf.exists()
+
+
+def test_overwrite_via_cli(runner, vault, source_dir):
+    """--overwrite replaces existing entries through full CLI."""
+    content = b"overwrite via cli"
+    sha = hashlib.sha256(content).hexdigest()
+
+    # First consume
+    pdf = source_dir / "doc.pdf"
+    pdf.write_bytes(content)
+    runner.invoke(
+        cli,
+        ["--vault", str(vault), "consume", "--path", "ow", str(source_dir)],
+    )
+
+    # Re-create and consume again with --overwrite
+    pdf.write_bytes(content)
+    result = runner.invoke(
+        cli,
+        [
+            "--vault",
+            str(vault),
+            "consume",
+            "--path",
+            "ow",
+            "--overwrite",
+            str(source_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Consumed" in result.output
+    assert "Warning" not in result.output
+    assert len(list((vault / "ow").iterdir())) == 1
+    assert (vault / "ow" / sha / "original.pdf").read_bytes() == content
+
+
+@patch("commands.consume.Mistral")
+def test_overwrite_re_ocrs_via_cli(mock_mistral_cls, runner, vault, source_dir):
+    """--overwrite forces re-OCR through full CLI."""
+    mock_client = MagicMock()
+    mock_client.ocr.process.return_value = _mock_ocr_response()
+    mock_mistral_cls.return_value = mock_client
+
+    content = b"re-ocr via cli"
+    sha = hashlib.sha256(content).hexdigest()
+
+    # Pre-create target with old OCR
+    target = vault / "reocr" / sha
+    ocr_dir = target / "ocr"
+    ocr_dir.mkdir(parents=True)
+    (target / "original.pdf").write_bytes(content)
+    (ocr_dir / "mistral-ocr-latest.txt").write_text("stale")
+
+    pdf = source_dir / "doc.pdf"
+    pdf.write_bytes(content)
+
+    result = runner.invoke(
+        cli,
+        [
+            "--vault",
+            str(vault),
+            "consume",
+            "--path",
+            "reocr",
+            "--overwrite",
+            "--mistral-api-key",
+            "sk-test",
+            str(source_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "OCR completed" in result.output
+    txt = (ocr_dir / "mistral-ocr-latest.txt").read_text()
+    assert "stale" not in txt
+    assert "# Page 1" in txt
+
+
 @patch("commands.consume.Mistral")
 def test_ocr_via_cli_flag(mock_mistral_cls, runner, vault, source_dir):
     """Full CLI with --mistral-api-key flag runs OCR end-to-end."""
