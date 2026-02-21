@@ -24,9 +24,10 @@ def _mock_ocr_response():
     return response
 
 
-def _mock_chat_response(title="My Document Title"):
-    """Create a mock OpenAI chat completion response for title extraction."""
-    message = SimpleNamespace(content=title)
+def _mock_chat_response(merchant="ACME Store", date="2024-01-15", total="$42.50"):
+    """Create a mock OpenAI chat completion response for metadata extraction."""
+    content = json.dumps({"merchant": merchant, "date": date, "total": total})
+    message = SimpleNamespace(content=content)
     choice = SimpleNamespace(message=message)
     response = MagicMock()
     response.choices = [choice]
@@ -41,10 +42,10 @@ def _setup_mock_mistral(mock_mistral_cls):
     return mock_client
 
 
-def _setup_mock_openai(mock_openai_cls, title="My Document Title"):
+def _setup_mock_openai(mock_openai_cls, **kwargs):
     """Set up a mock OpenAI client with chat response."""
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = _mock_chat_response(title)
+    mock_client.chat.completions.create.return_value = _mock_chat_response(**kwargs)
     mock_openai_cls.return_value = mock_client
     return mock_client
 
@@ -427,9 +428,11 @@ def test_ocr_json_contains_model_dump(
 def test_title_md_created_after_ocr(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
-    """A <title>.md file is created with an Obsidian embed link."""
+    """A <title>.md file is created with frontmatter and Obsidian embed link."""
     _setup_mock_mistral(mock_mistral_cls)
-    _setup_mock_openai(mock_openai_cls, title="My Research Paper")
+    _setup_mock_openai(
+        mock_openai_cls, merchant="Coffee Shop", date="2024-06-01", total="$5.75"
+    )
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"title test")
@@ -443,10 +446,14 @@ def test_title_md_created_after_ocr(
 
     assert result.exit_code == 0
     target_dir = vault / "papers" / sha
-    md_file = target_dir / "My Research Paper.md"
+    md_file = target_dir / "2024-06-01 - Coffee Shop - $5.75.md"
     assert md_file.exists()
-    assert md_file.read_text() == "![[original.pdf]]\n"
-    assert "Title: My Research Paper" in result.output
+    content = md_file.read_text()
+    assert 'merchant: "Coffee Shop"' in content
+    assert 'date: "2024-06-01"' in content
+    assert 'total: "$5.75"' in content
+    assert "![[original.pdf]]" in content
+    assert "Title: 2024-06-01 - Coffee Shop - $5.75" in result.output
 
 
 @patch("commands.consume.OpenAI")
@@ -456,7 +463,9 @@ def test_title_sanitizes_unsafe_characters(
 ):
     """Unsafe filename characters are stripped from the title."""
     _setup_mock_mistral(mock_mistral_cls)
-    _setup_mock_openai(mock_openai_cls, title='A "Title" with: bad/chars?')
+    _setup_mock_openai(
+        mock_openai_cls, merchant='Shop "A"/B', date="2024-01-15", total="$10.00"
+    )
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"sanitize test")
@@ -469,9 +478,9 @@ def test_title_sanitizes_unsafe_characters(
     )
 
     target_dir = vault / "papers" / sha
-    md_file = target_dir / "A Title with badchars.md"
+    md_file = target_dir / "2024-01-15 - Shop AB - $10.00.md"
     assert md_file.exists()
-    assert md_file.read_text() == "![[original.pdf]]\n"
+    assert "![[original.pdf]]" in md_file.read_text()
 
 
 @patch("commands.consume.OpenAI")
@@ -479,7 +488,7 @@ def test_title_sanitizes_unsafe_characters(
 def test_title_uses_openai_gpt5_mini(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
-    """Title extraction calls OpenAI gpt-5-mini with OCR text."""
+    """Metadata extraction calls OpenAI gpt-5-mini with OCR text."""
     _setup_mock_mistral(mock_mistral_cls)
     mock_openai_client = _setup_mock_openai(mock_openai_cls)
 
@@ -498,5 +507,8 @@ def test_title_uses_openai_gpt5_mini(
     prompt = call_kwargs.kwargs["messages"][0]["content"]
     assert "partially read by OCR" in prompt
     assert '"papers"' in prompt
-    assert "title in Obsidian" in prompt
+    assert "merchant" in prompt
+    assert "date" in prompt
+    assert "total" in prompt
+    assert "JSON" in prompt
     assert "# Page 1" in prompt

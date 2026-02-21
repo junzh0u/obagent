@@ -24,9 +24,10 @@ def _mock_ocr_response():
     return response
 
 
-def _mock_chat_response(title="My Document Title"):
-    """Create a mock OpenAI chat completion response for title extraction."""
-    message = SimpleNamespace(content=title)
+def _mock_chat_response(merchant="ACME Store", date="2024-01-15", total="$42.50"):
+    """Create a mock OpenAI chat completion response for metadata extraction."""
+    content = json.dumps({"merchant": merchant, "date": date, "total": total})
+    message = SimpleNamespace(content=content)
     choice = SimpleNamespace(message=message)
     response = MagicMock()
     response.choices = [choice]
@@ -41,10 +42,10 @@ def _setup_mock_mistral(mock_mistral_cls):
     return mock_client
 
 
-def _setup_mock_openai(mock_openai_cls, title="My Document Title"):
+def _setup_mock_openai(mock_openai_cls, **kwargs):
     """Set up a mock OpenAI client with chat response."""
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = _mock_chat_response(title)
+    mock_client.chat.completions.create.return_value = _mock_chat_response(**kwargs)
     mock_openai_cls.return_value = mock_client
     return mock_client
 
@@ -470,9 +471,11 @@ def test_ocr_files_content_via_cli(
 def test_title_md_created_via_cli(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
-    """Title markdown file is created through full CLI invocation."""
+    """Title markdown file is created with frontmatter through full CLI."""
     _setup_mock_mistral(mock_mistral_cls)
-    _setup_mock_openai(mock_openai_cls, title="Deep Learning Survey")
+    _setup_mock_openai(
+        mock_openai_cls, merchant="Bookstore", date="2024-09-20", total="$29.99"
+    )
 
     pdf = source_dir / "paper.pdf"
     pdf.write_bytes(b"title cli test")
@@ -492,7 +495,11 @@ def test_title_md_created_via_cli(
     )
 
     assert result.exit_code == 0
-    assert "Title: Deep Learning Survey" in result.output
-    md_file = vault / "papers" / sha / "Deep Learning Survey.md"
+    assert "Title: 2024-09-20 - Bookstore - $29.99" in result.output
+    md_file = vault / "papers" / sha / "2024-09-20 - Bookstore - $29.99.md"
     assert md_file.exists()
-    assert md_file.read_text() == "![[original.pdf]]\n"
+    content = md_file.read_text()
+    assert 'merchant: "Bookstore"' in content
+    assert 'date: "2024-09-20"' in content
+    assert 'total: "$29.99"' in content
+    assert "![[original.pdf]]" in content

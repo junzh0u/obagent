@@ -90,7 +90,7 @@ def _run_ocr(target_dir, api_key):
 
 
 def _extract_title(target_dir, api_key, ocr_text, path):
-    """Use OpenAI to extract a title from OCR text and create a markdown note."""
+    """Use OpenAI to extract metadata from OCR text and create a markdown note."""
     client = OpenAI(api_key=api_key)
     response = client.chat.completions.create(
         model="gpt-5-mini",
@@ -101,16 +101,25 @@ def _extract_title(target_dir, api_key, ocr_text, path):
                     "I will provide you with the content of a document that has been "
                     "partially read by OCR (so it may contain errors).\n"
                     f'The document is stored under the path "{path}".\n'
-                    "Your task is to find a suitable document title that I can use as "
-                    "the title in Obsidian.\n"
-                    "Respond only with the title in plain text, no markdown, "
-                    "no additional information!\n\n" + ocr_text[:4000]
+                    "Extract the following fields:\n"
+                    "- merchant: the merchant or vendor name\n"
+                    "- date: the document date in YYYY-MM-DD format\n"
+                    "- total: the total amount (number with currency symbol)\n"
+                    "Respond ONLY with a JSON object containing these three fields, "
+                    "no additional text!\n\n" + ocr_text[:4000]
                 ),
             },
         ],
     )
-    title = response.choices[0].message.content.strip()
-    # Sanitize for use as filename
+    raw = response.choices[0].message.content.strip()
+    fields = json.loads(raw)
+    merchant = fields["merchant"]
+    date = fields["date"]
+    total = fields["total"]
+    title = f"{date} - {merchant} - {total}"
     safe_title = "".join(c for c in title if c not in r'\/:*?"<>|').strip()
-    (target_dir / f"{safe_title}.md").write_text("![[original.pdf#height]]\n")
+    frontmatter = (
+        f'---\nmerchant: "{merchant}"\ndate: "{date}"\ntotal: "{total}"\n---\n'
+    )
+    (target_dir / f"{safe_title}.md").write_text(frontmatter + "![[original.pdf]]\n")
     click.echo(f"  Title: {safe_title}")
