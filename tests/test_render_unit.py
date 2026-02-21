@@ -58,6 +58,31 @@ def test_sanitizes_unsafe_characters(runner, vault):
     assert "![[_assets_/sha2/src/original.pdf#height]]" in md_file.read_text()
 
 
+def test_null_total_defaults_to_zero(runner, vault):
+    """When total is null, $0.00 is used instead."""
+    _setup_entry_with_llm(
+        vault, sha="sha_null", merchant="Free Store", date="2024-01-15"
+    )
+    # Overwrite the JSON with null total
+    import json
+
+    llm_json = vault / "papers" / "_assets_" / "sha_null" / "llm" / "default.json"
+    llm_json.write_text(
+        json.dumps({"merchant": "Free Store", "date": "2024-01-15", "total": None})
+    )
+
+    result = runner.invoke(
+        render,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    md_file = vault / "papers" / "2024-01-15 - Free Store - $0.00.md"
+    assert md_file.exists()
+    assert 'total: "$0.00"' in md_file.read_text()
+
+
 def test_skip_existing_md(runner, vault):
     """Rendering is skipped when .md already references this sha256."""
     _setup_entry_with_llm(vault, sha="sha3")
@@ -115,6 +140,36 @@ def test_overwrite_replaces_md(runner, vault):
     assert new_md.exists()
     content = new_md.read_text()
     assert 'merchant: "New Shop"' in content
+
+
+def test_overwrite_single_sha_deletes_old_md(runner, vault):
+    """With --overwrite and sha256, the old .md referencing that sha is deleted first."""
+    _setup_entry_with_llm(
+        vault, sha="sha_ow", merchant="Old Name", date="2024-01-15", total="$42.50"
+    )
+    # Simulate an existing .md with old title referencing this sha
+    old_md = vault / "papers" / "2024-01-15 - Old Name - $42.50.md"
+    old_md.write_text(
+        '---\nmerchant: "Old Name"\n---\n![[_assets_/sha_ow/src/original.pdf#height]]\n'
+    )
+    # Now update the LLM JSON to produce a different title
+    import json
+
+    llm_json = vault / "papers" / "_assets_" / "sha_ow" / "llm" / "default.json"
+    llm_json.write_text(
+        json.dumps({"merchant": "New Name", "date": "2024-01-15", "total": "$42.50"})
+    )
+
+    result = runner.invoke(
+        render,
+        ["--overwrite", "sha_ow"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert not old_md.exists()
+    new_md = vault / "papers" / "2024-01-15 - New Name - $42.50.md"
+    assert new_md.exists()
 
 
 def test_no_llm_json_no_entries(runner, vault):
