@@ -17,7 +17,7 @@ def test_ocr_results_saved_to_correct_paths(
 
     content = b"ocr test content"
     sha = hashlib.sha256(content).hexdigest()
-    target_dir = vault / "papers" / sha
+    target_dir = vault / "papers" / "_assets_" / sha
     (target_dir / "src").mkdir(parents=True)
     (target_dir / "src" / "original.pdf").write_bytes(content)
 
@@ -40,7 +40,7 @@ def test_ocr_text_contains_concatenated_markdown(mock_mistral_cls, runner, vault
     setup_mock_mistral(mock_mistral_cls)
 
     sha = "abc123"
-    target_dir = vault / "papers" / sha
+    target_dir = vault / "papers" / "_assets_" / sha
     (target_dir / "src").mkdir(parents=True)
     (target_dir / "src" / "original.pdf").write_bytes(b"ocr text test")
 
@@ -61,7 +61,7 @@ def test_ocr_json_contains_model_dump(mock_mistral_cls, runner, vault):
     mock_response = mock_client.ocr.process.return_value
 
     sha = "def456"
-    target_dir = vault / "papers" / sha
+    target_dir = vault / "papers" / "_assets_" / sha
     (target_dir / "src").mkdir(parents=True)
     (target_dir / "src" / "original.pdf").write_bytes(b"ocr json test")
 
@@ -84,7 +84,7 @@ def test_ocr_skip_existing(mock_mistral_cls, runner, vault):
     setup_mock_mistral(mock_mistral_cls)
 
     sha = "existing"
-    target_dir = vault / "papers" / sha
+    target_dir = vault / "papers" / "_assets_" / sha
     ocr_dir = target_dir / "ocr"
     ocr_dir.mkdir(parents=True)
     (target_dir / "src").mkdir(parents=True)
@@ -109,7 +109,7 @@ def test_ocr_overwrite_reruns(mock_mistral_cls, runner, vault):
     setup_mock_mistral(mock_mistral_cls)
 
     sha = "overwrite"
-    target_dir = vault / "papers" / sha
+    target_dir = vault / "papers" / "_assets_" / sha
     ocr_dir = target_dir / "ocr"
     ocr_dir.mkdir(parents=True)
     (target_dir / "src").mkdir(parents=True)
@@ -138,7 +138,7 @@ def test_ocr_custom_model(mock_mistral_cls, runner, vault):
     mock_client = setup_mock_mistral(mock_mistral_cls)
 
     sha = "custom"
-    target_dir = vault / "papers" / sha
+    target_dir = vault / "papers" / "_assets_" / sha
     (target_dir / "src").mkdir(parents=True)
     (target_dir / "src" / "original.pdf").write_bytes(b"custom model test")
 

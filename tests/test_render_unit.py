@@ -9,7 +9,7 @@ def _setup_entry_with_llm(vault, sha="abc123", llm_filename="default.json", **fi
     """Create a vault entry with LLM JSON ready for rendering."""
     defaults = {"merchant": "ACME Store", "date": "2024-01-15", "total": "$42.50"}
     defaults.update(fields)
-    target_dir = vault / "papers" / sha
+    target_dir = vault / "papers" / "_assets_" / sha
     llm_dir = target_dir / "llm"
     llm_dir.mkdir(parents=True)
     (target_dir / "src").mkdir(parents=True)
@@ -31,14 +31,13 @@ def test_md_created_with_frontmatter(runner, vault):
     )
 
     assert result.exit_code == 0
-    target_dir = vault / "papers" / "sha1"
-    md_file = target_dir / "2024-06-01 - Coffee Shop - $5.75.md"
+    md_file = vault / "papers" / "2024-06-01 - Coffee Shop - $5.75.md"
     assert md_file.exists()
     content = md_file.read_text()
     assert 'merchant: "Coffee Shop"' in content
     assert 'date: "2024-06-01"' in content
     assert 'total: "$5.75"' in content
-    assert "![[src/original.pdf#height]]" in content
+    assert "![[_assets_/sha1/src/original.pdf#height]]" in content
     assert "Title: 2024-06-01 - Coffee Shop - $5.75" in result.output
 
 
@@ -54,16 +53,18 @@ def test_sanitizes_unsafe_characters(runner, vault):
         obj={"vault": str(vault), "path": "papers"},
     )
 
-    target_dir = vault / "papers" / "sha2"
-    md_file = target_dir / "2024-01-15 - Shop AB - $10.00.md"
+    md_file = vault / "papers" / "2024-01-15 - Shop AB - $10.00.md"
     assert md_file.exists()
-    assert "![[src/original.pdf#height]]" in md_file.read_text()
+    assert "![[_assets_/sha2/src/original.pdf#height]]" in md_file.read_text()
 
 
 def test_skip_existing_md(runner, vault):
     """Rendering is skipped when .md file already exists."""
-    target_dir = _setup_entry_with_llm(vault, sha="sha3")
-    (target_dir / "existing title.md").write_text("---\nold: true\n---\n")
+    _setup_entry_with_llm(vault, sha="sha3")
+    # Place existing .md at vault/papers/ level with the title that would be generated
+    (vault / "papers" / "2024-01-15 - ACME Store - $42.50.md").write_text(
+        "---\nold: true\n---\n"
+    )
 
     result = runner.invoke(
         render,
@@ -77,10 +78,11 @@ def test_skip_existing_md(runner, vault):
 
 def test_overwrite_replaces_md(runner, vault):
     """With --overwrite, old .md files are deleted and new one is created."""
-    target_dir = _setup_entry_with_llm(
+    _setup_entry_with_llm(
         vault, sha="sha4", merchant="New Shop", date="2025-01-01", total="$99.00"
     )
-    (target_dir / "old title.md").write_text("---\nold: true\n---\n")
+    papers_dir = vault / "papers"
+    (papers_dir / "old title.md").write_text("---\nold: true\n---\n")
 
     result = runner.invoke(
         render,
@@ -89,8 +91,8 @@ def test_overwrite_replaces_md(runner, vault):
     )
 
     assert result.exit_code == 0
-    assert not (target_dir / "old title.md").exists()
-    new_md = target_dir / "2025-01-01 - New Shop - $99.00.md"
+    assert not (papers_dir / "old title.md").exists()
+    new_md = papers_dir / "2025-01-01 - New Shop - $99.00.md"
     assert new_md.exists()
     content = new_md.read_text()
     assert 'merchant: "New Shop"' in content
@@ -98,7 +100,7 @@ def test_overwrite_replaces_md(runner, vault):
 
 def test_no_llm_json_no_entries(runner, vault):
     """Without llm JSON, no entries are processed."""
-    (vault / "papers" / "sha5").mkdir(parents=True)
+    (vault / "papers" / "_assets_" / "sha5").mkdir(parents=True)
 
     result = runner.invoke(
         render,
@@ -112,7 +114,7 @@ def test_no_llm_json_no_entries(runner, vault):
 
 def test_render_picks_newest_llm_json(runner, vault):
     """When multiple LLM json files exist, the newest by mtime is used."""
-    target_dir = vault / "papers" / "sha6"
+    target_dir = vault / "papers" / "_assets_" / "sha6"
     llm_dir = target_dir / "llm"
     llm_dir.mkdir(parents=True)
     (target_dir / "src").mkdir(parents=True)
@@ -138,4 +140,4 @@ def test_render_picks_newest_llm_json(runner, vault):
 
     assert result.exit_code == 0
     assert "Title: 2025-06-01 - New Shop - $99.00" in result.output
-    assert (target_dir / "2025-06-01 - New Shop - $99.00.md").exists()
+    assert (vault / "papers" / "2025-06-01 - New Shop - $99.00.md").exists()

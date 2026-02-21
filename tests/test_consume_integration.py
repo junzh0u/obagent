@@ -39,7 +39,7 @@ def test_full_consume_via_cli(
     assert result.exit_code == 0
     assert "Consumed" in result.output
 
-    target_dir = vault / "reports" / expected_hash
+    target_dir = vault / "reports" / "_assets_" / expected_hash
     assert (target_dir / "src" / "original.pdf").exists()
     assert (target_dir / "src" / "metadata.json").exists()
     assert not pdf.exists()
@@ -71,7 +71,7 @@ def test_default_path_is_receipts(
     )
 
     assert result.exit_code == 0
-    assert (vault / "Receipts" / sha / "src" / "original.pdf").exists()
+    assert (vault / "Receipts" / "_assets_" / sha / "src" / "original.pdf").exists()
 
 
 @patch("commands.llm.OpenAI")
@@ -105,7 +105,7 @@ def test_consume_multiple_pdfs(
 
     assert result.exit_code == 0
     for name, sha in files.items():
-        target_dir = vault / "multi" / sha
+        target_dir = vault / "multi" / "_assets_" / sha
         assert (target_dir / "src" / "original.pdf").read_bytes() is not None
         meta = json.loads((target_dir / "src" / "metadata.json").read_text())
         assert meta["sha256"] == sha
@@ -143,7 +143,7 @@ def test_consume_nested_pdfs(
     assert result.exit_code == 0
     assert "Consumed" in result.output
     assert not pdf.exists()
-    assert len(list((vault / "nested").iterdir())) == 1
+    assert len(list((vault / "nested").iterdir())) == 2  # _assets_ dir + .md file
 
 
 @patch("commands.llm.OpenAI")
@@ -195,7 +195,7 @@ def test_duplicate_skip_via_cli(
     assert result.exit_code == 0
     assert "Warning" in result.output
     assert "skipping" in result.output
-    assert len(list((vault / "dup").iterdir())) == 1
+    assert len(list((vault / "dup").iterdir())) == 2  # _assets_ dir + .md file
 
 
 @patch("commands.llm.OpenAI")
@@ -230,7 +230,7 @@ def test_non_pdf_files_are_ignored(
     assert (source_dir / "notes.txt").exists()
     assert (source_dir / "image.png").exists()
     assert not pdf.exists()
-    assert len(list((vault / "mixed").iterdir())) == 1
+    assert len(list((vault / "mixed").iterdir())) == 2  # _assets_ dir + .md file
 
 
 @patch("commands.llm.OpenAI")
@@ -314,8 +314,10 @@ def test_overwrite_via_cli(
     assert result.exit_code == 0
     assert "Consumed" in result.output
     assert "Warning" not in result.output
-    assert len(list((vault / "ow").iterdir())) == 1
-    assert (vault / "ow" / sha / "src" / "original.pdf").read_bytes() == content
+    assert len(list((vault / "ow").iterdir())) == 2  # _assets_ dir + .md file
+    assert (
+        vault / "ow" / "_assets_" / sha / "src" / "original.pdf"
+    ).read_bytes() == content
 
 
 @patch("commands.llm.OpenAI")
@@ -331,7 +333,7 @@ def test_overwrite_re_ocrs_via_cli(
     sha = hashlib.sha256(content).hexdigest()
 
     # Pre-create target with old OCR
-    target = vault / "reocr" / sha
+    target = vault / "reocr" / "_assets_" / sha
     ocr_dir = target / "ocr"
     ocr_dir.mkdir(parents=True)
     (target / "src").mkdir(parents=True)
@@ -393,7 +395,7 @@ def test_ocr_via_cli_flag(mock_mistral_cls, mock_openai_cls, runner, vault, sour
 
     assert result.exit_code == 0
     assert "OCR completed" in result.output
-    ocr_dir = vault / "reports" / sha / "ocr"
+    ocr_dir = vault / "reports" / "_assets_" / sha / "ocr"
     assert (ocr_dir / f"{OCR_MODEL}.json").exists()
     assert (ocr_dir / f"{OCR_MODEL}.txt").exists()
     mock_mistral_cls.assert_any_call(api_key="sk-test-key")
@@ -426,7 +428,7 @@ def test_ocr_via_env_var(mock_mistral_cls, mock_openai_cls, runner, vault, sourc
 
     assert result.exit_code == 0
     assert "OCR completed" in result.output
-    ocr_dir = vault / "envtest" / sha / "ocr"
+    ocr_dir = vault / "envtest" / "_assets_" / sha / "ocr"
     assert (ocr_dir / f"{OCR_MODEL}.json").exists()
     assert (ocr_dir / f"{OCR_MODEL}.txt").exists()
     mock_mistral_cls.assert_any_call(api_key="sk-env-key")
@@ -459,7 +461,7 @@ def test_ocr_files_content_via_cli(
         ],
     )
 
-    ocr_dir = vault / "check" / sha / "ocr"
+    ocr_dir = vault / "check" / "_assets_" / sha / "ocr"
     txt = (ocr_dir / f"{OCR_MODEL}.txt").read_text()
     assert "# Page 1" in txt
     assert "# Page 2" in txt
@@ -501,7 +503,7 @@ def test_title_md_created_via_cli(
     )
 
     assert result.exit_code == 0
-    target_dir = vault / "papers" / sha
+    target_dir = vault / "papers" / "_assets_" / sha
     # LLM JSON created
     json_path = target_dir / "llm" / f"{LLM_MODEL}.json"
     assert json_path.exists()
@@ -509,12 +511,12 @@ def test_title_md_created_via_cli(
     assert fields["merchant"] == "Bookstore"
     assert fields["date"] == "2024-09-20"
     assert fields["total"] == "$29.99"
-    # Rendered markdown
+    # Rendered markdown at vault/papers/ level
     assert "Title: 2024-09-20 - Bookstore - $29.99" in result.output
-    md_file = target_dir / "2024-09-20 - Bookstore - $29.99.md"
+    md_file = vault / "papers" / "2024-09-20 - Bookstore - $29.99.md"
     assert md_file.exists()
     content = md_file.read_text()
     assert 'merchant: "Bookstore"' in content
     assert 'date: "2024-09-20"' in content
     assert 'total: "$29.99"' in content
-    assert "![[src/original.pdf#height]]" in content
+    assert f"![[_assets_/{sha}/src/original.pdf#height]]" in content

@@ -74,7 +74,10 @@ def llm(ctx, openai_api_key, llm_model, overwrite):
     """Extract metadata via LLM from OCR'd entries in the vault."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    for target_dir in sorted(p for p in (vault / path).iterdir() if p.is_dir()):
+    assets_dir = vault / path / "_assets_"
+    if not assets_dir.is_dir():
+        return
+    for target_dir in sorted(p for p in assets_dir.iterdir() if p.is_dir()):
         click.echo(f"LLM: {target_dir}")
         try:
             extract_fields(

@@ -19,7 +19,7 @@ def test_sha256_is_correct(runner, vault, source_dir):
     )
 
     assert result.exit_code == 0
-    target_dir = vault / "papers" / expected_hash
+    target_dir = vault / "papers" / "_assets_" / expected_hash
     assert target_dir.exists()
     assert (target_dir / "src" / "original.pdf").read_bytes() == content
     meta = json.loads((target_dir / "src" / "metadata.json").read_text())
@@ -67,7 +67,7 @@ def test_duplicate_is_skipped(runner, vault, source_dir):
     content = b"duplicate content"
     sha256 = hashlib.sha256(content).hexdigest()
 
-    existing_dir = vault / "papers" / sha256
+    existing_dir = vault / "papers" / "_assets_" / sha256
     (existing_dir / "src").mkdir(parents=True)
     (existing_dir / "src" / "original.pdf").write_bytes(content)
 
@@ -122,7 +122,7 @@ def test_overwrite_replaces_existing_entry(runner, vault, source_dir):
     content = b"overwrite content"
     sha = hashlib.sha256(content).hexdigest()
 
-    existing_dir = vault / "papers" / sha
+    existing_dir = vault / "papers" / "_assets_" / sha
     (existing_dir / "src").mkdir(parents=True)
     (existing_dir / "src" / "original.pdf").write_bytes(b"old content")
     (existing_dir / "src" / "metadata.json").write_text('{"old": true}')
@@ -159,7 +159,7 @@ def test_overwrite_without_existing_works_normally(runner, vault, source_dir):
 
     assert result.exit_code == 0
     assert "Consumed" in result.output
-    assert (vault / "papers" / sha / "src" / "original.pdf").exists()
+    assert (vault / "papers" / "_assets_" / sha / "src" / "original.pdf").exists()
 
 
 def test_keep_original_and_overwrite_together(runner, vault, source_dir):
@@ -167,7 +167,7 @@ def test_keep_original_and_overwrite_together(runner, vault, source_dir):
     content = b"both flags"
     sha = hashlib.sha256(content).hexdigest()
 
-    existing_dir = vault / "papers" / sha
+    existing_dir = vault / "papers" / "_assets_" / sha
     (existing_dir / "src").mkdir(parents=True)
     (existing_dir / "src" / "original.pdf").write_bytes(b"old")
 

@@ -11,7 +11,7 @@ from tests.conftest import setup_mock_openai
 
 def _setup_entry_with_ocr(vault, sha="abc123", ocr_filename="default-ocr.txt"):
     """Create a vault entry with OCR text ready for LLM extraction."""
-    target_dir = vault / "papers" / sha
+    target_dir = vault / "papers" / "_assets_" / sha
     ocr_dir = target_dir / "ocr"
     ocr_dir.mkdir(parents=True)
     (target_dir / "original.pdf").write_bytes(b"test")
@@ -36,7 +36,7 @@ def test_llm_json_created(mock_openai_cls, runner, vault):
     )
 
     assert result.exit_code == 0
-    target_dir = vault / "papers" / "sha1"
+    target_dir = vault / "papers" / "_assets_" / "sha1"
     json_path = target_dir / "llm" / f"{LLM_MODEL}.json"
     assert json_path.exists()
     fields = json.loads(json_path.read_text())
@@ -129,7 +129,7 @@ def test_llm_custom_model(mock_openai_cls, runner, vault):
     )
 
     assert result.exit_code == 0
-    target_dir = vault / "papers" / "sha6"
+    target_dir = vault / "papers" / "_assets_" / "sha6"
     assert (target_dir / "llm" / "custom-model.json").exists()
     call_kwargs = mock_client.chat.completions.create.call_args
     assert call_kwargs.kwargs["model"] == "custom-model"
@@ -139,7 +139,7 @@ def test_llm_custom_model(mock_openai_cls, runner, vault):
 def test_llm_picks_newest_ocr_txt(mock_openai_cls, runner, vault):
     """When multiple OCR txt files exist, the newest by mtime is used."""
     setup_mock_openai(mock_openai_cls)
-    target_dir = vault / "papers" / "sha7"
+    target_dir = vault / "papers" / "_assets_" / "sha7"
     ocr_dir = target_dir / "ocr"
     ocr_dir.mkdir(parents=True)
     (target_dir / "original.pdf").write_bytes(b"test")
