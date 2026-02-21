@@ -5,6 +5,8 @@ from pathlib import Path
 import click
 from mistralai import Mistral
 
+from constants import OCR_MODEL
+
 
 def run_ocr(target_dir, api_key, *, overwrite=False):
     """Run Mistral OCR on the consumed PDF and save results.
@@ -13,7 +15,7 @@ def run_ocr(target_dir, api_key, *, overwrite=False):
     Otherwise runs OCR, saves JSON + TXT, returns concatenated text.
     """
     ocr_dir = target_dir / "ocr"
-    txt_path = ocr_dir / "mistral-ocr-latest.txt"
+    txt_path = ocr_dir / f"{OCR_MODEL}.txt"
 
     if txt_path.exists() and not overwrite:
         click.echo("  OCR already exists, skipping")
@@ -24,7 +26,7 @@ def run_ocr(target_dir, api_key, *, overwrite=False):
 
     client = Mistral(api_key=api_key)
     ocr_response = client.ocr.process(
-        model="mistral-ocr-latest",
+        model=OCR_MODEL,
         document={
             "type": "document_url",
             "document_url": f"data:application/pdf;base64,{pdf_b64}",
@@ -32,7 +34,7 @@ def run_ocr(target_dir, api_key, *, overwrite=False):
     )
 
     ocr_dir.mkdir(exist_ok=True)
-    (ocr_dir / "mistral-ocr-latest.json").write_text(
+    (ocr_dir / f"{OCR_MODEL}.json").write_text(
         json.dumps(ocr_response.model_dump(), indent=2)
     )
     pages_md = [page.markdown for page in ocr_response.pages]

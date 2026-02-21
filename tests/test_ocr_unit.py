@@ -3,6 +3,7 @@ import json
 from unittest.mock import patch
 
 from commands.ocr import ocr
+from constants import OCR_MODEL
 
 from tests.conftest import setup_mock_mistral
 
@@ -29,8 +30,8 @@ def test_ocr_results_saved_to_correct_paths(
     assert result.exit_code == 0
     ocr_dir = target_dir / "ocr"
     assert ocr_dir.exists()
-    assert (ocr_dir / "mistral-ocr-latest.json").exists()
-    assert (ocr_dir / "mistral-ocr-latest.txt").exists()
+    assert (ocr_dir / f"{OCR_MODEL}.json").exists()
+    assert (ocr_dir / f"{OCR_MODEL}.txt").exists()
 
 
 @patch("commands.ocr.Mistral")
@@ -49,7 +50,7 @@ def test_ocr_text_contains_concatenated_markdown(mock_mistral_cls, runner, vault
         obj={"vault": str(vault), "path": "papers"},
     )
 
-    txt = (target_dir / "ocr" / "mistral-ocr-latest.txt").read_text()
+    txt = (target_dir / "ocr" / f"{OCR_MODEL}.txt").read_text()
     assert txt == "# Page 1\n\nHello world\n\n# Page 2\n\nGoodbye world"
 
 
@@ -70,10 +71,10 @@ def test_ocr_json_contains_model_dump(mock_mistral_cls, runner, vault):
         obj={"vault": str(vault), "path": "papers"},
     )
 
-    json_path = target_dir / "ocr" / "mistral-ocr-latest.json"
+    json_path = target_dir / "ocr" / f"{OCR_MODEL}.json"
     data = json.loads(json_path.read_text())
     assert data == mock_response.model_dump.return_value
-    assert data["model"] == "mistral-ocr-latest"
+    assert data["model"] == OCR_MODEL
     assert len(data["pages"]) == 2
 
 
@@ -87,7 +88,7 @@ def test_ocr_skip_existing(mock_mistral_cls, runner, vault):
     ocr_dir = target_dir / "ocr"
     ocr_dir.mkdir(parents=True)
     (target_dir / "original.pdf").write_bytes(b"test")
-    (ocr_dir / "mistral-ocr-latest.txt").write_text("existing ocr text")
+    (ocr_dir / f"{OCR_MODEL}.txt").write_text("existing ocr text")
 
     result = runner.invoke(
         ocr,
@@ -98,7 +99,7 @@ def test_ocr_skip_existing(mock_mistral_cls, runner, vault):
     assert result.exit_code == 0
     assert "already exists, skipping" in result.output
     mock_mistral_cls.return_value.ocr.process.assert_not_called()
-    assert (ocr_dir / "mistral-ocr-latest.txt").read_text() == "existing ocr text"
+    assert (ocr_dir / f"{OCR_MODEL}.txt").read_text() == "existing ocr text"
 
 
 @patch("commands.ocr.Mistral")
@@ -111,8 +112,8 @@ def test_ocr_overwrite_reruns(mock_mistral_cls, runner, vault):
     ocr_dir = target_dir / "ocr"
     ocr_dir.mkdir(parents=True)
     (target_dir / "original.pdf").write_bytes(b"test")
-    (ocr_dir / "mistral-ocr-latest.txt").write_text("old ocr text")
-    (ocr_dir / "mistral-ocr-latest.json").write_text('{"old": true}')
+    (ocr_dir / f"{OCR_MODEL}.txt").write_text("old ocr text")
+    (ocr_dir / f"{OCR_MODEL}.json").write_text('{"old": true}')
 
     result = runner.invoke(
         ocr,
@@ -122,8 +123,8 @@ def test_ocr_overwrite_reruns(mock_mistral_cls, runner, vault):
 
     assert result.exit_code == 0
     assert "OCR completed" in result.output
-    txt = (ocr_dir / "mistral-ocr-latest.txt").read_text()
+    txt = (ocr_dir / f"{OCR_MODEL}.txt").read_text()
     assert "old ocr text" not in txt
     assert "# Page 1" in txt
-    data = json.loads((ocr_dir / "mistral-ocr-latest.json").read_text())
+    data = json.loads((ocr_dir / f"{OCR_MODEL}.json").read_text())
     assert "old" not in data

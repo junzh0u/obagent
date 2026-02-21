@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
+from constants import OCR_MODEL
+
 BOTH_KEYS = ["--mistral-api-key", "test-key", "--openai-api-key", "test-oai-key"]
 
 
@@ -38,7 +40,7 @@ def mock_ocr_response():
             {"markdown": "# Page 1\n\nHello world", "index": 0},
             {"markdown": "# Page 2\n\nGoodbye world", "index": 1},
         ],
-        "model": "mistral-ocr-latest",
+        "model": OCR_MODEL,
     }
     return response
 
