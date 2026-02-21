@@ -22,6 +22,24 @@ def _mock_ocr_response():
     return response
 
 
+def _mock_chat_response(title="My Document Title"):
+    """Create a mock chat completion response for title extraction."""
+    message = SimpleNamespace(content=title)
+    choice = SimpleNamespace(message=message)
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+def _setup_mock_client(mock_mistral_cls, title="My Document Title"):
+    """Set up a mock Mistral client with both OCR and chat responses."""
+    mock_client = MagicMock()
+    mock_client.ocr.process.return_value = _mock_ocr_response()
+    mock_client.chat.complete.return_value = _mock_chat_response(title)
+    mock_mistral_cls.return_value = mock_client
+    return mock_client
+
+
 def test_sha256_is_correct(runner, vault, source_dir):
     """The stored sha256 matches what hashlib computes."""
     content = b"hello world pdf content"
@@ -190,9 +208,7 @@ def test_overwrite_without_existing_works_normally(runner, vault, source_dir):
 @patch("commands.consume.Mistral")
 def test_overwrite_forces_re_ocr(mock_mistral_cls, runner, vault, source_dir):
     """With --overwrite, OCR is re-run even if ocr/ already exists."""
-    mock_client = MagicMock()
-    mock_client.ocr.process.return_value = _mock_ocr_response()
-    mock_mistral_cls.return_value = mock_client
+    _setup_mock_client(mock_mistral_cls)
 
     content = b"re-ocr content"
     sha = hashlib.sha256(content).hexdigest()
@@ -262,9 +278,7 @@ def test_ocr_results_saved_to_correct_paths(
     mock_mistral_cls, runner, vault, source_dir
 ):
     """OCR results are saved to ocr/ subdirectory with correct filenames."""
-    mock_client = MagicMock()
-    mock_client.ocr.process.return_value = _mock_ocr_response()
-    mock_mistral_cls.return_value = mock_client
+    _setup_mock_client(mock_mistral_cls)
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"ocr test content")
@@ -288,9 +302,7 @@ def test_ocr_text_contains_concatenated_markdown(
     mock_mistral_cls, runner, vault, source_dir
 ):
     """OCR text file contains page markdowns separated by double newlines."""
-    mock_client = MagicMock()
-    mock_client.ocr.process.return_value = _mock_ocr_response()
-    mock_mistral_cls.return_value = mock_client
+    _setup_mock_client(mock_mistral_cls)
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"ocr text test")
@@ -309,10 +321,8 @@ def test_ocr_text_contains_concatenated_markdown(
 @patch("commands.consume.Mistral")
 def test_ocr_json_contains_model_dump(mock_mistral_cls, runner, vault, source_dir):
     """OCR JSON file contains valid JSON from model_dump()."""
-    mock_client = MagicMock()
-    mock_response = _mock_ocr_response()
-    mock_client.ocr.process.return_value = mock_response
-    mock_mistral_cls.return_value = mock_client
+    mock_client = _setup_mock_client(mock_mistral_cls)
+    mock_response = mock_client.ocr.process.return_value
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"ocr json test")
@@ -347,3 +357,73 @@ def test_no_ocr_without_api_key(mock_mistral_cls, runner, vault, source_dir):
     assert result.exit_code == 0
     assert not (vault / "papers" / sha / "ocr").exists()
     mock_mistral_cls.assert_not_called()
+
+
+@patch("commands.consume.Mistral")
+def test_title_md_created_after_ocr(mock_mistral_cls, runner, vault, source_dir):
+    """A <title>.md file is created with an Obsidian embed link."""
+    _setup_mock_client(mock_mistral_cls, title="My Research Paper")
+
+    pdf = source_dir / "doc.pdf"
+    pdf.write_bytes(b"title test")
+    sha = hashlib.sha256(b"title test").hexdigest()
+
+    result = runner.invoke(
+        consume,
+        ["--path", "papers", "--mistral-api-key", "test-key", str(source_dir)],
+        obj={"vault": str(vault)},
+    )
+
+    assert result.exit_code == 0
+    target_dir = vault / "papers" / sha
+    md_file = target_dir / "My Research Paper.md"
+    assert md_file.exists()
+    assert md_file.read_text() == "![[original.pdf]]\n"
+    assert "Title: My Research Paper" in result.output
+
+
+@patch("commands.consume.Mistral")
+def test_title_sanitizes_unsafe_characters(mock_mistral_cls, runner, vault, source_dir):
+    """Unsafe filename characters are stripped from the title."""
+    _setup_mock_client(mock_mistral_cls, title='A "Title" with: bad/chars?')
+
+    pdf = source_dir / "doc.pdf"
+    pdf.write_bytes(b"sanitize test")
+    sha = hashlib.sha256(b"sanitize test").hexdigest()
+
+    runner.invoke(
+        consume,
+        ["--path", "papers", "--mistral-api-key", "test-key", str(source_dir)],
+        obj={"vault": str(vault)},
+    )
+
+    target_dir = vault / "papers" / sha
+    md_file = target_dir / "A Title with badchars.md"
+    assert md_file.exists()
+    assert md_file.read_text() == "![[original.pdf]]\n"
+
+
+@patch("commands.consume.Mistral")
+def test_title_uses_chat_complete_with_ocr_text(
+    mock_mistral_cls, runner, vault, source_dir
+):
+    """Title extraction calls chat.complete with mistral-large-latest and OCR text."""
+    mock_client = _setup_mock_client(mock_mistral_cls)
+
+    pdf = source_dir / "doc.pdf"
+    pdf.write_bytes(b"chat model test")
+
+    runner.invoke(
+        consume,
+        ["--path", "papers", "--mistral-api-key", "test-key", str(source_dir)],
+        obj={"vault": str(vault)},
+    )
+
+    mock_client.chat.complete.assert_called_once()
+    call_kwargs = mock_client.chat.complete.call_args
+    assert call_kwargs.kwargs["model"] == "mistral-large-latest"
+    prompt = call_kwargs.kwargs["messages"][0]["content"]
+    assert "partially read by OCR" in prompt
+    assert '"papers"' in prompt
+    assert "title in Obsidian" in prompt
+    assert "# Page 1" in prompt

@@ -22,6 +22,24 @@ def _mock_ocr_response():
     return response
 
 
+def _mock_chat_response(title="My Document Title"):
+    """Create a mock chat completion response for title extraction."""
+    message = SimpleNamespace(content=title)
+    choice = SimpleNamespace(message=message)
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+def _setup_mock_client(mock_mistral_cls, title="My Document Title"):
+    """Set up a mock Mistral client with both OCR and chat responses."""
+    mock_client = MagicMock()
+    mock_client.ocr.process.return_value = _mock_ocr_response()
+    mock_client.chat.complete.return_value = _mock_chat_response(title)
+    mock_mistral_cls.return_value = mock_client
+    return mock_client
+
+
 def test_full_consume_via_cli(runner, vault, source_dir):
     """End-to-end: invoke through the top-level CLI group."""
     pdf = source_dir / "report.pdf"
@@ -201,9 +219,7 @@ def test_overwrite_via_cli(runner, vault, source_dir):
 @patch("commands.consume.Mistral")
 def test_overwrite_re_ocrs_via_cli(mock_mistral_cls, runner, vault, source_dir):
     """--overwrite forces re-OCR through full CLI."""
-    mock_client = MagicMock()
-    mock_client.ocr.process.return_value = _mock_ocr_response()
-    mock_mistral_cls.return_value = mock_client
+    _setup_mock_client(mock_mistral_cls)
 
     content = b"re-ocr via cli"
     sha = hashlib.sha256(content).hexdigest()
@@ -243,9 +259,7 @@ def test_overwrite_re_ocrs_via_cli(mock_mistral_cls, runner, vault, source_dir):
 @patch("commands.consume.Mistral")
 def test_ocr_via_cli_flag(mock_mistral_cls, runner, vault, source_dir):
     """Full CLI with --mistral-api-key flag runs OCR end-to-end."""
-    mock_client = MagicMock()
-    mock_client.ocr.process.return_value = _mock_ocr_response()
-    mock_mistral_cls.return_value = mock_client
+    _setup_mock_client(mock_mistral_cls)
 
     pdf = source_dir / "report.pdf"
     pdf.write_bytes(b"cli ocr test")
@@ -270,15 +284,13 @@ def test_ocr_via_cli_flag(mock_mistral_cls, runner, vault, source_dir):
     ocr_dir = vault / "reports" / sha / "ocr"
     assert (ocr_dir / "mistral-ocr-latest.json").exists()
     assert (ocr_dir / "mistral-ocr-latest.txt").exists()
-    mock_mistral_cls.assert_called_once_with(api_key="sk-test-key")
+    mock_mistral_cls.assert_any_call(api_key="sk-test-key")
 
 
 @patch("commands.consume.Mistral")
 def test_ocr_via_env_var(mock_mistral_cls, runner, vault, source_dir):
     """API key from MISTRAL_API_KEY env var is used for OCR."""
-    mock_client = MagicMock()
-    mock_client.ocr.process.return_value = _mock_ocr_response()
-    mock_mistral_cls.return_value = mock_client
+    _setup_mock_client(mock_mistral_cls)
 
     pdf = source_dir / "env.pdf"
     pdf.write_bytes(b"env var ocr test")
@@ -295,15 +307,13 @@ def test_ocr_via_env_var(mock_mistral_cls, runner, vault, source_dir):
     ocr_dir = vault / "envtest" / sha / "ocr"
     assert (ocr_dir / "mistral-ocr-latest.json").exists()
     assert (ocr_dir / "mistral-ocr-latest.txt").exists()
-    mock_mistral_cls.assert_called_once_with(api_key="sk-env-key")
+    mock_mistral_cls.assert_any_call(api_key="sk-env-key")
 
 
 @patch("commands.consume.Mistral")
 def test_ocr_files_content_via_cli(mock_mistral_cls, runner, vault, source_dir):
     """Verify OCR file contents are correct through full CLI invocation."""
-    mock_client = MagicMock()
-    mock_client.ocr.process.return_value = _mock_ocr_response()
-    mock_mistral_cls.return_value = mock_client
+    _setup_mock_client(mock_mistral_cls)
 
     pdf = source_dir / "content.pdf"
     pdf.write_bytes(b"content check")
@@ -333,3 +343,33 @@ def test_ocr_files_content_via_cli(mock_mistral_cls, runner, vault, source_dir):
     data = json.loads((ocr_dir / "mistral-ocr-latest.json").read_text())
     assert data["model"] == "mistral-ocr-latest"
     assert len(data["pages"]) == 2
+
+
+@patch("commands.consume.Mistral")
+def test_title_md_created_via_cli(mock_mistral_cls, runner, vault, source_dir):
+    """Title markdown file is created through full CLI invocation."""
+    _setup_mock_client(mock_mistral_cls, title="Deep Learning Survey")
+
+    pdf = source_dir / "paper.pdf"
+    pdf.write_bytes(b"title cli test")
+    sha = hashlib.sha256(b"title cli test").hexdigest()
+
+    result = runner.invoke(
+        cli,
+        [
+            "--vault",
+            str(vault),
+            "consume",
+            "--path",
+            "papers",
+            "--mistral-api-key",
+            "sk-test",
+            str(source_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Title: Deep Learning Survey" in result.output
+    md_file = vault / "papers" / sha / "Deep Learning Survey.md"
+    assert md_file.exists()
+    assert md_file.read_text() == "![[original.pdf]]\n"
