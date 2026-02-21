@@ -5,7 +5,7 @@ import click
 from commands.ingest import ingest_pdf
 from commands.llm import extract_fields
 from commands.ocr import run_ocr
-from commands.render import render_note
+from commands.render import clear_notes, render_note
 from constants import LLM_MODEL, OCR_MODEL
 
 
@@ -50,6 +50,8 @@ def consume(
     """Consume PDFs from a directory into the vault."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
+    if overwrite:
+        clear_notes(vault / path)
     for pdf in sorted(Path(directory).rglob("*.pdf")):
         target_dir = ingest_pdf(
             pdf, vault, path, keep_original=keep_original, overwrite=overwrite
@@ -69,6 +71,6 @@ def consume(
             click.echo(f"  Warning: field extraction failed: {e}")
             continue
         try:
-            render_note(target_dir, overwrite=overwrite)
+            render_note(target_dir)
         except Exception as e:
             click.echo(f"  Warning: note rendering failed: {e}")

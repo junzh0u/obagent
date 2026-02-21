@@ -6,11 +6,17 @@ import click
 from utils import newest_file
 
 
-def render_note(target_dir, *, overwrite=False):
+def clear_notes(path_dir):
+    """Delete all .md files in path_dir."""
+    for md in path_dir.glob("*.md"):
+        md.unlink()
+
+
+def render_note(target_dir):
     """Read LLM JSON and create an Obsidian markdown note.
 
-    Writes .md to target_dir's parent (vault/path/) for a flat, browsable layout.
-    If .md file exists and not overwrite, skips and returns None.
+    Writes .md to target_dir's grandparent (vault/path/) for a flat, browsable layout.
+    Skips if .md already exists. Call clear_notes() first to force re-render.
     Returns safe_title on success, None if skipped.
     """
     json_path = newest_file(target_dir / "llm", "*.json")
@@ -28,7 +34,7 @@ def render_note(target_dir, *, overwrite=False):
     path_dir = target_dir.parent.parent
     md_path = path_dir / f"{safe_title}.md"
 
-    if md_path.exists() and not overwrite:
+    if md_path.exists():
         click.echo("  Markdown already exists, skipping")
         return None
 
@@ -55,14 +61,13 @@ def render(ctx, overwrite):
     path = ctx.obj["path"]
     path_dir = vault / path
     if overwrite:
-        for md in path_dir.glob("*.md"):
-            md.unlink()
+        clear_notes(path_dir)
     assets_dir = path_dir / "_assets_"
     if not assets_dir.is_dir():
         return
     for target_dir in sorted(p for p in assets_dir.iterdir() if p.is_dir()):
         click.echo(f"Render: {target_dir}")
         try:
-            render_note(target_dir, overwrite=overwrite)
+            render_note(target_dir)
         except Exception as e:
             click.echo(f"  Warning: note rendering failed: {e}")

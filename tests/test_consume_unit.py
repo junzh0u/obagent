@@ -36,7 +36,7 @@ def test_calls_all_four_steps(
         model=LLM_MODEL,
         overwrite=False,
     )
-    mock_render.assert_called_once_with(target_dir, overwrite=False)
+    mock_render.assert_called_once_with(target_dir)
 
 
 @patch("commands.consume.render_note")
@@ -156,7 +156,7 @@ def test_forwards_flags(
         model="custom-llm",
         overwrite=True,
     )
-    mock_render.assert_called_once_with(target_dir, overwrite=True)
+    mock_render.assert_called_once_with(target_dir)
 
 
 @patch("commands.consume.render_note")

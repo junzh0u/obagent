@@ -294,6 +294,9 @@ def test_overwrite_via_cli(
         ],
     )
 
+    # Plant a stale .md to verify --overwrite cleans it up
+    (vault / "ow" / "stale note.md").write_text("stale")
+
     # Re-create and consume again with --overwrite
     pdf.write_bytes(content)
     result = runner.invoke(
@@ -314,6 +317,7 @@ def test_overwrite_via_cli(
     assert result.exit_code == 0
     assert "Consumed" in result.output
     assert "Warning" not in result.output
+    assert not (vault / "ow" / "stale note.md").exists()
     assert len(list((vault / "ow").iterdir())) == 2  # _assets_ dir + .md file
     assert (
         vault / "ow" / "_assets_" / sha / "src" / "original.pdf"
