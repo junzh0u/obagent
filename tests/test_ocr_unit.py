@@ -128,3 +128,27 @@ def test_ocr_overwrite_reruns(mock_mistral_cls, runner, vault):
     assert "# Page 1" in txt
     data = json.loads((ocr_dir / f"{OCR_MODEL}.json").read_text())
     assert "old" not in data
+
+
+@patch("commands.ocr.Mistral")
+def test_ocr_custom_model(mock_mistral_cls, runner, vault):
+    """--ocr-model saves files under the custom model name and calls API with it."""
+    mock_client = setup_mock_mistral(mock_mistral_cls)
+
+    sha = "custom"
+    target_dir = vault / "papers" / sha
+    target_dir.mkdir(parents=True)
+    (target_dir / "original.pdf").write_bytes(b"custom model test")
+
+    result = runner.invoke(
+        ocr,
+        ["--mistral-api-key", "test-key", "--ocr-model", "custom-model"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    ocr_dir = target_dir / "ocr"
+    assert (ocr_dir / "custom-model.txt").exists()
+    assert (ocr_dir / "custom-model.json").exists()
+    call_kwargs = mock_client.ocr.process.call_args
+    assert call_kwargs.kwargs["model"] == "custom-model"

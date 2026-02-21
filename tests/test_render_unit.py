@@ -1,10 +1,11 @@
 import json
+import os
+import time
 
 from commands.render import render
-from constants import LLM_MODEL
 
 
-def _setup_entry_with_llm(vault, sha="abc123", **fields):
+def _setup_entry_with_llm(vault, sha="abc123", llm_filename="default.json", **fields):
     """Create a vault entry with LLM JSON ready for rendering."""
     defaults = {"merchant": "ACME Store", "date": "2024-01-15", "total": "$42.50"}
     defaults.update(fields)
@@ -12,7 +13,7 @@ def _setup_entry_with_llm(vault, sha="abc123", **fields):
     llm_dir = target_dir / "llm"
     llm_dir.mkdir(parents=True)
     (target_dir / "original.pdf").write_bytes(b"test")
-    (llm_dir / f"{LLM_MODEL}.json").write_text(json.dumps(defaults))
+    (llm_dir / llm_filename).write_text(json.dumps(defaults))
     return target_dir
 
 
@@ -106,3 +107,33 @@ def test_no_llm_json_no_entries(runner, vault):
 
     assert result.exit_code == 0
     assert "Title:" not in result.output
+
+
+def test_render_picks_newest_llm_json(runner, vault):
+    """When multiple LLM json files exist, the newest by mtime is used."""
+    target_dir = vault / "papers" / "sha6"
+    llm_dir = target_dir / "llm"
+    llm_dir.mkdir(parents=True)
+    (target_dir / "original.pdf").write_bytes(b"test")
+
+    old_file = llm_dir / "old-model.json"
+    old_file.write_text(
+        json.dumps({"merchant": "Old Shop", "date": "2024-01-01", "total": "$1.00"})
+    )
+    old_mtime = time.time() - 100
+    os.utime(old_file, (old_mtime, old_mtime))
+
+    new_file = llm_dir / "new-model.json"
+    new_file.write_text(
+        json.dumps({"merchant": "New Shop", "date": "2025-06-01", "total": "$99.00"})
+    )
+
+    result = runner.invoke(
+        render,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert "Title: 2025-06-01 - New Shop - $99.00" in result.output
+    assert (target_dir / "2025-06-01 - New Shop - $99.00.md").exists()

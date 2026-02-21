@@ -8,14 +8,14 @@ from mistralai import Mistral
 from constants import OCR_MODEL
 
 
-def run_ocr(target_dir, api_key, *, overwrite=False):
+def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
     """Run Mistral OCR on the consumed PDF and save results.
 
     If OCR output exists and not overwrite, returns existing text (skip API call).
     Otherwise runs OCR, saves JSON + TXT, returns concatenated text.
     """
     ocr_dir = target_dir / "ocr"
-    txt_path = ocr_dir / f"{OCR_MODEL}.txt"
+    txt_path = ocr_dir / f"{model}.txt"
 
     if txt_path.exists() and not overwrite:
         click.echo("  OCR already exists, skipping")
@@ -26,7 +26,7 @@ def run_ocr(target_dir, api_key, *, overwrite=False):
 
     client = Mistral(api_key=api_key)
     ocr_response = client.ocr.process(
-        model=OCR_MODEL,
+        model=model,
         document={
             "type": "document_url",
             "document_url": f"data:application/pdf;base64,{pdf_b64}",
@@ -34,7 +34,7 @@ def run_ocr(target_dir, api_key, *, overwrite=False):
     )
 
     ocr_dir.mkdir(exist_ok=True)
-    (ocr_dir / f"{OCR_MODEL}.json").write_text(
+    (ocr_dir / f"{model}.json").write_text(
         json.dumps(ocr_response.model_dump(), indent=2)
     )
     pages_md = [page.markdown for page in ocr_response.pages]
@@ -51,13 +51,16 @@ def run_ocr(target_dir, api_key, *, overwrite=False):
     required=True,
     help="Mistral API key for OCR processing.",
 )
+@click.option(
+    "--ocr-model", default=OCR_MODEL, show_default=True, help="Mistral OCR model name."
+)
 @click.option("--overwrite", is_flag=True, help="Overwrite existing OCR results.")
 @click.pass_context
-def ocr(ctx, mistral_api_key, overwrite):
+def ocr(ctx, mistral_api_key, ocr_model, overwrite):
     """Run OCR on ingested PDFs in the vault."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
     for pdf_path in sorted((vault / path).rglob("original.pdf")):
         target_dir = pdf_path.parent
         click.echo(f"OCR: {target_dir}")
-        run_ocr(target_dir, mistral_api_key, overwrite=overwrite)
+        run_ocr(target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite)

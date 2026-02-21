@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from commands.consume import consume
+from constants import LLM_MODEL, OCR_MODEL
 
 from tests.conftest import BOTH_KEYS
 
@@ -27,9 +28,16 @@ def test_calls_all_four_steps(
 
     assert result.exit_code == 0
     mock_ingest.assert_called_once()
-    mock_ocr.assert_called_once_with(target_dir, "test-key", overwrite=False)
+    mock_ocr.assert_called_once_with(
+        target_dir, "test-key", model=OCR_MODEL, overwrite=False
+    )
     mock_llm.assert_called_once_with(
-        target_dir, "test-oai-key", "ocr text", "papers", overwrite=False
+        target_dir,
+        "test-oai-key",
+        "ocr text",
+        "papers",
+        model=LLM_MODEL,
+        overwrite=False,
     )
     mock_render.assert_called_once_with(target_dir, overwrite=False)
 
@@ -125,7 +133,16 @@ def test_forwards_flags(
 
     result = runner.invoke(
         consume,
-        ["--keep-original", "--overwrite", *BOTH_KEYS, str(source_dir)],
+        [
+            "--keep-original",
+            "--overwrite",
+            "--ocr-model",
+            "custom-ocr",
+            "--llm-model",
+            "custom-llm",
+            *BOTH_KEYS,
+            str(source_dir),
+        ],
         obj={"vault": str(vault), "path": "papers"},
     )
 
@@ -133,9 +150,16 @@ def test_forwards_flags(
     ingest_kwargs = mock_ingest.call_args
     assert ingest_kwargs.kwargs["keep_original"] is True
     assert ingest_kwargs.kwargs["overwrite"] is True
-    mock_ocr.assert_called_once_with(target_dir, "test-key", overwrite=True)
+    mock_ocr.assert_called_once_with(
+        target_dir, "test-key", model="custom-ocr", overwrite=True
+    )
     mock_llm.assert_called_once_with(
-        target_dir, "test-oai-key", "ocr text", "papers", overwrite=True
+        target_dir,
+        "test-oai-key",
+        "ocr text",
+        "papers",
+        model="custom-llm",
+        overwrite=True,
     )
     mock_render.assert_called_once_with(target_dir, overwrite=True)
 
