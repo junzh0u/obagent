@@ -38,7 +38,7 @@ def test_md_created_with_frontmatter(runner, vault):
     assert 'merchant: "Coffee Shop"' in content
     assert 'date: "2024-06-01"' in content
     assert 'total: "$5.75"' in content
-    assert "![[src/original.pdf]]" in content
+    assert "![[src/original.pdf#height]]" in content
     assert "Title: 2024-06-01 - Coffee Shop - $5.75" in result.output
 
 
@@ -57,7 +57,7 @@ def test_sanitizes_unsafe_characters(runner, vault):
     target_dir = vault / "papers" / "sha2"
     md_file = target_dir / "2024-01-15 - Shop AB - $10.00.md"
     assert md_file.exists()
-    assert "![[src/original.pdf]]" in md_file.read_text()
+    assert "![[src/original.pdf#height]]" in md_file.read_text()
 
 
 def test_skip_existing_md(runner, vault):
