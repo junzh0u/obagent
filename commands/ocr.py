@@ -21,7 +21,7 @@ def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
         click.echo("  OCR already exists, skipping")
         return
 
-    pdf_bytes = (target_dir / "original.pdf").read_bytes()
+    pdf_bytes = (target_dir / "src" / "original.pdf").read_bytes()
     pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
 
     client = Mistral(api_key=api_key)
@@ -58,7 +58,6 @@ def ocr(ctx, mistral_api_key, ocr_model, overwrite):
     """Run OCR on ingested PDFs in the vault."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    for pdf_path in sorted((vault / path).rglob("original.pdf")):
-        target_dir = pdf_path.parent
+    for target_dir in sorted(p for p in (vault / path).iterdir() if p.is_dir()):
         click.echo(f"OCR: {target_dir}")
         run_ocr(target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite)

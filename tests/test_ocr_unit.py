@@ -18,8 +18,8 @@ def test_ocr_results_saved_to_correct_paths(
     content = b"ocr test content"
     sha = hashlib.sha256(content).hexdigest()
     target_dir = vault / "papers" / sha
-    target_dir.mkdir(parents=True)
-    (target_dir / "original.pdf").write_bytes(content)
+    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src" / "original.pdf").write_bytes(content)
 
     result = runner.invoke(
         ocr,
@@ -41,8 +41,8 @@ def test_ocr_text_contains_concatenated_markdown(mock_mistral_cls, runner, vault
 
     sha = "abc123"
     target_dir = vault / "papers" / sha
-    target_dir.mkdir(parents=True)
-    (target_dir / "original.pdf").write_bytes(b"ocr text test")
+    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"ocr text test")
 
     runner.invoke(
         ocr,
@@ -62,8 +62,8 @@ def test_ocr_json_contains_model_dump(mock_mistral_cls, runner, vault):
 
     sha = "def456"
     target_dir = vault / "papers" / sha
-    target_dir.mkdir(parents=True)
-    (target_dir / "original.pdf").write_bytes(b"ocr json test")
+    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"ocr json test")
 
     runner.invoke(
         ocr,
@@ -87,7 +87,8 @@ def test_ocr_skip_existing(mock_mistral_cls, runner, vault):
     target_dir = vault / "papers" / sha
     ocr_dir = target_dir / "ocr"
     ocr_dir.mkdir(parents=True)
-    (target_dir / "original.pdf").write_bytes(b"test")
+    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"test")
     (ocr_dir / f"{OCR_MODEL}.txt").write_text("existing ocr text")
 
     result = runner.invoke(
@@ -111,7 +112,8 @@ def test_ocr_overwrite_reruns(mock_mistral_cls, runner, vault):
     target_dir = vault / "papers" / sha
     ocr_dir = target_dir / "ocr"
     ocr_dir.mkdir(parents=True)
-    (target_dir / "original.pdf").write_bytes(b"test")
+    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"test")
     (ocr_dir / f"{OCR_MODEL}.txt").write_text("old ocr text")
     (ocr_dir / f"{OCR_MODEL}.json").write_text('{"old": true}')
 
@@ -137,8 +139,8 @@ def test_ocr_custom_model(mock_mistral_cls, runner, vault):
 
     sha = "custom"
     target_dir = vault / "papers" / sha
-    target_dir.mkdir(parents=True)
-    (target_dir / "original.pdf").write_bytes(b"custom model test")
+    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"custom model test")
 
     result = runner.invoke(
         ocr,

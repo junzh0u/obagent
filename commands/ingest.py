@@ -17,17 +17,18 @@ def ingest_pdf(pdf, vault, path, *, keep_original=False, overwrite=False):
     if target_dir.exists() and not overwrite:
         click.echo(f"Warning: {pdf} already consumed ({sha256}), skipping")
         return None
-    target_dir.mkdir(parents=True, exist_ok=True)
+    src_dir = target_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
     if keep_original:
-        shutil.copy2(pdf, target_dir / "original.pdf")
+        shutil.copy2(pdf, src_dir / "original.pdf")
     else:
-        shutil.move(pdf, target_dir / "original.pdf")
+        shutil.move(pdf, src_dir / "original.pdf")
     metadata = {
         "original_filepath": str(pdf.resolve()),
         "sha256": sha256,
         "consumed_at": datetime.now(timezone.utc).isoformat(),
     }
-    (target_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    (src_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
     click.echo(f"Consumed {pdf} -> {target_dir}")
     return target_dir
 

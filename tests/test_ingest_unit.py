@@ -21,8 +21,8 @@ def test_sha256_is_correct(runner, vault, source_dir):
     assert result.exit_code == 0
     target_dir = vault / "papers" / expected_hash
     assert target_dir.exists()
-    assert (target_dir / "original.pdf").read_bytes() == content
-    meta = json.loads((target_dir / "metadata.json").read_text())
+    assert (target_dir / "src" / "original.pdf").read_bytes() == content
+    meta = json.loads((target_dir / "src" / "metadata.json").read_text())
     assert meta["sha256"] == expected_hash
 
 
@@ -68,8 +68,8 @@ def test_duplicate_is_skipped(runner, vault, source_dir):
     sha256 = hashlib.sha256(content).hexdigest()
 
     existing_dir = vault / "papers" / sha256
-    existing_dir.mkdir(parents=True)
-    (existing_dir / "original.pdf").write_bytes(content)
+    (existing_dir / "src").mkdir(parents=True)
+    (existing_dir / "src" / "original.pdf").write_bytes(content)
 
     pdf = source_dir / "dup.pdf"
     pdf.write_bytes(content)
@@ -123,9 +123,9 @@ def test_overwrite_replaces_existing_entry(runner, vault, source_dir):
     sha = hashlib.sha256(content).hexdigest()
 
     existing_dir = vault / "papers" / sha
-    existing_dir.mkdir(parents=True)
-    (existing_dir / "original.pdf").write_bytes(b"old content")
-    (existing_dir / "metadata.json").write_text('{"old": true}')
+    (existing_dir / "src").mkdir(parents=True)
+    (existing_dir / "src" / "original.pdf").write_bytes(b"old content")
+    (existing_dir / "src" / "metadata.json").write_text('{"old": true}')
 
     pdf = source_dir / "new.pdf"
     pdf.write_bytes(content)
@@ -139,8 +139,8 @@ def test_overwrite_replaces_existing_entry(runner, vault, source_dir):
     assert result.exit_code == 0
     assert "Warning" not in result.output
     assert "Consumed" in result.output
-    assert (existing_dir / "original.pdf").read_bytes() == content
-    meta = json.loads((existing_dir / "metadata.json").read_text())
+    assert (existing_dir / "src" / "original.pdf").read_bytes() == content
+    meta = json.loads((existing_dir / "src" / "metadata.json").read_text())
     assert "old" not in meta
     assert meta["sha256"] == sha
 
@@ -159,7 +159,7 @@ def test_overwrite_without_existing_works_normally(runner, vault, source_dir):
 
     assert result.exit_code == 0
     assert "Consumed" in result.output
-    assert (vault / "papers" / sha / "original.pdf").exists()
+    assert (vault / "papers" / sha / "src" / "original.pdf").exists()
 
 
 def test_keep_original_and_overwrite_together(runner, vault, source_dir):
@@ -168,8 +168,8 @@ def test_keep_original_and_overwrite_together(runner, vault, source_dir):
     sha = hashlib.sha256(content).hexdigest()
 
     existing_dir = vault / "papers" / sha
-    existing_dir.mkdir(parents=True)
-    (existing_dir / "original.pdf").write_bytes(b"old")
+    (existing_dir / "src").mkdir(parents=True)
+    (existing_dir / "src" / "original.pdf").write_bytes(b"old")
 
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(content)
@@ -182,7 +182,7 @@ def test_keep_original_and_overwrite_together(runner, vault, source_dir):
 
     assert result.exit_code == 0
     assert pdf.exists()
-    assert (existing_dir / "original.pdf").read_bytes() == content
+    assert (existing_dir / "src" / "original.pdf").read_bytes() == content
 
 
 def test_non_pdf_files_are_ignored(runner, vault, source_dir):

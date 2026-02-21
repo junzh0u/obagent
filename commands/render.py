@@ -35,7 +35,9 @@ def render_note(target_dir, *, overwrite=False):
     frontmatter = (
         f'---\nmerchant: "{merchant}"\ndate: "{date}"\ntotal: "{total}"\n---\n'
     )
-    (target_dir / f"{safe_title}.md").write_text(frontmatter + "![[original.pdf]]\n")
+    (target_dir / f"{safe_title}.md").write_text(
+        frontmatter + "![[src/original.pdf]]\n"
+    )
     click.echo(f"  Title: {safe_title}")
     return safe_title
 

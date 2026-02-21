@@ -40,8 +40,8 @@ def test_full_consume_via_cli(
     assert "Consumed" in result.output
 
     target_dir = vault / "reports" / expected_hash
-    assert (target_dir / "original.pdf").exists()
-    assert (target_dir / "metadata.json").exists()
+    assert (target_dir / "src" / "original.pdf").exists()
+    assert (target_dir / "src" / "metadata.json").exists()
     assert not pdf.exists()
 
 
@@ -71,7 +71,7 @@ def test_default_path_is_receipts(
     )
 
     assert result.exit_code == 0
-    assert (vault / "Receipts" / sha / "original.pdf").exists()
+    assert (vault / "Receipts" / sha / "src" / "original.pdf").exists()
 
 
 @patch("commands.llm.OpenAI")
@@ -106,8 +106,8 @@ def test_consume_multiple_pdfs(
     assert result.exit_code == 0
     for name, sha in files.items():
         target_dir = vault / "multi" / sha
-        assert (target_dir / "original.pdf").read_bytes() is not None
-        meta = json.loads((target_dir / "metadata.json").read_text())
+        assert (target_dir / "src" / "original.pdf").read_bytes() is not None
+        meta = json.loads((target_dir / "src" / "metadata.json").read_text())
         assert meta["sha256"] == sha
         assert name in meta["original_filepath"]
 
@@ -315,7 +315,7 @@ def test_overwrite_via_cli(
     assert "Consumed" in result.output
     assert "Warning" not in result.output
     assert len(list((vault / "ow").iterdir())) == 1
-    assert (vault / "ow" / sha / "original.pdf").read_bytes() == content
+    assert (vault / "ow" / sha / "src" / "original.pdf").read_bytes() == content
 
 
 @patch("commands.llm.OpenAI")
@@ -334,7 +334,8 @@ def test_overwrite_re_ocrs_via_cli(
     target = vault / "reocr" / sha
     ocr_dir = target / "ocr"
     ocr_dir.mkdir(parents=True)
-    (target / "original.pdf").write_bytes(content)
+    (target / "src").mkdir(parents=True)
+    (target / "src" / "original.pdf").write_bytes(content)
     (ocr_dir / f"{OCR_MODEL}.txt").write_text("stale")
 
     pdf = source_dir / "doc.pdf"
@@ -516,4 +517,4 @@ def test_title_md_created_via_cli(
     assert 'merchant: "Bookstore"' in content
     assert 'date: "2024-09-20"' in content
     assert 'total: "$29.99"' in content
-    assert "![[original.pdf]]" in content
+    assert "![[src/original.pdf]]" in content

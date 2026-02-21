@@ -12,7 +12,8 @@ def _setup_entry_with_llm(vault, sha="abc123", llm_filename="default.json", **fi
     target_dir = vault / "papers" / sha
     llm_dir = target_dir / "llm"
     llm_dir.mkdir(parents=True)
-    (target_dir / "original.pdf").write_bytes(b"test")
+    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"test")
     (llm_dir / llm_filename).write_text(json.dumps(defaults))
     return target_dir
 
@@ -37,7 +38,7 @@ def test_md_created_with_frontmatter(runner, vault):
     assert 'merchant: "Coffee Shop"' in content
     assert 'date: "2024-06-01"' in content
     assert 'total: "$5.75"' in content
-    assert "![[original.pdf]]" in content
+    assert "![[src/original.pdf]]" in content
     assert "Title: 2024-06-01 - Coffee Shop - $5.75" in result.output
 
 
@@ -56,7 +57,7 @@ def test_sanitizes_unsafe_characters(runner, vault):
     target_dir = vault / "papers" / "sha2"
     md_file = target_dir / "2024-01-15 - Shop AB - $10.00.md"
     assert md_file.exists()
-    assert "![[original.pdf]]" in md_file.read_text()
+    assert "![[src/original.pdf]]" in md_file.read_text()
 
 
 def test_skip_existing_md(runner, vault):
@@ -114,7 +115,8 @@ def test_render_picks_newest_llm_json(runner, vault):
     target_dir = vault / "papers" / "sha6"
     llm_dir = target_dir / "llm"
     llm_dir.mkdir(parents=True)
-    (target_dir / "original.pdf").write_bytes(b"test")
+    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"test")
 
     old_file = llm_dir / "old-model.json"
     old_file.write_text(
