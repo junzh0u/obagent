@@ -20,10 +20,23 @@ def cli(ctx, vault):
     ctx.obj["vault"] = vault
 
 
-cli.add_command(consume)
-cli.add_command(ingest)
-cli.add_command(ocr)
-cli.add_command(llm)
+@cli.group()
+@click.option(
+    "--path",
+    default="Receipts",
+    show_default=True,
+    help="Subdirectory within the vault.",
+)
+@click.pass_context
+def receipt(ctx, path):
+    """Receipt processing commands."""
+    ctx.obj["path"] = path
+
+
+receipt.add_command(consume)
+receipt.add_command(ingest)
+receipt.add_command(ocr)
+receipt.add_command(llm)
 
 if __name__ == "__main__":
     cli()

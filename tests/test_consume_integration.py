@@ -25,9 +25,10 @@ def test_full_consume_via_cli(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "reports",
+            "consume",
             *BOTH_KEYS,
             str(source_dir),
         ],
@@ -40,6 +41,35 @@ def test_full_consume_via_cli(
     assert (target_dir / "original.pdf").exists()
     assert (target_dir / "metadata.json").exists()
     assert not pdf.exists()
+
+
+@patch("commands.llm.OpenAI")
+@patch("commands.ocr.Mistral")
+def test_default_path_is_receipts(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
+    """Without --path, files are stored under 'Receipts'."""
+    setup_mock_mistral(mock_mistral_cls)
+    setup_mock_openai(mock_openai_cls)
+
+    pdf = source_dir / "doc.pdf"
+    pdf.write_bytes(b"default path test")
+    sha = hashlib.sha256(b"default path test").hexdigest()
+
+    result = runner.invoke(
+        cli,
+        [
+            "--vault",
+            str(vault),
+            "receipt",
+            "consume",
+            *BOTH_KEYS,
+            str(source_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (vault / "Receipts" / sha / "original.pdf").exists()
 
 
 @patch("commands.llm.OpenAI")
@@ -62,9 +92,10 @@ def test_consume_multiple_pdfs(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "multi",
+            "consume",
             *BOTH_KEYS,
             str(source_dir),
         ],
@@ -98,9 +129,10 @@ def test_consume_nested_pdfs(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "nested",
+            "consume",
             *BOTH_KEYS,
             str(source_dir),
         ],
@@ -131,9 +163,10 @@ def test_duplicate_skip_via_cli(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "dup",
+            "consume",
             *BOTH_KEYS,
             str(source_dir),
         ],
@@ -148,9 +181,10 @@ def test_duplicate_skip_via_cli(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "dup",
+            "consume",
             *BOTH_KEYS,
             str(source_dir),
         ],
@@ -159,19 +193,7 @@ def test_duplicate_skip_via_cli(
     assert result.exit_code == 0
     assert "Warning" in result.output
     assert "skipping" in result.output
-    # Only one entry in the vault
     assert len(list((vault / "dup").iterdir())) == 1
-
-
-def test_path_option_is_required(runner, vault, source_dir):
-    """Omitting --path results in an error."""
-    result = runner.invoke(
-        cli,
-        ["--vault", str(vault), "consume", str(source_dir)],
-    )
-
-    assert result.exit_code != 0
-    assert "Missing option" in result.output or "--path" in result.output
 
 
 @patch("commands.llm.OpenAI")
@@ -193,9 +215,10 @@ def test_non_pdf_files_are_ignored(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "mixed",
+            "consume",
             *BOTH_KEYS,
             str(source_dir),
         ],
@@ -225,9 +248,10 @@ def test_keep_original_via_cli(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "kept",
+            "consume",
             "--keep-original",
             *BOTH_KEYS,
             str(source_dir),
@@ -256,7 +280,16 @@ def test_overwrite_via_cli(
     pdf.write_bytes(content)
     runner.invoke(
         cli,
-        ["--vault", str(vault), "consume", "--path", "ow", *BOTH_KEYS, str(source_dir)],
+        [
+            "--vault",
+            str(vault),
+            "receipt",
+            "--path",
+            "ow",
+            "consume",
+            *BOTH_KEYS,
+            str(source_dir),
+        ],
     )
 
     # Re-create and consume again with --overwrite
@@ -266,9 +299,10 @@ def test_overwrite_via_cli(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "ow",
+            "consume",
             "--overwrite",
             *BOTH_KEYS,
             str(source_dir),
@@ -309,9 +343,10 @@ def test_overwrite_re_ocrs_via_cli(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "reocr",
+            "consume",
             "--overwrite",
             *BOTH_KEYS,
             str(source_dir),
@@ -341,9 +376,10 @@ def test_ocr_via_cli_flag(mock_mistral_cls, mock_openai_cls, runner, vault, sour
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "reports",
+            "consume",
             "--mistral-api-key",
             "sk-test-key",
             "--openai-api-key",
@@ -373,7 +409,15 @@ def test_ocr_via_env_var(mock_mistral_cls, mock_openai_cls, runner, vault, sourc
 
     result = runner.invoke(
         cli,
-        ["--vault", str(vault), "consume", "--path", "envtest", str(source_dir)],
+        [
+            "--vault",
+            str(vault),
+            "receipt",
+            "--path",
+            "envtest",
+            "consume",
+            str(source_dir),
+        ],
         env={"MISTRAL_API_KEY": "sk-env-key", "OPENAI_API_KEY": "ok-env-key"},
     )
 
@@ -403,9 +447,10 @@ def test_ocr_files_content_via_cli(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "check",
+            "consume",
             *BOTH_KEYS,
             str(source_dir),
         ],
@@ -443,9 +488,10 @@ def test_title_md_created_via_cli(
         [
             "--vault",
             str(vault),
-            "consume",
+            "receipt",
             "--path",
             "papers",
+            "consume",
             *BOTH_KEYS,
             str(source_dir),
         ],

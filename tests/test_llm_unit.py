@@ -1,4 +1,3 @@
-import hashlib
 from unittest.mock import patch
 
 from commands.llm import llm
@@ -28,8 +27,8 @@ def test_title_md_created(mock_openai_cls, runner, vault):
 
     result = runner.invoke(
         llm,
-        ["--path", "papers", "--openai-api-key", "test-key"],
-        obj={"vault": str(vault)},
+        ["--openai-api-key", "test-key"],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -54,8 +53,8 @@ def test_title_sanitizes_unsafe_characters(mock_openai_cls, runner, vault):
 
     runner.invoke(
         llm,
-        ["--path", "papers", "--openai-api-key", "test-key"],
-        obj={"vault": str(vault)},
+        ["--openai-api-key", "test-key"],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     target_dir = vault / "papers" / "sha2"
@@ -72,8 +71,8 @@ def test_title_uses_openai_gpt5_mini(mock_openai_cls, runner, vault):
 
     runner.invoke(
         llm,
-        ["--path", "papers", "--openai-api-key", "test-key"],
-        obj={"vault": str(vault)},
+        ["--openai-api-key", "test-key"],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     mock_openai_client.chat.completions.create.assert_called_once()
@@ -98,8 +97,8 @@ def test_llm_skip_existing_md(mock_openai_cls, runner, vault):
 
     result = runner.invoke(
         llm,
-        ["--path", "papers", "--openai-api-key", "test-key"],
-        obj={"vault": str(vault)},
+        ["--openai-api-key", "test-key"],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -118,8 +117,8 @@ def test_llm_overwrite_replaces_md(mock_openai_cls, runner, vault):
 
     result = runner.invoke(
         llm,
-        ["--path", "papers", "--openai-api-key", "test-key", "--overwrite"],
-        obj={"vault": str(vault)},
+        ["--openai-api-key", "test-key", "--overwrite"],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0

@@ -43,7 +43,6 @@ def run_ocr(target_dir, api_key, *, overwrite=False):
 
 
 @click.command()
-@click.option("--path", required=True, help="Subdirectory within the vault to scan.")
 @click.option(
     "--mistral-api-key",
     envvar="MISTRAL_API_KEY",
@@ -52,9 +51,10 @@ def run_ocr(target_dir, api_key, *, overwrite=False):
 )
 @click.option("--overwrite", is_flag=True, help="Overwrite existing OCR results.")
 @click.pass_context
-def ocr(ctx, path, mistral_api_key, overwrite):
+def ocr(ctx, mistral_api_key, overwrite):
     """Run OCR on ingested PDFs in the vault."""
     vault = Path(ctx.obj["vault"])
+    path = ctx.obj["path"]
     for pdf_path in sorted((vault / path).rglob("original.pdf")):
         target_dir = pdf_path.parent
         click.echo(f"OCR: {target_dir}")

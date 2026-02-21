@@ -33,15 +33,13 @@ def ingest_pdf(pdf, vault, path, *, keep_original=False, overwrite=False):
 
 
 @click.command()
-@click.option(
-    "--path", required=True, help="Subdirectory within the vault to store PDFs."
-)
 @click.option("--keep-original", is_flag=True, help="Copy PDFs instead of moving them.")
 @click.option("--overwrite", is_flag=True, help="Overwrite existing entries.")
 @click.argument("directory", type=click.Path(exists=True, file_okay=False))
 @click.pass_context
-def ingest(ctx, path, keep_original, overwrite, directory):
+def ingest(ctx, keep_original, overwrite, directory):
     """Ingest PDFs from a directory into the vault."""
     vault = Path(ctx.obj["vault"])
+    path = ctx.obj["path"]
     for pdf in sorted(Path(directory).rglob("*.pdf")):
         ingest_pdf(pdf, vault, path, keep_original=keep_original, overwrite=overwrite)

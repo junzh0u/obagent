@@ -4,8 +4,6 @@ from datetime import datetime
 
 from commands.ingest import ingest
 
-from tests.conftest import BOTH_KEYS
-
 
 def test_sha256_is_correct(runner, vault, source_dir):
     """The stored sha256 matches what hashlib computes."""
@@ -16,8 +14,8 @@ def test_sha256_is_correct(runner, vault, source_dir):
 
     result = runner.invoke(
         ingest,
-        ["--path", "papers", str(source_dir)],
-        obj={"vault": str(vault)},
+        [str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -35,8 +33,8 @@ def test_metadata_structure(runner, vault, source_dir):
 
     runner.invoke(
         ingest,
-        ["--path", "docs", str(source_dir)],
-        obj={"vault": str(vault)},
+        [str(source_dir)],
+        obj={"vault": str(vault), "path": "docs"},
     )
 
     meta_files = list(vault.rglob("metadata.json"))
@@ -54,8 +52,8 @@ def test_original_file_is_moved(runner, vault, source_dir):
 
     runner.invoke(
         ingest,
-        ["--path", "inbox", str(source_dir)],
-        obj={"vault": str(vault)},
+        [str(source_dir)],
+        obj={"vault": str(vault), "path": "inbox"},
     )
 
     assert not pdf.exists()
@@ -78,8 +76,8 @@ def test_duplicate_is_skipped(runner, vault, source_dir):
 
     result = runner.invoke(
         ingest,
-        ["--path", "papers", str(source_dir)],
-        obj={"vault": str(vault)},
+        [str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -92,8 +90,8 @@ def test_no_pdfs_does_nothing(runner, vault, source_dir):
     """An empty source directory produces no output and no vault entries."""
     result = runner.invoke(
         ingest,
-        ["--path", "papers", str(source_dir)],
-        obj={"vault": str(vault)},
+        [str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -108,8 +106,8 @@ def test_keep_original_preserves_source(runner, vault, source_dir):
 
     result = runner.invoke(
         ingest,
-        ["--path", "papers", "--keep-original", str(source_dir)],
-        obj={"vault": str(vault)},
+        ["--keep-original", str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -134,8 +132,8 @@ def test_overwrite_replaces_existing_entry(runner, vault, source_dir):
 
     result = runner.invoke(
         ingest,
-        ["--path", "papers", "--overwrite", str(source_dir)],
-        obj={"vault": str(vault)},
+        ["--overwrite", str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -155,8 +153,8 @@ def test_overwrite_without_existing_works_normally(runner, vault, source_dir):
 
     result = runner.invoke(
         ingest,
-        ["--path", "papers", "--overwrite", str(source_dir)],
-        obj={"vault": str(vault)},
+        ["--overwrite", str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -178,8 +176,8 @@ def test_keep_original_and_overwrite_together(runner, vault, source_dir):
 
     result = runner.invoke(
         ingest,
-        ["--path", "papers", "--keep-original", "--overwrite", str(source_dir)],
-        obj={"vault": str(vault)},
+        ["--keep-original", "--overwrite", str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -196,8 +194,8 @@ def test_non_pdf_files_are_ignored(runner, vault, source_dir):
 
     result = runner.invoke(
         ingest,
-        ["--path", "mixed", str(source_dir)],
-        obj={"vault": str(vault)},
+        [str(source_dir)],
+        obj={"vault": str(vault), "path": "mixed"},
     )
 
     assert result.exit_code == 0

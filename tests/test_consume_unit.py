@@ -1,5 +1,4 @@
-from pathlib import Path
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 from commands.consume import consume
 
@@ -21,8 +20,8 @@ def test_calls_all_three_steps(
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
-        obj={"vault": str(vault)},
+        [*BOTH_KEYS, str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -46,8 +45,8 @@ def test_skips_ocr_and_llm_when_ingest_returns_none(
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
-        obj={"vault": str(vault)},
+        [*BOTH_KEYS, str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -71,8 +70,8 @@ def test_handles_llm_exception(
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
-        obj={"vault": str(vault)},
+        [*BOTH_KEYS, str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -92,15 +91,8 @@ def test_forwards_flags(mock_ingest, mock_ocr, mock_llm, runner, vault, source_d
 
     result = runner.invoke(
         consume,
-        [
-            "--path",
-            "papers",
-            "--keep-original",
-            "--overwrite",
-            *BOTH_KEYS,
-            str(source_dir),
-        ],
-        obj={"vault": str(vault)},
+        ["--keep-original", "--overwrite", *BOTH_KEYS, str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -129,8 +121,8 @@ def test_processes_multiple_pdfs(
 
     result = runner.invoke(
         consume,
-        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
-        obj={"vault": str(vault)},
+        [*BOTH_KEYS, str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -148,8 +140,8 @@ def test_no_pdfs_does_nothing(
     """An empty source directory calls nothing."""
     result = runner.invoke(
         consume,
-        ["--path", "papers", *BOTH_KEYS, str(source_dir)],
-        obj={"vault": str(vault)},
+        [*BOTH_KEYS, str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0

@@ -22,8 +22,8 @@ def test_ocr_results_saved_to_correct_paths(
 
     result = runner.invoke(
         ocr,
-        ["--path", "papers", "--mistral-api-key", "test-key"],
-        obj={"vault": str(vault)},
+        ["--mistral-api-key", "test-key"],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
@@ -45,8 +45,8 @@ def test_ocr_text_contains_concatenated_markdown(mock_mistral_cls, runner, vault
 
     runner.invoke(
         ocr,
-        ["--path", "papers", "--mistral-api-key", "test-key"],
-        obj={"vault": str(vault)},
+        ["--mistral-api-key", "test-key"],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     txt = (target_dir / "ocr" / "mistral-ocr-latest.txt").read_text()
@@ -66,8 +66,8 @@ def test_ocr_json_contains_model_dump(mock_mistral_cls, runner, vault):
 
     runner.invoke(
         ocr,
-        ["--path", "papers", "--mistral-api-key", "test-key"],
-        obj={"vault": str(vault)},
+        ["--mistral-api-key", "test-key"],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     json_path = target_dir / "ocr" / "mistral-ocr-latest.json"
@@ -91,15 +91,13 @@ def test_ocr_skip_existing(mock_mistral_cls, runner, vault):
 
     result = runner.invoke(
         ocr,
-        ["--path", "papers", "--mistral-api-key", "test-key"],
-        obj={"vault": str(vault)},
+        ["--mistral-api-key", "test-key"],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0
     assert "already exists, skipping" in result.output
-    # API should not have been called
     mock_mistral_cls.return_value.ocr.process.assert_not_called()
-    # Original text should be preserved
     assert (ocr_dir / "mistral-ocr-latest.txt").read_text() == "existing ocr text"
 
 
@@ -118,8 +116,8 @@ def test_ocr_overwrite_reruns(mock_mistral_cls, runner, vault):
 
     result = runner.invoke(
         ocr,
-        ["--path", "papers", "--mistral-api-key", "test-key", "--overwrite"],
-        obj={"vault": str(vault)},
+        ["--mistral-api-key", "test-key", "--overwrite"],
+        obj={"vault": str(vault), "path": "papers"},
     )
 
     assert result.exit_code == 0

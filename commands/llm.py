@@ -56,7 +56,6 @@ def extract_title(target_dir, api_key, ocr_text, path, *, overwrite=False):
 
 
 @click.command()
-@click.option("--path", required=True, help="Subdirectory within the vault to scan.")
 @click.option(
     "--openai-api-key",
     envvar="OPENAI_API_KEY",
@@ -65,9 +64,10 @@ def extract_title(target_dir, api_key, ocr_text, path, *, overwrite=False):
 )
 @click.option("--overwrite", is_flag=True, help="Overwrite existing markdown files.")
 @click.pass_context
-def llm(ctx, path, openai_api_key, overwrite):
+def llm(ctx, openai_api_key, overwrite):
     """Extract metadata via LLM from OCR'd entries in the vault."""
     vault = Path(ctx.obj["vault"])
+    path = ctx.obj["path"]
     for txt_path in sorted((vault / path).rglob("mistral-ocr-latest.txt")):
         target_dir = txt_path.parent.parent
         ocr_text = txt_path.read_text()

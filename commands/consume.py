@@ -9,9 +9,6 @@ from commands.ocr import run_ocr
 
 @click.command()
 @click.option(
-    "--path", required=True, help="Subdirectory within the vault to store PDFs."
-)
-@click.option(
     "--mistral-api-key",
     envvar="MISTRAL_API_KEY",
     required=True,
@@ -29,11 +26,10 @@ from commands.ocr import run_ocr
 )
 @click.argument("directory", type=click.Path(exists=True, file_okay=False))
 @click.pass_context
-def consume(
-    ctx, path, mistral_api_key, openai_api_key, keep_original, overwrite, directory
-):
+def consume(ctx, mistral_api_key, openai_api_key, keep_original, overwrite, directory):
     """Consume PDFs from a directory into the vault."""
     vault = Path(ctx.obj["vault"])
+    path = ctx.obj["path"]
     for pdf in sorted(Path(directory).rglob("*.pdf")):
         target_dir = ingest_pdf(
             pdf, vault, path, keep_original=keep_original, overwrite=overwrite
