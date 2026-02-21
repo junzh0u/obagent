@@ -59,11 +59,11 @@ def test_sanitizes_unsafe_characters(runner, vault):
 
 
 def test_skip_existing_md(runner, vault):
-    """Rendering is skipped when .md file already exists."""
+    """Rendering is skipped when .md already references this sha256."""
     _setup_entry_with_llm(vault, sha="sha3")
-    # Place existing .md at vault/papers/ level with the title that would be generated
+    # Place existing .md that already references sha3
     (vault / "papers" / "2024-01-15 - ACME Store - $42.50.md").write_text(
-        "---\nold: true\n---\n"
+        "---\nold: true\n---\n![[_assets_/sha3/src/original.pdf#height]]\n"
     )
 
     result = runner.invoke(
@@ -74,6 +74,25 @@ def test_skip_existing_md(runner, vault):
 
     assert result.exit_code == 0
     assert "already exists, skipping" in result.output
+
+
+def test_append_different_sha(runner, vault):
+    """When .md exists but for a different sha256, the new PDF embed is appended."""
+    _setup_entry_with_llm(vault, sha="sha3a")
+    _setup_entry_with_llm(vault, sha="sha3b")
+    md_path = vault / "papers" / "2024-01-15 - ACME Store - $42.50.md"
+
+    result = runner.invoke(
+        render,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    content = md_path.read_text()
+    assert "![[_assets_/sha3a/src/original.pdf#height]]" in content
+    assert "![[_assets_/sha3b/src/original.pdf#height]]" in content
+    assert "Appended to:" in result.output
 
 
 def test_overwrite_replaces_md(runner, vault):

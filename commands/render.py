@@ -17,12 +17,13 @@ def render_note(target_dir):
     """Read LLM JSON and create an Obsidian markdown note.
 
     Writes .md to target_dir's grandparent (vault/path/) for a flat, browsable layout.
-    Skips if .md already exists. Call clear_notes() first to force re-render.
+    If .md already exists with a different sha256, appends the PDF embed.
+    Skips if this sha256 is already referenced. Call clear_notes() first to force re-render.
     Returns safe_title on success, None if skipped.
     """
     json_path = newest_file(target_dir / "llm", "*.json")
     if json_path is None:
-        click.echo("  No LLM result found, skipping render")
+        click.secho("  No LLM result found, skipping render", fg="yellow")
         return None
 
     fields = json.loads(json_path.read_text())
@@ -35,17 +36,22 @@ def render_note(target_dir):
     path_dir = target_dir.parent.parent
     md_path = path_dir / f"{safe_title}.md"
 
+    embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/original.pdf#height]]\n"
+
     if md_path.exists():
-        click.echo("  Markdown already exists, skipping")
-        return None
+        if target_dir.name in md_path.read_text():
+            click.secho("  Markdown already exists, skipping", fg="yellow")
+            return None
+        with md_path.open("a") as f:
+            f.write(embed)
+        click.secho(f"  Appended to: {safe_title}", fg="green")
+        return safe_title
 
     frontmatter = (
         f'---\nmerchant: "{merchant}"\ndate: "{date}"\ntotal: "{total}"\n---\n'
     )
-    md_path.write_text(
-        frontmatter + f"![[{ASSETS_DIR}/{target_dir.name}/src/original.pdf#height]]\n"
-    )
-    click.echo(f"  Title: {safe_title}")
+    md_path.write_text(frontmatter + embed)
+    click.secho(f"  Title: {safe_title}", fg="green")
     return safe_title
 
 
@@ -63,8 +69,8 @@ def render(ctx, overwrite):
     if overwrite:
         clear_notes(vault / path)
     for target_dir in iter_entries(vault, path):
-        click.echo(f"Render: {target_dir}")
+        click.secho(f"Render: {target_dir}", bold=True)
         try:
             render_note(target_dir)
         except Exception as e:
-            click.echo(f"  Warning: note rendering failed: {e}")
+            click.secho(f"  Warning: note rendering failed: {e}", fg="red")
