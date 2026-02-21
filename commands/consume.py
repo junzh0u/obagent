@@ -56,14 +56,11 @@ def consume(
         )
         if target_dir is None:
             continue
-        ocr_text = run_ocr(
-            target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite
-        )
+        run_ocr(target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite)
         try:
             extract_fields(
                 target_dir,
                 openai_api_key,
-                ocr_text,
                 path,
                 model=llm_model,
                 overwrite=overwrite,

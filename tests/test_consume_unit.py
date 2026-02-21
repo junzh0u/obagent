@@ -18,8 +18,6 @@ def test_calls_all_four_steps(
     pdf.write_bytes(b"test")
     target_dir = vault / "papers" / "sha"
     mock_ingest.return_value = target_dir
-    mock_ocr.return_value = "ocr text"
-
     result = runner.invoke(
         consume,
         [*BOTH_KEYS, str(source_dir)],
@@ -34,7 +32,6 @@ def test_calls_all_four_steps(
     mock_llm.assert_called_once_with(
         target_dir,
         "test-oai-key",
-        "ocr text",
         "papers",
         model=LLM_MODEL,
         overwrite=False,
@@ -78,7 +75,7 @@ def test_handles_llm_exception(
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     mock_ingest.return_value = vault / "papers" / "sha"
-    mock_ocr.return_value = "ocr text"
+
     mock_llm.side_effect = ValueError("API error")
 
     result = runner.invoke(
@@ -103,7 +100,7 @@ def test_handles_render_exception(
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     mock_ingest.return_value = vault / "papers" / "sha"
-    mock_ocr.return_value = "ocr text"
+
     mock_render.side_effect = ValueError("Template error")
 
     result = runner.invoke(
@@ -129,7 +126,6 @@ def test_forwards_flags(
     pdf.write_bytes(b"test")
     target_dir = vault / "papers" / "sha"
     mock_ingest.return_value = target_dir
-    mock_ocr.return_value = "ocr text"
 
     result = runner.invoke(
         consume,
@@ -156,7 +152,6 @@ def test_forwards_flags(
     mock_llm.assert_called_once_with(
         target_dir,
         "test-oai-key",
-        "ocr text",
         "papers",
         model="custom-llm",
         overwrite=True,
@@ -177,7 +172,6 @@ def test_processes_multiple_pdfs(
 
     dirs = [vault / "papers" / f"sha_{i}" for i in range(3)]
     mock_ingest.side_effect = dirs
-    mock_ocr.return_value = "ocr text"
 
     result = runner.invoke(
         consume,

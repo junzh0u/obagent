@@ -3,6 +3,8 @@ from pathlib import Path
 
 import click
 
+from utils import newest_file
+
 
 def render_note(target_dir, *, overwrite=False):
     """Read LLM JSON and create an Obsidian markdown note.
@@ -11,16 +13,10 @@ def render_note(target_dir, *, overwrite=False):
     If overwrite, deletes old .md files first.
     Returns safe_title on success, None if skipped.
     """
-    llm_dir = target_dir / "llm"
-    json_files = (
-        sorted(llm_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if llm_dir.exists()
-        else []
-    )
-    if not json_files:
+    json_path = newest_file(target_dir / "llm", "*.json")
+    if json_path is None:
         click.echo("  No LLM result found, skipping render")
         return None
-    json_path = json_files[0]
 
     existing_md = list(target_dir.glob("*.md"))
     if existing_md and not overwrite:
@@ -51,14 +47,7 @@ def render(ctx, overwrite):
     """Render Obsidian notes from LLM-extracted metadata."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    entries = {}
-    for json_path in (vault / path).rglob("*.json"):
-        if json_path.parent.name != "llm":
-            continue
-        td = json_path.parent.parent
-        if td not in entries or json_path.stat().st_mtime > entries[td].stat().st_mtime:
-            entries[td] = json_path
-    for target_dir in sorted(entries):
+    for target_dir in sorted(p for p in (vault / path).iterdir() if p.is_dir()):
         click.echo(f"Render: {target_dir}")
         try:
             render_note(target_dir, overwrite=overwrite)

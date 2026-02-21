@@ -5,13 +5,13 @@ import click
 from openai import OpenAI
 
 from constants import LLM_MODEL
+from utils import newest_file
 
 
-def extract_fields(
-    target_dir, api_key, ocr_text, path, *, model=LLM_MODEL, overwrite=False
-):
+def extract_fields(target_dir, api_key, path, *, model=LLM_MODEL, overwrite=False):
     """Use OpenAI to extract metadata from OCR text and save as JSON.
 
+    Discovers the newest OCR .txt file under target_dir/ocr/.
     If llm/<model>.json exists and not overwrite, skips and returns None.
     Returns the parsed fields dict on success, None if skipped.
     """
@@ -20,6 +20,12 @@ def extract_fields(
     if json_path.exists() and not overwrite:
         click.echo("  LLM result already exists, skipping")
         return None
+
+    txt_path = newest_file(target_dir / "ocr", "*.txt")
+    if txt_path is None:
+        click.echo("  No OCR result found, skipping LLM")
+        return None
+    ocr_text = txt_path.read_text()
 
     client = OpenAI(api_key=api_key)
     response = client.chat.completions.create(
@@ -68,21 +74,12 @@ def llm(ctx, openai_api_key, llm_model, overwrite):
     """Extract metadata via LLM from OCR'd entries in the vault."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    entries = {}
-    for txt_path in (vault / path).rglob("*.txt"):
-        if txt_path.parent.name != "ocr":
-            continue
-        td = txt_path.parent.parent
-        if td not in entries or txt_path.stat().st_mtime > entries[td].stat().st_mtime:
-            entries[td] = txt_path
-    for target_dir in sorted(entries):
-        ocr_text = entries[target_dir].read_text()
+    for target_dir in sorted(p for p in (vault / path).iterdir() if p.is_dir()):
         click.echo(f"LLM: {target_dir}")
         try:
             extract_fields(
                 target_dir,
                 openai_api_key,
-                ocr_text,
                 path,
                 model=llm_model,
                 overwrite=overwrite,

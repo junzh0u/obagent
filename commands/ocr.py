@@ -11,15 +11,15 @@ from constants import OCR_MODEL
 def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
     """Run Mistral OCR on the consumed PDF and save results.
 
-    If OCR output exists and not overwrite, returns existing text (skip API call).
-    Otherwise runs OCR, saves JSON + TXT, returns concatenated text.
+    If OCR output exists and not overwrite, skips the API call.
+    Otherwise runs OCR and saves JSON + TXT.
     """
     ocr_dir = target_dir / "ocr"
     txt_path = ocr_dir / f"{model}.txt"
 
     if txt_path.exists() and not overwrite:
         click.echo("  OCR already exists, skipping")
-        return txt_path.read_text()
+        return
 
     pdf_bytes = (target_dir / "original.pdf").read_bytes()
     pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
@@ -38,10 +38,8 @@ def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
         json.dumps(ocr_response.model_dump(), indent=2)
     )
     pages_md = [page.markdown for page in ocr_response.pages]
-    ocr_text = "\n\n".join(pages_md)
-    txt_path.write_text(ocr_text)
+    txt_path.write_text("\n\n".join(pages_md))
     click.echo(f"  OCR completed ({len(ocr_response.pages)} pages)")
-    return ocr_text
 
 
 @click.command()
