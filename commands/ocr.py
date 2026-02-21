@@ -19,7 +19,7 @@ def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
     txt_path = ocr_dir / f"{model}.txt"
 
     if txt_path.exists() and not overwrite:
-        click.echo("  OCR already exists, skipping")
+        click.secho("  OCR already exists, skipping", fg="yellow")
         return
 
     pdf_bytes = (target_dir / "src" / "original.pdf").read_bytes()
@@ -40,7 +40,7 @@ def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
     )
     pages_md = [page.markdown for page in ocr_response.pages]
     txt_path.write_text("\n\n".join(pages_md))
-    click.echo(f"  OCR completed ({len(ocr_response.pages)} pages)")
+    click.secho(f"  OCR completed ({len(ocr_response.pages)} pages)", fg="green")
 
 
 @click.command()
@@ -60,5 +60,5 @@ def ocr(ctx, mistral_api_key, ocr_model, overwrite):
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
     for target_dir in iter_entries(vault, path):
-        click.echo(f"OCR: {target_dir}")
+        click.secho(f"OCR: {target_dir}", bold=True)
         run_ocr(target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite)

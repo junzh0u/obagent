@@ -18,12 +18,12 @@ def extract_fields(target_dir, api_key, path, *, model=LLM_MODEL, overwrite=Fals
     llm_dir = target_dir / "llm"
     json_path = llm_dir / f"{model}.json"
     if json_path.exists() and not overwrite:
-        click.echo("  LLM result already exists, skipping")
+        click.secho("  LLM result already exists, skipping", fg="yellow")
         return None
 
     txt_path = newest_file(target_dir / "ocr", "*.txt")
     if txt_path is None:
-        click.echo("  No OCR result found, skipping LLM")
+        click.secho("  No OCR result found, skipping LLM", fg="yellow")
         return None
     ocr_text = txt_path.read_text()
 
@@ -52,7 +52,7 @@ def extract_fields(target_dir, api_key, path, *, model=LLM_MODEL, overwrite=Fals
     fields = json.loads(raw)
     llm_dir.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(fields, indent=2) + "\n")
-    click.echo(f"  Extracted: {fields}")
+    click.secho(f"  Extracted: {fields}", fg="green")
     return fields
 
 
@@ -76,7 +76,7 @@ def llm(ctx, openai_api_key, llm_model, overwrite):
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
     for target_dir in iter_entries(vault, path):
-        click.echo(f"LLM: {target_dir}")
+        click.secho(f"LLM: {target_dir}", bold=True)
         try:
             extract_fields(
                 target_dir,
@@ -86,4 +86,4 @@ def llm(ctx, openai_api_key, llm_model, overwrite):
                 overwrite=overwrite,
             )
         except Exception as e:
-            click.echo(f"  Warning: field extraction failed: {e}")
+            click.secho(f"  Warning: field extraction failed: {e}", fg="red")

@@ -53,6 +53,7 @@ def consume(
     if overwrite:
         clear_notes(vault / path)
     for pdf in sorted(Path(directory).rglob("*.pdf")):
+        click.secho(f"Consume: {pdf}", bold=True)
         target_dir = ingest_pdf(
             pdf, vault, path, keep_original=keep_original, overwrite=overwrite
         )
@@ -68,9 +69,9 @@ def consume(
                 overwrite=overwrite,
             )
         except Exception as e:
-            click.echo(f"  Warning: field extraction failed: {e}")
+            click.secho(f"  Warning: field extraction failed: {e}", fg="red")
             continue
         try:
             render_note(target_dir)
         except Exception as e:
-            click.echo(f"  Warning: note rendering failed: {e}")
+            click.secho(f"  Warning: note rendering failed: {e}", fg="red")

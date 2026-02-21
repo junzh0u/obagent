@@ -17,7 +17,7 @@ def ingest_pdf(pdf, vault, path, *, keep_original=False, overwrite=False):
     sha256 = hashlib.sha256(pdf.read_bytes()).hexdigest()
     target_dir = vault / path / ASSETS_DIR / sha256
     if target_dir.exists() and not overwrite:
-        click.echo(f"Warning: {pdf} already consumed ({sha256}), skipping")
+        click.secho(f"  Warning: already consumed ({sha256}), skipping", fg="yellow")
         return None
     src_dir = target_dir / "src"
     src_dir.mkdir(parents=True, exist_ok=True)
@@ -31,7 +31,7 @@ def ingest_pdf(pdf, vault, path, *, keep_original=False, overwrite=False):
         "consumed_at": datetime.now(timezone.utc).isoformat(),
     }
     (src_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
-    click.echo(f"Consumed {pdf} -> {target_dir}")
+    click.secho(f"  Ingested -> {target_dir}", fg="green")
     return target_dir
 
 
@@ -45,4 +45,5 @@ def ingest(ctx, keep_original, overwrite, directory):
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
     for pdf in sorted(Path(directory).rglob("*.pdf")):
+        click.secho(f"Ingest: {pdf}", bold=True)
         ingest_pdf(pdf, vault, path, keep_original=keep_original, overwrite=overwrite)

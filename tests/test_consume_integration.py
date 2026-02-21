@@ -37,7 +37,7 @@ def test_full_consume_via_cli(
     )
 
     assert result.exit_code == 0
-    assert "Consumed" in result.output
+    assert "Ingested" in result.output
 
     target_dir = vault / "reports" / "_assets_" / expected_hash
     assert (target_dir / "src" / "original.pdf").exists()
@@ -141,7 +141,7 @@ def test_consume_nested_pdfs(
     )
 
     assert result.exit_code == 0
-    assert "Consumed" in result.output
+    assert "Ingested" in result.output
     assert not pdf.exists()
     assert len(list((vault / "nested").iterdir())) == 2  # _assets_ dir + .md file
 
@@ -261,7 +261,7 @@ def test_keep_original_via_cli(
     )
 
     assert result.exit_code == 0
-    assert "Consumed" in result.output
+    assert "Ingested" in result.output
     assert pdf.exists()
 
 
@@ -315,7 +315,7 @@ def test_overwrite_via_cli(
     )
 
     assert result.exit_code == 0
-    assert "Consumed" in result.output
+    assert "Ingested" in result.output
     assert "Warning" not in result.output
     assert not (vault / "ow" / "stale note.md").exists()
     assert len(list((vault / "ow").iterdir())) == 2  # _assets_ dir + .md file

@@ -138,7 +138,7 @@ def test_overwrite_replaces_existing_entry(runner, vault, source_dir):
 
     assert result.exit_code == 0
     assert "Warning" not in result.output
-    assert "Consumed" in result.output
+    assert "Ingested" in result.output
     assert (existing_dir / "src" / "original.pdf").read_bytes() == content
     meta = json.loads((existing_dir / "src" / "metadata.json").read_text())
     assert "old" not in meta
@@ -158,7 +158,7 @@ def test_overwrite_without_existing_works_normally(runner, vault, source_dir):
     )
 
     assert result.exit_code == 0
-    assert "Consumed" in result.output
+    assert "Ingested" in result.output
     assert (vault / "papers" / "_assets_" / sha / "src" / "original.pdf").exists()
 
 
