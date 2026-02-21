@@ -35,15 +35,29 @@ def ingest_pdf(pdf, vault, path, *, keep_original=False, overwrite=False):
     return target_dir
 
 
+def resolve_pdfs(paths):
+    """Resolve a list of paths to PDF files, recursing into directories."""
+    pdfs = []
+    for p in paths:
+        p = Path(p)
+        if p.is_dir():
+            pdfs.extend(sorted(p.rglob("*.pdf")))
+        elif p.suffix.lower() == ".pdf":
+            pdfs.append(p)
+        else:
+            click.secho(f"Warning: skipping non-PDF file: {p}", fg="yellow")
+    return pdfs
+
+
 @click.command()
 @click.option("--keep-original", is_flag=True, help="Copy PDFs instead of moving them.")
 @click.option("--overwrite", is_flag=True, help="Overwrite existing entries.")
-@click.argument("directory", type=click.Path(exists=True, file_okay=False))
+@click.argument("paths", nargs=-1, required=True, type=click.Path(exists=True))
 @click.pass_context
-def ingest(ctx, keep_original, overwrite, directory):
-    """Ingest PDFs from a directory into the vault."""
+def ingest(ctx, keep_original, overwrite, paths):
+    """Ingest PDFs into the vault. Accepts PDF files and/or directories."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    for pdf in sorted(Path(directory).rglob("*.pdf")):
+    for pdf in resolve_pdfs(paths):
         click.secho(f"Ingest: {pdf}", bold=True)
         ingest_pdf(pdf, vault, path, keep_original=keep_original, overwrite=overwrite)

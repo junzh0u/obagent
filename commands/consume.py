@@ -2,7 +2,7 @@ from pathlib import Path
 
 import click
 
-from commands.ingest import ingest_pdf
+from commands.ingest import ingest_pdf, resolve_pdfs
 from commands.llm import extract_fields
 from commands.ocr import run_ocr
 from commands.render import clear_notes, render_note
@@ -35,7 +35,7 @@ from constants import LLM_MODEL, OCR_MODEL
 @click.option(
     "--overwrite", is_flag=True, help="Overwrite existing entries and force re-OCR."
 )
-@click.argument("directory", type=click.Path(exists=True, file_okay=False))
+@click.argument("paths", nargs=-1, required=True, type=click.Path(exists=True))
 @click.pass_context
 def consume(
     ctx,
@@ -45,14 +45,14 @@ def consume(
     llm_model,
     keep_original,
     overwrite,
-    directory,
+    paths,
 ):
-    """Consume PDFs from a directory into the vault."""
+    """Consume PDFs into the vault. Accepts PDF files and/or directories."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
     if overwrite:
         clear_notes(vault / path)
-    for pdf in sorted(Path(directory).rglob("*.pdf")):
+    for pdf in resolve_pdfs(paths):
         click.secho(f"Consume: {pdf}", bold=True)
         target_dir = ingest_pdf(
             pdf, vault, path, keep_original=keep_original, overwrite=overwrite
