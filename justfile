@@ -1,6 +1,6 @@
 # Install obagent CLI and zsh completions
 install:
-    uv tool install . --compile-bytecode --force
+    uv tool install . --compile-bytecode --force --reinstall
     _OBAGENT_COMPLETE=zsh_source obagent > ~/.dotfiles/.config/zsh/completions/_obagent
     @echo "Installed. Restart your shell to enable completions."
 
