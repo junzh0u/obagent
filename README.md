@@ -45,9 +45,11 @@ uv sync
 
 ### Install to PATH
 
+Requires [just](https://github.com/casey/just).
+
 ```bash
-uv tool install . --compile-bytecode  # install the `obagent` command globally
-uv tool uninstall obagent             # remove
+just install     # install CLI + zsh completions
+just uninstall   # remove both
 ```
 
 Set API keys as environment variables or pass them as CLI flags:
@@ -89,7 +91,6 @@ obagent receipt --path Invoices consume ./inbox
 ## Development
 
 ```bash
-uv run ruff format .       # format
-uv run ruff check .        # lint
-uv run pytest tests/ -v    # test
+just check   # verify formatting, lint, and run tests
+just fix     # auto-fix formatting and lint issues
 ```

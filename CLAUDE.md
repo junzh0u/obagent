@@ -10,14 +10,14 @@
 ## Project Structure
 
 - `main.py` — CLI entry point, click group with `receipt` subgroup
-- `commands/` — subcommand modules (consume, ingest, ocr, llm, render)
+- `commands/` — subcommand modules (consume, ingest, ocr, llm, render, scan)
 - `constants.py` — shared constants (OCR_MODEL, LLM_MODEL, ASSETS_DIR)
 - `utils.py` — shared utilities (iter_entries, newest_file)
 - `tests/` — unit and integration tests with shared fixtures in `conftest.py`
 
 ## Pipeline
 
-Each receipt goes through: **ingest → ocr → llm → render** (or all at once via `consume`).
+Each receipt goes through: **ingest → ocr → llm → render** (or all at once via `consume`). Use `scan` to preview without side effects.
 
 Vault layout:
 ```
@@ -32,17 +32,20 @@ vault/{path}/
 ```bash
 uv sync              # Install dependencies
 uv run obagent       # Run the CLI
+just install         # Install to PATH with zsh completions
+just uninstall       # Remove CLI and completions
 ```
 
 ## Code Quality
 
 - Formatter/linter: **ruff** (dev dependency)
 - Pre-commit hook runs `ruff format --check` and `ruff check`
-- Always run `uv run ruff format .` before committing
+- Always run `just fix` before committing
+- Run `just check` to verify formatting, lint, and tests
 
 ## Testing
 
 - Always write unit tests and integration tests whenever applicable
 - Test framework: **pytest** (dev dependency)
 - Tests live in `tests/` with shared fixtures in `tests/conftest.py`
-- Run tests: `uv run pytest tests/ -v`
+- Run tests: `just check`
