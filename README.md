@@ -42,6 +42,13 @@ Requires Python 3.14+ and [uv](https://docs.astral.sh/uv/).
 uv sync
 ```
 
+### Install to PATH
+
+```bash
+uv tool install . --compile-bytecode  # install the `obagent` command globally
+uv tool uninstall obagent             # remove
+```
+
 Set API keys as environment variables or pass them as CLI flags:
 
 ```bash
