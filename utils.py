@@ -15,3 +15,10 @@ def newest_file(directory, glob_pattern):
         if newest is None or p.stat().st_mtime > newest.stat().st_mtime:
             newest = p
     return newest
+
+
+def make_safe_title(merchant, date, total):
+    """Build a filesystem-safe title from receipt metadata fields."""
+    total = total or "$0.00"
+    title = f"{date} - {merchant} - {total}"
+    return "".join(c for c in title if c not in r'\/:*?"<>|').strip()

@@ -4,7 +4,7 @@ from pathlib import Path
 import click
 
 from constants import ASSETS_DIR
-from utils import iter_entries, newest_file
+from utils import iter_entries, make_safe_title, newest_file
 
 
 def clear_notes(path_dir):
@@ -47,8 +47,7 @@ def render_note(target_dir, *, overwrite=False):
     merchant = fields["merchant"]
     date = fields["date"]
     total = fields["total"] or "$0.00"
-    title = f"{date} - {merchant} - {total}"
-    safe_title = "".join(c for c in title if c not in r'\/:*?"<>|').strip()
+    safe_title = make_safe_title(merchant, date, total)
 
     md_path = path_dir / f"{safe_title}.md"
 
