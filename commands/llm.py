@@ -8,7 +8,7 @@ from constants import ASSETS_DIR, LLM_MODEL
 from utils import iter_entries, newest_file
 
 
-def extract_fields(target_dir, api_key, path, *, model=LLM_MODEL, overwrite=False):
+def extract_fields(target_dir, client, path, *, model=LLM_MODEL, overwrite=False):
     """Use OpenAI to extract metadata from OCR text and save as JSON.
 
     Discovers the newest OCR .txt file under target_dir/ocr/.
@@ -27,7 +27,6 @@ def extract_fields(target_dir, api_key, path, *, model=LLM_MODEL, overwrite=Fals
         return None
     ocr_text = txt_path.read_text()
 
-    client = OpenAI(api_key=api_key)
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -80,12 +79,13 @@ def llm(ctx, openai_api_key, llm_model, overwrite, sha256):
         entries = [vault / path / ASSETS_DIR / sha256]
     else:
         entries = iter_entries(vault, path)
+    client = OpenAI(api_key=openai_api_key)
     for target_dir in entries:
         click.secho(f"LLM: {target_dir}", bold=True)
         try:
             extract_fields(
                 target_dir,
-                openai_api_key,
+                client,
                 path,
                 model=llm_model,
                 overwrite=overwrite,

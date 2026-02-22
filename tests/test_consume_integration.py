@@ -9,8 +9,8 @@ from constants import LLM_MODEL, OCR_MODEL
 from tests.conftest import BOTH_KEYS, setup_mock_mistral, setup_mock_openai
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_full_consume_via_cli(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -45,8 +45,8 @@ def test_full_consume_via_cli(
     assert not pdf.exists()
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_default_path_is_receipts(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -74,8 +74,8 @@ def test_default_path_is_receipts(
     assert (vault / "Receipts" / "_assets_" / sha / "src" / "original.pdf").exists()
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_consume_multiple_pdfs(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -112,8 +112,8 @@ def test_consume_multiple_pdfs(
         assert name in meta["original_filepath"]
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_consume_nested_pdfs(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -146,8 +146,8 @@ def test_consume_nested_pdfs(
     assert len(list((vault / "nested").iterdir())) == 2  # _assets_ dir + .md file
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_duplicate_skip_via_cli(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -198,8 +198,8 @@ def test_duplicate_skip_via_cli(
     assert len(list((vault / "dup").iterdir())) == 2  # _assets_ dir + .md file
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_non_pdf_files_are_ignored(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -233,8 +233,8 @@ def test_non_pdf_files_are_ignored(
     assert len(list((vault / "mixed").iterdir())) == 2  # _assets_ dir + .md file
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_keep_original_via_cli(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -265,8 +265,8 @@ def test_keep_original_via_cli(
     assert pdf.exists()
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_overwrite_via_cli(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -324,8 +324,8 @@ def test_overwrite_via_cli(
     ).read_bytes() == content
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_overwrite_re_ocrs_via_cli(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -369,8 +369,8 @@ def test_overwrite_re_ocrs_via_cli(
     assert "# Page 1" in txt
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_ocr_via_cli_flag(mock_mistral_cls, mock_openai_cls, runner, vault, source_dir):
     """Full CLI with API key flags runs OCR end-to-end."""
     setup_mock_mistral(mock_mistral_cls)
@@ -405,8 +405,8 @@ def test_ocr_via_cli_flag(mock_mistral_cls, mock_openai_cls, runner, vault, sour
     mock_mistral_cls.assert_any_call(api_key="sk-test-key")
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_ocr_via_env_var(mock_mistral_cls, mock_openai_cls, runner, vault, source_dir):
     """API keys from env vars are used."""
     setup_mock_mistral(mock_mistral_cls)
@@ -438,8 +438,8 @@ def test_ocr_via_env_var(mock_mistral_cls, mock_openai_cls, runner, vault, sourc
     mock_mistral_cls.assert_any_call(api_key="sk-env-key")
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_ocr_files_content_via_cli(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -477,8 +477,8 @@ def test_ocr_files_content_via_cli(
     assert len(data["pages"]) == 2
 
 
-@patch("commands.llm.OpenAI")
-@patch("commands.ocr.Mistral")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_title_md_created_via_cli(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):

@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import click
+from mistralai import Mistral
+from openai import OpenAI
 
 from commands.ingest import ingest_pdf, resolve_pdfs
 from commands.llm import extract_fields
@@ -52,6 +54,8 @@ def consume(
     path = ctx.obj["path"]
     if overwrite:
         clear_notes(vault / path)
+    mistral_client = Mistral(api_key=mistral_api_key)
+    openai_client = OpenAI(api_key=openai_api_key)
     for pdf in resolve_pdfs(paths):
         click.secho(f"Consume: {pdf}", bold=True)
         target_dir = ingest_pdf(
@@ -60,13 +64,13 @@ def consume(
         if target_dir is None:
             continue
         try:
-            run_ocr(target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite)
+            run_ocr(target_dir, mistral_client, model=ocr_model, overwrite=overwrite)
         except Exception as e:
             raise click.ClickException(f"OCR failed: {e}") from e
         try:
             extract_fields(
                 target_dir,
-                openai_api_key,
+                openai_client,
                 path,
                 model=llm_model,
                 overwrite=overwrite,

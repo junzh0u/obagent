@@ -10,8 +10,18 @@ from tests.conftest import BOTH_KEYS
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_calls_all_four_steps(
-    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+    mock_mistral,
+    mock_openai,
+    mock_ingest,
+    mock_ocr,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    source_dir,
 ):
     """consume calls ingest_pdf, run_ocr, extract_fields, and render_note in sequence."""
     pdf = source_dir / "doc.pdf"
@@ -25,13 +35,15 @@ def test_calls_all_four_steps(
     )
 
     assert result.exit_code == 0
+    mock_mistral.assert_called_once_with(api_key="test-key")
+    mock_openai.assert_called_once_with(api_key="test-oai-key")
     mock_ingest.assert_called_once()
     mock_ocr.assert_called_once_with(
-        target_dir, "test-key", model=OCR_MODEL, overwrite=False
+        target_dir, mock_mistral.return_value, model=OCR_MODEL, overwrite=False
     )
     mock_llm.assert_called_once_with(
         target_dir,
-        "test-oai-key",
+        mock_openai.return_value,
         "papers",
         model=LLM_MODEL,
         overwrite=False,
@@ -43,8 +55,18 @@ def test_calls_all_four_steps(
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_skips_ocr_llm_render_when_ingest_returns_none(
-    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+    mock_mistral,
+    mock_openai,
+    mock_ingest,
+    mock_ocr,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    source_dir,
 ):
     """When ingest_pdf returns None (duplicate), OCR, LLM, and render are skipped."""
     pdf = source_dir / "dup.pdf"
@@ -68,8 +90,18 @@ def test_skips_ocr_llm_render_when_ingest_returns_none(
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_aborts_on_ocr_exception(
-    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+    mock_mistral,
+    mock_openai,
+    mock_ingest,
+    mock_ocr,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    source_dir,
 ):
     """OCR exceptions abort the command."""
     pdf = source_dir / "doc.pdf"
@@ -94,8 +126,18 @@ def test_aborts_on_ocr_exception(
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_aborts_on_llm_exception(
-    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+    mock_mistral,
+    mock_openai,
+    mock_ingest,
+    mock_ocr,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    source_dir,
 ):
     """LLM exceptions abort the command."""
     pdf = source_dir / "doc.pdf"
@@ -119,8 +161,18 @@ def test_aborts_on_llm_exception(
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_handles_render_exception(
-    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+    mock_mistral,
+    mock_openai,
+    mock_ingest,
+    mock_ocr,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    source_dir,
 ):
     """Render exceptions are caught and printed as warnings."""
     pdf = source_dir / "doc.pdf"
@@ -144,8 +196,18 @@ def test_handles_render_exception(
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_forwards_flags(
-    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+    mock_mistral,
+    mock_openai,
+    mock_ingest,
+    mock_ocr,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    source_dir,
 ):
     """--keep-original and --overwrite are forwarded to sub-functions."""
     pdf = source_dir / "doc.pdf"
@@ -173,11 +235,11 @@ def test_forwards_flags(
     assert ingest_kwargs.kwargs["keep_original"] is True
     assert ingest_kwargs.kwargs["overwrite"] is True
     mock_ocr.assert_called_once_with(
-        target_dir, "test-key", model="custom-ocr", overwrite=True
+        target_dir, mock_mistral.return_value, model="custom-ocr", overwrite=True
     )
     mock_llm.assert_called_once_with(
         target_dir,
-        "test-oai-key",
+        mock_openai.return_value,
         "papers",
         model="custom-llm",
         overwrite=True,
@@ -189,8 +251,18 @@ def test_forwards_flags(
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_processes_multiple_pdfs(
-    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+    mock_mistral,
+    mock_openai,
+    mock_ingest,
+    mock_ocr,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    source_dir,
 ):
     """Multiple PDFs are each processed through all 4 steps."""
     for name in ["a.pdf", "b.pdf", "c.pdf"]:
@@ -216,8 +288,18 @@ def test_processes_multiple_pdfs(
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
 def test_no_pdfs_does_nothing(
-    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+    mock_mistral,
+    mock_openai,
+    mock_ingest,
+    mock_ocr,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    source_dir,
 ):
     """An empty source directory calls nothing."""
     result = runner.invoke(

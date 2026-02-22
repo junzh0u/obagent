@@ -27,7 +27,7 @@ def _ocr_with_retry(client, model, document, *, max_retries=MAX_RETRIES):
             time.sleep(wait)
 
 
-def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
+def run_ocr(target_dir, client, *, model=OCR_MODEL, overwrite=False):
     """Run Mistral OCR on the consumed PDF and save results.
 
     If OCR output exists and not overwrite, skips the API call.
@@ -43,7 +43,6 @@ def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
     pdf_bytes = (target_dir / "src" / "original.pdf").read_bytes()
     pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
 
-    client = Mistral(api_key=api_key)
     ocr_response = _ocr_with_retry(
         client,
         model,
@@ -83,6 +82,7 @@ def ocr(ctx, mistral_api_key, ocr_model, overwrite, sha256):
         entries = [vault / path / ASSETS_DIR / sha256]
     else:
         entries = iter_entries(vault, path)
+    client = Mistral(api_key=mistral_api_key)
     for target_dir in entries:
         click.secho(f"OCR: {target_dir}", bold=True)
-        run_ocr(target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite)
+        run_ocr(target_dir, client, model=ocr_model, overwrite=overwrite)
