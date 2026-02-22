@@ -83,6 +83,29 @@ def test_null_total_defaults_to_zero(runner, vault):
     assert 'total: "$0.00"' in md_file.read_text()
 
 
+def test_null_date_defaults_to_empty(runner, vault):
+    """When date is null, it is omitted from the title."""
+    _setup_entry_with_llm(vault, sha="sha_nodate", merchant="Mystery Shop")
+    import json
+
+    llm_json = vault / "papers" / "_assets_" / "sha_nodate" / "llm" / "default.json"
+    llm_json.write_text(
+        json.dumps({"merchant": "Mystery Shop", "date": None, "total": "$10.00"})
+    )
+
+    result = runner.invoke(
+        render,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    md_file = vault / "papers" / "Mystery Shop - $10.00.md"
+    assert md_file.exists()
+    content = md_file.read_text()
+    assert 'date: ""' in content
+
+
 def test_skip_existing_md(runner, vault):
     """Rendering is skipped when .md already references this sha256."""
     _setup_entry_with_llm(vault, sha="sha3")

@@ -20,5 +20,6 @@ def newest_file(directory, glob_pattern):
 def make_safe_title(merchant, date, total):
     """Build a filesystem-safe title from receipt metadata fields."""
     total = total or "$0.00"
-    title = f"{date} - {merchant} - {total}"
+    parts = [p for p in (date, merchant, total) if p]
+    title = " - ".join(parts)
     return "".join(c for c in title if c not in r'\/:*?"<>|').strip()

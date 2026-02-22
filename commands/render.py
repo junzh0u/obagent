@@ -45,7 +45,7 @@ def render_note(target_dir, *, overwrite=False):
 
     fields = json.loads(json_path.read_text())
     merchant = fields["merchant"]
-    date = fields["date"]
+    date = fields["date"] or ""
     total = fields["total"] or "$0.00"
     safe_title = make_safe_title(merchant, date, total)
 
