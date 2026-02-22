@@ -1,12 +1,30 @@
 import base64
 import json
+import time
 from pathlib import Path
 
 import click
 from mistralai import Mistral
+from mistralai.models import SDKError
 
 from constants import ASSETS_DIR, OCR_MODEL
 from utils import iter_entries
+
+MAX_RETRIES = 5
+INITIAL_BACKOFF = 2
+
+
+def _ocr_with_retry(client, model, document, *, max_retries=MAX_RETRIES):
+    """Call OCR with exponential backoff on rate-limit (429) responses."""
+    for attempt in range(max_retries + 1):
+        try:
+            return client.ocr.process(model=model, document=document)
+        except SDKError as e:
+            if e.status_code != 429 or attempt == max_retries:
+                raise
+            wait = INITIAL_BACKOFF * (2**attempt)
+            click.secho(f"  Rate limited, retrying in {wait}s…", fg="yellow")
+            time.sleep(wait)
 
 
 def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
@@ -26,8 +44,9 @@ def run_ocr(target_dir, api_key, *, model=OCR_MODEL, overwrite=False):
     pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
 
     client = Mistral(api_key=api_key)
-    ocr_response = client.ocr.process(
-        model=model,
+    ocr_response = _ocr_with_retry(
+        client,
+        model,
         document={
             "type": "document_url",
             "document_url": f"data:application/pdf;base64,{pdf_b64}",

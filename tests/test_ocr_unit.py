@@ -1,11 +1,23 @@
 import hashlib
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from commands.ocr import ocr
+import httpx
+from mistralai.models import SDKError
+
+from commands.ocr import _ocr_with_retry, ocr
 from constants import OCR_MODEL
 
 from tests.conftest import setup_mock_mistral
+
+
+def _make_sdk_error(status_code):
+    """Create an SDKError with the given status code."""
+    response = MagicMock(spec=httpx.Response)
+    response.status_code = status_code
+    response.text = "error"
+    response.headers = {}
+    return SDKError("API error", response)
 
 
 @patch("commands.ocr.Mistral")
@@ -178,3 +190,53 @@ def test_ocr_custom_model(mock_mistral_cls, runner, vault):
     assert (ocr_dir / "custom-model.json").exists()
     call_kwargs = mock_client.ocr.process.call_args
     assert call_kwargs.kwargs["model"] == "custom-model"
+
+
+@patch("commands.ocr.time.sleep")
+def test_ocr_retries_on_429(mock_sleep):
+    """_ocr_with_retry retries on 429 with exponential backoff."""
+    client = MagicMock()
+    success = MagicMock()
+    client.ocr.process.side_effect = [
+        _make_sdk_error(429),
+        _make_sdk_error(429),
+        success,
+    ]
+
+    result = _ocr_with_retry(client, "model", document={"type": "test"}, max_retries=3)
+
+    assert result is success
+    assert client.ocr.process.call_count == 3
+    assert mock_sleep.call_args_list[0].args[0] == 2
+    assert mock_sleep.call_args_list[1].args[0] == 4
+
+
+@patch("commands.ocr.time.sleep")
+def test_ocr_raises_after_max_retries(mock_sleep):
+    """_ocr_with_retry raises after exhausting retries on 429."""
+    client = MagicMock()
+    client.ocr.process.side_effect = _make_sdk_error(429)
+
+    try:
+        _ocr_with_retry(client, "model", document={"type": "test"}, max_retries=2)
+        assert False, "Should have raised"
+    except SDKError:
+        pass
+
+    assert client.ocr.process.call_count == 3  # initial + 2 retries
+
+
+@patch("commands.ocr.time.sleep")
+def test_ocr_does_not_retry_non_429(mock_sleep):
+    """_ocr_with_retry does not retry on non-429 errors."""
+    client = MagicMock()
+    client.ocr.process.side_effect = _make_sdk_error(502)
+
+    try:
+        _ocr_with_retry(client, "model", document={"type": "test"}, max_retries=3)
+        assert False, "Should have raised"
+    except SDKError:
+        pass
+
+    assert client.ocr.process.call_count == 1
+    mock_sleep.assert_not_called()
