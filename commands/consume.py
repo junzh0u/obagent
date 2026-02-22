@@ -56,12 +56,15 @@ def consume(
         clear_notes(vault / path)
     mistral_client = Mistral(api_key=mistral_api_key)
     openai_client = OpenAI(api_key=openai_api_key)
+    consumed = 0
+    skipped = 0
     for pdf in resolve_pdfs(paths):
         click.secho(f"Consume: {pdf}", bold=True)
         target_dir = ingest_pdf(
             pdf, vault, path, keep_original=keep_original, overwrite=overwrite
         )
         if target_dir is None:
+            skipped += 1
             continue
         try:
             run_ocr(target_dir, mistral_client, model=ocr_model, overwrite=overwrite)
@@ -81,3 +84,9 @@ def consume(
             render_note(target_dir)
         except Exception as e:
             click.secho(f"  Warning: note rendering failed: {e}", fg="red")
+        consumed += 1
+    total = consumed + skipped
+    click.secho(
+        f"{total} PDFs found: {consumed} consumed, {skipped} already in vault",
+        bold=True,
+    )

@@ -49,6 +49,7 @@ def test_calls_all_four_steps(
         overwrite=False,
     )
     mock_render.assert_called_once_with(target_dir)
+    assert "1 PDFs found: 1 consumed, 0 already in vault" in result.output
 
 
 @patch("commands.consume.render_note")
@@ -84,6 +85,7 @@ def test_skips_ocr_llm_render_when_ingest_returns_none(
     mock_ocr.assert_not_called()
     mock_llm.assert_not_called()
     mock_render.assert_not_called()
+    assert "1 PDFs found: 0 consumed, 1 already in vault" in result.output
 
 
 @patch("commands.consume.render_note")
@@ -282,6 +284,7 @@ def test_processes_multiple_pdfs(
     assert mock_ocr.call_count == 3
     assert mock_llm.call_count == 3
     assert mock_render.call_count == 3
+    assert "3 PDFs found: 3 consumed, 0 already in vault" in result.output
 
 
 @patch("commands.consume.render_note")
@@ -313,3 +316,4 @@ def test_no_pdfs_does_nothing(
     mock_ocr.assert_not_called()
     mock_llm.assert_not_called()
     mock_render.assert_not_called()
+    assert "0 PDFs found: 0 consumed, 0 already in vault" in result.output
