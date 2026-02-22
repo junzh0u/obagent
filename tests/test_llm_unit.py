@@ -3,7 +3,9 @@ import os
 import time
 from unittest.mock import patch
 
-from commands.llm import llm
+import pytest
+
+from commands.llm import _clean_total, llm
 from constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai
@@ -183,3 +185,24 @@ def test_llm_picks_newest_ocr_txt(mock_openai_cls, runner, vault):
     prompt = call_kwargs.kwargs["messages"][0]["content"]
     assert "new ocr content" in prompt
     assert "old ocr content" not in prompt
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("$5.00", "$5.00"),
+        ("$5.00 USD", "$5.00"),
+        ("USD 5.00", "$5.00"),
+        ("USD$ 88.41", "$88.41"),
+        ("EUR 10.00", "€10.00"),
+        ("£29.99", "£29.99"),
+        ("GBP 29.99", "£29.99"),
+        ("CAD$ 15.00", "$15.00"),
+        ("¥1200", "¥1200"),
+        ("JPY 1200", "¥1200"),
+        ("$42.50 CAD", "$42.50"),
+    ],
+)
+def test_clean_total(raw, expected):
+    """_clean_total strips currency codes/names, keeping symbol + number."""
+    assert _clean_total(raw) == expected

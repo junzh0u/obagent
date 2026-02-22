@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import click
@@ -6,6 +7,74 @@ from openai import OpenAI
 
 from constants import ASSETS_DIR, LLM_MODEL
 from utils import iter_entries, newest_file
+
+
+_CURRENCY_SYMBOLS = {
+    "$",
+    "€",
+    "£",
+    "¥",
+    "₩",
+    "₹",
+    "₽",
+    "₫",
+    "₱",
+    "฿",
+    "₺",
+    "₴",
+    "₸",
+    "₦",
+    "₵",
+}
+_CURRENCY_CODE_RE = re.compile(
+    r"[A-Z]{3}\$?\s*",  # e.g. "USD ", "USD$ ", "EUR "
+)
+
+
+def _clean_total(total):
+    """Strip currency codes/names, keeping only the symbol and number.
+
+    "USD$ 88.41" -> "$88.41", "$5.00 USD" -> "$5.00", "EUR 10.00" -> "€10.00"
+    """
+    code_to_symbol = {
+        "USD": "$",
+        "CAD": "$",
+        "AUD": "$",
+        "NZD": "$",
+        "HKD": "$",
+        "SGD": "$",
+        "EUR": "€",
+        "GBP": "£",
+        "JPY": "¥",
+        "CNY": "¥",
+        "KRW": "₩",
+        "INR": "₹",
+        "RUB": "₽",
+        "VND": "₫",
+        "PHP": "₱",
+        "THB": "฿",
+        "TRY": "₺",
+        "UAH": "₴",
+        "KZT": "₸",
+        "NGN": "₦",
+        "GHS": "₵",
+    }
+    s = total.strip()
+    # Extract leading currency code (e.g. "USD$ 88.41" or "EUR 10.00")
+    m = _CURRENCY_CODE_RE.match(s)
+    if m:
+        code = m.group().rstrip("$ ")
+        rest = s[m.end() :]
+        # If the remainder already has a symbol, just return symbol + number
+        if rest and rest[0] in _CURRENCY_SYMBOLS:
+            return rest
+        symbol = code_to_symbol.get(code, "$")
+        return symbol + rest
+    # Strip trailing currency code/name (e.g. "$5.00 USD")
+    parts = s.rsplit(None, 1)
+    if len(parts) == 2 and parts[1].upper() in code_to_symbol:
+        return parts[0]
+    return s
 
 
 def extract_fields(target_dir, client, path, *, model=LLM_MODEL, overwrite=False):
@@ -50,6 +119,8 @@ def extract_fields(target_dir, client, path, *, model=LLM_MODEL, overwrite=False
     )
     raw = response.choices[0].message.content.strip()
     fields = json.loads(raw)
+    if "total" in fields and fields["total"]:
+        fields["total"] = _clean_total(fields["total"])
     llm_dir.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(fields, indent=2) + "\n")
     click.secho(f"  Extracted: {fields}", fg="green")
