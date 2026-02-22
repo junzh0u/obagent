@@ -47,6 +47,7 @@ def _clean_total(total):
         "GBP": "£",
         "JPY": "¥",
         "CNY": "¥",
+        "RMB": "¥",
         "KRW": "₩",
         "INR": "₹",
         "RUB": "₽",

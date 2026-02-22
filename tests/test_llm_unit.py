@@ -201,6 +201,8 @@ def test_llm_picks_newest_ocr_txt(mock_openai_cls, runner, vault):
         ("¥1200", "¥1200"),
         ("JPY 1200", "¥1200"),
         ("$42.50 CAD", "$42.50"),
+        ("RMB 66.00", "¥66.00"),
+        ("¥66.00 RMB", "¥66.00"),
     ],
 )
 def test_clean_total(raw, expected):
