@@ -40,7 +40,8 @@ def extract_fields(target_dir, client, path, *, model=LLM_MODEL, overwrite=False
                     "- merchant: the merchant or vendor name (short brand name only in title case, "
                     "preserve acronyms like CVS or IKEA, omit store numbers, locations, and addresses)\n"
                     "- date: the document date in YYYY-MM-DD format\n"
-                    "- total: the total amount (number with currency symbol)\n"
+                    "- total: the total amount with currency symbol only, no currency code or name "
+                    '(e.g. "$5.00" not "$5.00 USD", "USD 5.00", or "USD$ 5.00")\n'
                     "Respond ONLY with a JSON object containing these three fields, "
                     "no additional text!\n\n" + ocr_text[:4000]
                 ),
