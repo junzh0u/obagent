@@ -1,5 +1,4 @@
 import os
-import time
 
 from utils import newest_file
 
