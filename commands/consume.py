@@ -59,7 +59,10 @@ def consume(
         )
         if target_dir is None:
             continue
-        run_ocr(target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite)
+        try:
+            run_ocr(target_dir, mistral_api_key, model=ocr_model, overwrite=overwrite)
+        except Exception as e:
+            raise click.ClickException(f"OCR failed: {e}") from e
         try:
             extract_fields(
                 target_dir,
@@ -69,8 +72,7 @@ def consume(
                 overwrite=overwrite,
             )
         except Exception as e:
-            click.secho(f"  Warning: field extraction failed: {e}", fg="red")
-            continue
+            raise click.ClickException(f"Field extraction failed: {e}") from e
         try:
             render_note(target_dir)
         except Exception as e:

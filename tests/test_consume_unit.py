@@ -68,10 +68,36 @@ def test_skips_ocr_llm_render_when_ingest_returns_none(
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.ingest_pdf")
-def test_handles_llm_exception(
+def test_aborts_on_ocr_exception(
     mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
 ):
-    """LLM exceptions are caught, render is skipped for that entry."""
+    """OCR exceptions abort the command."""
+    pdf = source_dir / "doc.pdf"
+    pdf.write_bytes(b"test")
+    mock_ingest.return_value = vault / "papers" / "sha"
+
+    mock_ocr.side_effect = Exception("Status 502")
+
+    result = runner.invoke(
+        consume,
+        [*BOTH_KEYS, str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code != 0
+    assert "OCR failed: Status 502" in result.output
+    mock_llm.assert_not_called()
+    mock_render.assert_not_called()
+
+
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
+@patch("commands.consume.run_ocr")
+@patch("commands.consume.ingest_pdf")
+def test_aborts_on_llm_exception(
+    mock_ingest, mock_ocr, mock_llm, mock_render, runner, vault, source_dir
+):
+    """LLM exceptions abort the command."""
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     mock_ingest.return_value = vault / "papers" / "sha"
@@ -84,8 +110,8 @@ def test_handles_llm_exception(
         obj={"vault": str(vault), "path": "papers"},
     )
 
-    assert result.exit_code == 0
-    assert "Warning: field extraction failed: API error" in result.output
+    assert result.exit_code != 0
+    assert "Field extraction failed: API error" in result.output
     mock_render.assert_not_called()
 
 
