@@ -82,7 +82,7 @@ def ocr(ctx, mistral_api_key, ocr_model, overwrite, sha256):
         entries = [vault / path / ASSETS_DIR / sha256]
     else:
         entries = iter_entries(vault, path)
-    client = Mistral(api_key=mistral_api_key)
-    for target_dir in entries:
-        click.secho(f"OCR: {target_dir}", bold=True)
-        run_ocr(target_dir, client, model=ocr_model, overwrite=overwrite)
+    with Mistral(api_key=mistral_api_key) as client:
+        for target_dir in entries:
+            click.secho(f"OCR: {target_dir}", bold=True)
+            run_ocr(target_dir, client, model=ocr_model, overwrite=overwrite)

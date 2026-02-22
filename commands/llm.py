@@ -152,16 +152,16 @@ def llm(ctx, openai_api_key, llm_model, overwrite, sha256):
         entries = [vault / path / ASSETS_DIR / sha256]
     else:
         entries = iter_entries(vault, path)
-    client = OpenAI(api_key=openai_api_key)
-    for target_dir in entries:
-        click.secho(f"LLM: {target_dir}", bold=True)
-        try:
-            extract_fields(
-                target_dir,
-                client,
-                path,
-                model=llm_model,
-                overwrite=overwrite,
-            )
-        except Exception as e:
-            click.secho(f"  Warning: field extraction failed: {e}", fg="red")
+    with OpenAI(api_key=openai_api_key) as client:
+        for target_dir in entries:
+            click.secho(f"LLM: {target_dir}", bold=True)
+            try:
+                extract_fields(
+                    target_dir,
+                    client,
+                    path,
+                    model=llm_model,
+                    overwrite=overwrite,
+                )
+            except Exception as e:
+                click.secho(f"  Warning: field extraction failed: {e}", fg="red")

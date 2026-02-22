@@ -6,6 +6,13 @@ from constants import LLM_MODEL, OCR_MODEL
 from tests.conftest import BOTH_KEYS
 
 
+def _setup_ctx_managers(mock_mistral, mock_openai):
+    """Make mock clients support context manager protocol."""
+    for mock in (mock_mistral, mock_openai):
+        mock.return_value.__enter__ = lambda self: self
+        mock.return_value.__exit__ = lambda self, *args: False
+
+
 @patch("commands.consume.render_note")
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
@@ -24,6 +31,7 @@ def test_calls_all_four_steps(
     source_dir,
 ):
     """consume calls ingest_pdf, run_ocr, extract_fields, and render_note in sequence."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     target_dir = vault / "papers" / "sha"
@@ -70,6 +78,7 @@ def test_skips_ocr_llm_render_when_ingest_returns_none(
     source_dir,
 ):
     """When ingest_pdf returns None (duplicate), OCR, LLM, and render are skipped."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "dup.pdf"
     pdf.write_bytes(b"dup")
     mock_ingest.return_value = None
@@ -106,6 +115,7 @@ def test_aborts_on_ocr_exception(
     source_dir,
 ):
     """OCR exceptions abort the command."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     mock_ingest.return_value = vault / "papers" / "sha"
@@ -142,6 +152,7 @@ def test_aborts_on_llm_exception(
     source_dir,
 ):
     """LLM exceptions abort the command."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     mock_ingest.return_value = vault / "papers" / "sha"
@@ -177,6 +188,7 @@ def test_handles_render_exception(
     source_dir,
 ):
     """Render exceptions are caught and printed as warnings."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     mock_ingest.return_value = vault / "papers" / "sha"
@@ -212,6 +224,7 @@ def test_forwards_flags(
     source_dir,
 ):
     """--keep-original and --overwrite are forwarded to sub-functions."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     target_dir = vault / "papers" / "sha"
@@ -267,6 +280,7 @@ def test_processes_multiple_pdfs(
     source_dir,
 ):
     """Multiple PDFs are each processed through all 4 steps."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
     for name in ["a.pdf", "b.pdf", "c.pdf"]:
         (source_dir / name).write_bytes(name.encode())
 
@@ -305,6 +319,7 @@ def test_no_pdfs_does_nothing(
     source_dir,
 ):
     """An empty source directory calls nothing."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
     result = runner.invoke(
         consume,
         [*BOTH_KEYS, str(source_dir)],

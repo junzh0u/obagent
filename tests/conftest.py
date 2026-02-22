@@ -56,16 +56,20 @@ def mock_chat_response(merchant="ACME Store", date="2024-01-15", total="$42.50")
 
 
 def setup_mock_mistral(mock_mistral_cls):
-    """Set up a mock Mistral client with OCR response."""
+    """Set up a mock Mistral client with OCR response and context manager support."""
     mock_client = MagicMock()
     mock_client.ocr.process.return_value = mock_ocr_response()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
     mock_mistral_cls.return_value = mock_client
     return mock_client
 
 
 def setup_mock_openai(mock_openai_cls, **kwargs):
-    """Set up a mock OpenAI client with chat response."""
+    """Set up a mock OpenAI client with chat response and context manager support."""
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_chat_response(**kwargs)
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
     mock_openai_cls.return_value = mock_client
     return mock_client
