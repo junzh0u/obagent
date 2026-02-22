@@ -6,6 +6,7 @@ from commands.ingest import ingest
 from commands.llm import llm
 from commands.ocr import ocr
 from commands.render import render
+from commands.scan import scan
 
 
 @click.group()
@@ -41,6 +42,7 @@ receipt.add_command(ingest)
 receipt.add_command(ocr)
 receipt.add_command(llm)
 receipt.add_command(render)
+receipt.add_command(scan)
 
 if __name__ == "__main__":
     cli()

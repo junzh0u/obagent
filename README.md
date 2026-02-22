@@ -12,6 +12,7 @@ Each step can be run individually or all at once with `consume`:
 
 | Command   | What it does                                              |
 |-----------|-----------------------------------------------------------|
+| `scan`    | Preview which PDFs are new vs already in the vault        |
 | `ingest`  | Copy/move PDFs into the vault, deduplicated by SHA-256    |
 | `ocr`     | Run Mistral OCR on ingested PDFs                          |
 | `llm`     | Extract structured fields (merchant, date, total) via LLM |
@@ -60,6 +61,9 @@ export OBAGENT_VAULT=/path/to/your/vault
 ## Usage
 
 ```bash
+# Preview what would happen (no files moved, no API calls)
+obagent receipt scan ./inbox
+
 # Full pipeline — consume all PDFs from a directory
 obagent receipt consume ./inbox
 
