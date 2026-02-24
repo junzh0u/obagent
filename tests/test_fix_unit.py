@@ -1,4 +1,4 @@
-from commands.fix import fix, parse_frontmatter
+from commands.fix import fix, fix_metadata_embeds, parse_frontmatter
 
 
 def _write_note(path_dir, filename, merchant, date, total, extra=""):
@@ -44,7 +44,7 @@ def test_skip_when_already_correct(runner, vault):
     assert result.exit_code == 0
     assert (path_dir / "2024-06-01 - Coffee Shop - $5.75.md").exists()
     assert "Renamed:" not in result.output
-    assert "Fixed 0 note(s)" in result.output
+    assert "Fixed 0 name(s), 0 embed(s)" in result.output
 
 
 def test_skip_missing_frontmatter(runner, vault):
@@ -106,7 +106,7 @@ def test_multiple_renames(runner, vault):
     assert result.exit_code == 0
     assert (path_dir / "2024-01-01 - Shop A - $10.00.md").exists()
     assert (path_dir / "2024-02-01 - Shop B - $20.00.md").exists()
-    assert "Fixed 2 note(s)" in result.output
+    assert "Fixed 2 name(s)" in result.output
 
 
 def test_parse_frontmatter_valid():
@@ -124,3 +124,100 @@ def test_parse_frontmatter_no_delimiters():
 def test_parse_frontmatter_unclosed():
     """parse_frontmatter returns None when closing delimiter is missing."""
     assert parse_frontmatter('---\nmerchant: "ACME"\n') is None
+
+
+def test_adds_missing_metadata_embed(runner, vault):
+    """Fix adds metadata.json embed when source embed exists without one."""
+    path_dir = vault / "papers"
+    path_dir.mkdir()
+    md = path_dir / "2024-06-01 - Coffee Shop - $5.75.md"
+    md.write_text(
+        '---\nmerchant: "Coffee Shop"\ndate: "2024-06-01"\ntotal: "$5.75"\n---\n'
+        "![[_assets_/sha1/src/original.pdf#height]]\n"
+    )
+
+    result = runner.invoke(fix, [], obj={"vault": str(vault), "path": "papers"})
+
+    assert result.exit_code == 0
+    content = md.read_text()
+    assert "![[_assets_/sha1/src/metadata.json]]" in content
+    assert "Fixed embeds:" in result.output
+    assert "1 embed(s)" in result.output
+
+
+def test_skips_when_metadata_embed_present(runner, vault):
+    """Fix does not duplicate metadata.json embed when already present."""
+    path_dir = vault / "papers"
+    path_dir.mkdir()
+    md = path_dir / "2024-06-01 - Coffee Shop - $5.75.md"
+    md.write_text(
+        '---\nmerchant: "Coffee Shop"\ndate: "2024-06-01"\ntotal: "$5.75"\n---\n'
+        "![[_assets_/sha1/src/original.pdf#height]]\n"
+        "![[_assets_/sha1/src/metadata.json]]\n"
+    )
+
+    result = runner.invoke(fix, [], obj={"vault": str(vault), "path": "papers"})
+
+    assert result.exit_code == 0
+    assert "Fixed embeds:" not in result.output
+    assert "0 embed(s)" in result.output
+
+
+def test_adds_metadata_for_multiple_shas(runner, vault):
+    """Fix adds metadata.json for each sha missing it in a single file."""
+    path_dir = vault / "papers"
+    path_dir.mkdir()
+    md = path_dir / "2024-06-01 - Coffee Shop - $5.75.md"
+    md.write_text(
+        '---\nmerchant: "Coffee Shop"\ndate: "2024-06-01"\ntotal: "$5.75"\n---\n'
+        "![[_assets_/sha1/src/original.pdf#height]]\n"
+        "![[_assets_/sha2/src/original.jpg]]\n"
+    )
+
+    result = runner.invoke(fix, [], obj={"vault": str(vault), "path": "papers"})
+
+    assert result.exit_code == 0
+    content = md.read_text()
+    assert "![[_assets_/sha1/src/metadata.json]]" in content
+    assert "![[_assets_/sha2/src/metadata.json]]" in content
+    assert "1 embed(s)" in result.output
+
+
+def test_fix_metadata_embeds_inserts_after_source_line(tmp_path):
+    """metadata.json embed is inserted on the line after the source embed."""
+    md = tmp_path / "test.md"
+    md.write_text(
+        "![[_assets_/sha1/src/original.pdf#height]]\n"
+        "![[_assets_/sha1/src/metadata.json]]\n"
+        "![[_assets_/sha2/src/original.jpg]]\n"
+    )
+
+    assert fix_metadata_embeds(md)
+    lines = md.read_text().splitlines()
+    idx = lines.index("![[_assets_/sha2/src/original.jpg]]")
+    assert lines[idx + 1] == "![[_assets_/sha2/src/metadata.json]]"
+
+
+def test_moves_misplaced_metadata_embed(tmp_path):
+    """metadata.json embed before the source embed is moved after it."""
+    md = tmp_path / "test.md"
+    md.write_text(
+        "![[_assets_/sha1/src/metadata.json]]\n"
+        "![[_assets_/sha1/src/original.pdf#height]]\n"
+    )
+
+    assert fix_metadata_embeds(md)
+    lines = md.read_text().splitlines()
+    assert lines[0] == "![[_assets_/sha1/src/original.pdf#height]]"
+    assert lines[1] == "![[_assets_/sha1/src/metadata.json]]"
+
+
+def test_no_change_when_already_correct(tmp_path):
+    """No rewrite when metadata.json is already after source embed."""
+    md = tmp_path / "test.md"
+    md.write_text(
+        "![[_assets_/sha1/src/original.pdf#height]]\n"
+        "![[_assets_/sha1/src/metadata.json]]\n"
+    )
+
+    assert not fix_metadata_embeds(md)

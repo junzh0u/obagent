@@ -56,6 +56,7 @@ def render_note(target_dir, *, overwrite=False):
     suffix = src.suffix.lower() if src else ".pdf"
     anchor = "#height" if suffix == ".pdf" else ""
     embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/{src_name}{anchor}]]\n"
+    meta_embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/metadata.json]]\n"
 
     if md_path.exists():
         if target_dir.name in md_path.read_text():
@@ -63,13 +64,14 @@ def render_note(target_dir, *, overwrite=False):
             return None
         with md_path.open("a") as f:
             f.write(embed)
+            f.write(meta_embed)
         click.secho(f"  Appended to: {safe_title}", fg="green")
         return safe_title
 
     frontmatter = (
         f'---\nmerchant: "{merchant}"\ndate: "{date}"\ntotal: "{total}"\n---\n'
     )
-    md_path.write_text(frontmatter + embed)
+    md_path.write_text(frontmatter + embed + meta_embed)
     click.secho(f"  Title: {safe_title}", fg="green")
     return safe_title
 

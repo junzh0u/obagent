@@ -28,6 +28,31 @@ def parse_frontmatter(text):
     return fields
 
 
+def fix_metadata_embeds(md_path):
+    """Ensure each source embed is followed by its metadata.json embed.
+
+    Adds missing metadata embeds and moves misplaced ones.
+    Returns True if the file was modified.
+    """
+    lines = md_path.read_text().splitlines()
+
+    # First pass: strip all metadata.json embed lines
+    cleaned = [l for l in lines if not (l.startswith("![[") and "/src/metadata.json]]" in l)]
+
+    # Second pass: re-insert after each source embed
+    result = []
+    for line in cleaned:
+        result.append(line)
+        if line.startswith("![[") and "/src/original." in line:
+            prefix = line.split("/src/original.")[0]
+            result.append(f"{prefix}/src/metadata.json]]")
+
+    if result != lines:
+        md_path.write_text("\n".join(result) + "\n")
+        return True
+    return False
+
+
 @click.command()
 @click.pass_context
 def fix(ctx):
@@ -41,11 +66,16 @@ def fix(ctx):
         return
 
     renamed = 0
+    embeds_fixed = 0
     for md_path in sorted(path_dir.glob("*.md")):
         fields = parse_frontmatter(md_path.read_text())
         if fields is None:
             click.secho(f"  Skip (no frontmatter): {md_path.name}", fg="yellow")
             continue
+
+        if fix_metadata_embeds(md_path):
+            click.secho(f"  Fixed embeds: {md_path.name}", fg="green")
+            embeds_fixed += 1
 
         merchant = fields.get("merchant")
         date = fields.get("date")
@@ -72,4 +102,4 @@ def fix(ctx):
         click.secho(f"  Renamed: {md_path.name} -> {new_path.name}", fg="green")
         renamed += 1
 
-    click.secho(f"Fixed {renamed} note(s)", bold=True)
+    click.secho(f"Fixed {renamed} name(s), {embeds_fixed} embed(s)", bold=True)

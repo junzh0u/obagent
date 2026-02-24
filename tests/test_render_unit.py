@@ -44,6 +44,7 @@ def test_md_created_with_frontmatter(runner, vault):
     assert 'date: "2024-06-01"' in content
     assert 'total: "$5.75"' in content
     assert "![[_assets_/sha1/src/original.pdf#height]]" in content
+    assert "![[_assets_/sha1/src/metadata.json]]" in content
     assert "Title: 2024-06-01 - Coffee Shop - $5.75" in result.output
 
 
@@ -61,7 +62,9 @@ def test_sanitizes_unsafe_characters(runner, vault):
 
     md_file = vault / "papers" / "2024-01-15 - Shop AB - $10.00.md"
     assert md_file.exists()
-    assert "![[_assets_/sha2/src/original.pdf#height]]" in md_file.read_text()
+    content = md_file.read_text()
+    assert "![[_assets_/sha2/src/original.pdf#height]]" in content
+    assert "![[_assets_/sha2/src/metadata.json]]" in content
 
 
 def test_null_total_defaults_to_zero(runner, vault):
@@ -145,7 +148,9 @@ def test_append_different_sha(runner, vault):
     assert result.exit_code == 0
     content = md_path.read_text()
     assert "![[_assets_/sha3a/src/original.pdf#height]]" in content
+    assert "![[_assets_/sha3a/src/metadata.json]]" in content
     assert "![[_assets_/sha3b/src/original.pdf#height]]" in content
+    assert "![[_assets_/sha3b/src/metadata.json]]" in content
     assert "Appended to:" in result.output
 
 
@@ -288,3 +293,4 @@ def test_render_jpeg_embed(runner, vault):
     assert md_file.exists()
     content = md_file.read_text()
     assert "![[_assets_/jpgsha/src/original.jpg]]" in content
+    assert "![[_assets_/jpgsha/src/metadata.json]]" in content
