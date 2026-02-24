@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from constants import ASSETS_DIR
+from utils import interruptible
 
 
 def ingest_pdf(pdf, vault, path, *, keep_original=False, overwrite=False):
@@ -58,6 +59,6 @@ def ingest(ctx, keep_original, overwrite, paths):
     """Ingest PDFs into the vault. Accepts PDF files and/or directories."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    for pdf in resolve_pdfs(paths):
+    for pdf in interruptible(resolve_pdfs(paths)):
         click.secho(f"Ingest: {pdf}", bold=True)
         ingest_pdf(pdf, vault, path, keep_original=keep_original, overwrite=overwrite)

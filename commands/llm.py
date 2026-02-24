@@ -6,7 +6,7 @@ import click
 from openai import OpenAI
 
 from constants import ASSETS_DIR, LLM_MODEL
-from utils import iter_entries, newest_file
+from utils import interruptible, iter_entries, newest_file
 
 
 _CURRENCY_SYMBOLS = {
@@ -152,7 +152,7 @@ def llm(ctx, openai_api_key, llm_model, overwrite, sha256):
     else:
         entries = iter_entries(vault, path)
     with OpenAI(api_key=openai_api_key) as client:
-        for target_dir in entries:
+        for target_dir in interruptible(entries):
             click.secho(f"LLM: {target_dir}", bold=True)
             try:
                 extract_fields(

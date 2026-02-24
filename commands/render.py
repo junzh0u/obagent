@@ -4,7 +4,7 @@ from pathlib import Path
 import click
 
 from constants import ASSETS_DIR
-from utils import iter_entries, make_safe_title, newest_file
+from utils import interruptible, iter_entries, make_safe_title, newest_file
 
 
 def clear_notes(path_dir):
@@ -88,7 +88,7 @@ def render(ctx, overwrite, sha256):
         if overwrite:
             clear_notes(vault / path)
         entries = iter_entries(vault, path)
-    for target_dir in entries:
+    for target_dir in interruptible(entries):
         click.secho(f"Render: {target_dir}", bold=True)
         try:
             render_note(target_dir, overwrite=sha256 and overwrite)

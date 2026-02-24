@@ -8,7 +8,7 @@ from mistralai import Mistral
 from mistralai.models import SDKError
 
 from constants import ASSETS_DIR, OCR_MODEL
-from utils import iter_entries
+from utils import interruptible, iter_entries
 
 MAX_RETRIES = 5
 INITIAL_BACKOFF = 2
@@ -83,6 +83,6 @@ def ocr(ctx, mistral_api_key, ocr_model, overwrite, sha256):
     else:
         entries = iter_entries(vault, path)
     with Mistral(api_key=mistral_api_key) as client:
-        for target_dir in entries:
+        for target_dir in interruptible(entries):
             click.secho(f"OCR: {target_dir}", bold=True)
             run_ocr(target_dir, client, model=ocr_model, overwrite=overwrite)

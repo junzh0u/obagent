@@ -9,6 +9,7 @@ from commands.llm import extract_fields
 from commands.ocr import run_ocr
 from commands.render import clear_notes, render_note
 from constants import LLM_MODEL, OCR_MODEL
+from utils import interruptible
 
 
 @click.command()
@@ -60,7 +61,7 @@ def consume(
         Mistral(api_key=mistral_api_key) as mistral_client,
         OpenAI(api_key=openai_api_key) as openai_client,
     ):
-        for pdf in resolve_pdfs(paths):
+        for pdf in interruptible(resolve_pdfs(paths)):
             click.secho(f"Consume: {pdf}", bold=True)
             target_dir = ingest_pdf(
                 pdf, vault, path, keep_original=keep_original, overwrite=overwrite

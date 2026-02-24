@@ -1,4 +1,39 @@
+import signal
+
+import click
+
 from constants import ASSETS_DIR
+
+
+def interruptible(iterable):
+    """Yield items, allowing graceful Ctrl+C between iterations.
+
+    First Ctrl+C: finish current item, stop before next.
+    Second Ctrl+C: force quit immediately.
+    """
+    stop = False
+    original = signal.getsignal(signal.SIGINT)
+
+    def handler(signum, frame):
+        nonlocal stop
+        if stop:
+            signal.signal(signal.SIGINT, original)
+            raise KeyboardInterrupt
+        stop = True
+        click.secho(
+            "\nInterrupted — finishing current item. Ctrl+C again to force quit.",
+            fg="yellow",
+        )
+
+    signal.signal(signal.SIGINT, handler)
+    try:
+        for item in iterable:
+            yield item
+            if stop:
+                click.secho("Stopped.", fg="yellow")
+                break
+    finally:
+        signal.signal(signal.SIGINT, original)
 
 
 def iter_entries(vault, path):
