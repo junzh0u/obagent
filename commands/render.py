@@ -53,7 +53,9 @@ def render_note(target_dir, *, overwrite=False):
 
     src = source_file(target_dir)
     src_name = src.name if src else "original.pdf"
-    embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/{src_name}#height]]\n"
+    suffix = src.suffix.lower() if src else ".pdf"
+    anchor = "#height" if suffix == ".pdf" else ""
+    embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/{src_name}{anchor}]]\n"
 
     if md_path.exists():
         if target_dir.name in md_path.read_text():

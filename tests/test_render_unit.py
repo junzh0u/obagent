@@ -287,4 +287,4 @@ def test_render_jpeg_embed(runner, vault):
     md_file = vault / "papers" / "2024-07-01 - Photo Shop - $15.00.md"
     assert md_file.exists()
     content = md_file.read_text()
-    assert "![[_assets_/jpgsha/src/original.jpg#height]]" in content
+    assert "![[_assets_/jpgsha/src/original.jpg]]" in content
