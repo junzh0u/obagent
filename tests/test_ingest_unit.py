@@ -185,8 +185,8 @@ def test_keep_original_and_overwrite_together(runner, vault, source_dir):
     assert (existing_dir / "src" / "original.pdf").read_bytes() == content
 
 
-def test_non_pdf_files_are_ignored(runner, vault, source_dir):
-    """Only .pdf files are ingested; other files are left untouched."""
+def test_unsupported_files_are_ignored(runner, vault, source_dir):
+    """Only supported files are ingested; other files are left untouched."""
     (source_dir / "notes.txt").write_text("not a pdf")
     (source_dir / "image.png").write_bytes(b"png data")
     pdf = source_dir / "real.pdf"
@@ -203,3 +203,24 @@ def test_non_pdf_files_are_ignored(runner, vault, source_dir):
     assert (source_dir / "image.png").exists()
     assert not pdf.exists()
     assert len(list((vault / "mixed").iterdir())) == 1
+
+
+def test_jpeg_ingest(runner, vault, source_dir):
+    """JPEG files are ingested and saved as original.jpg."""
+    content = b"jpeg image data"
+    jpg = source_dir / "photo.jpg"
+    jpg.write_bytes(content)
+    sha = hashlib.sha256(content).hexdigest()
+
+    result = runner.invoke(
+        ingest,
+        [str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert "Ingested" in result.output
+    assert not jpg.exists()
+    target_dir = vault / "papers" / "_assets_" / sha
+    assert (target_dir / "src" / "original.jpg").exists()
+    assert (target_dir / "src" / "original.jpg").read_bytes() == content

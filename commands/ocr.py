@@ -8,10 +8,25 @@ from mistralai import Mistral
 from mistralai.models import SDKError
 
 from constants import ASSETS_DIR, OCR_MODEL
-from utils import interruptible, iter_entries
+from utils import interruptible, iter_entries, source_file
 
 MAX_RETRIES = 5
 INITIAL_BACKOFF = 2
+
+
+def _build_ocr_document(src_path):
+    """Build the Mistral OCR document payload for a source file."""
+    raw = base64.standard_b64encode(src_path.read_bytes()).decode("utf-8")
+    ext = src_path.suffix.lower()
+    if ext == ".pdf":
+        return {
+            "type": "document_url",
+            "document_url": f"data:application/pdf;base64,{raw}",
+        }
+    return {
+        "type": "image_url",
+        "image_url": f"data:image/jpeg;base64,{raw}",
+    }
 
 
 def _ocr_with_retry(client, model, document, *, max_retries=MAX_RETRIES):
@@ -28,7 +43,7 @@ def _ocr_with_retry(client, model, document, *, max_retries=MAX_RETRIES):
 
 
 def run_ocr(target_dir, client, *, model=OCR_MODEL, overwrite=False):
-    """Run Mistral OCR on the consumed PDF and save results.
+    """Run Mistral OCR on the consumed source file and save results.
 
     If OCR output exists and not overwrite, skips the API call.
     Otherwise runs OCR and saves JSON + TXT.
@@ -40,17 +55,10 @@ def run_ocr(target_dir, client, *, model=OCR_MODEL, overwrite=False):
         click.secho("  OCR already exists, skipping", fg="yellow")
         return
 
-    pdf_bytes = (target_dir / "src" / "original.pdf").read_bytes()
-    pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
+    src_path = source_file(target_dir)
+    document = _build_ocr_document(src_path)
 
-    ocr_response = _ocr_with_retry(
-        client,
-        model,
-        document={
-            "type": "document_url",
-            "document_url": f"data:application/pdf;base64,{pdf_b64}",
-        },
-    )
+    ocr_response = _ocr_with_retry(client, model, document=document)
 
     ocr_dir.mkdir(exist_ok=True)
     (ocr_dir / f"{model}.json").write_text(
@@ -75,7 +83,7 @@ def run_ocr(target_dir, client, *, model=OCR_MODEL, overwrite=False):
 @click.argument("sha256", required=False)
 @click.pass_context
 def ocr(ctx, mistral_api_key, ocr_model, overwrite, sha256):
-    """Run OCR on ingested PDFs in the vault."""
+    """Run OCR on ingested files in the vault."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
     if sha256:

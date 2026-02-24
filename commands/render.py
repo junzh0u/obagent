@@ -4,7 +4,7 @@ from pathlib import Path
 import click
 
 from constants import ASSETS_DIR
-from utils import interruptible, iter_entries, make_safe_title, newest_file
+from utils import interruptible, iter_entries, make_safe_title, newest_file, source_file
 
 
 def clear_notes(path_dir):
@@ -51,7 +51,9 @@ def render_note(target_dir, *, overwrite=False):
 
     md_path = path_dir / f"{safe_title}.md"
 
-    embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/original.pdf#height]]\n"
+    src = source_file(target_dir)
+    src_name = src.name if src else "original.pdf"
+    embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/{src_name}#height]]\n"
 
     if md_path.exists():
         if target_dir.name in md_path.read_text():

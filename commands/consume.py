@@ -4,7 +4,7 @@ import click
 from mistralai import Mistral
 from openai import OpenAI
 
-from commands.ingest import ingest_pdf, resolve_pdfs
+from commands.ingest import ingest_source, resolve_sources
 from commands.llm import extract_fields
 from commands.ocr import run_ocr
 from commands.render import clear_notes, render_note
@@ -34,7 +34,9 @@ from utils import interruptible
     show_default=True,
     help="OpenAI model name for field extraction.",
 )
-@click.option("--keep-original", is_flag=True, help="Copy PDFs instead of moving them.")
+@click.option(
+    "--keep-original", is_flag=True, help="Copy files instead of moving them."
+)
 @click.option(
     "--overwrite", is_flag=True, help="Overwrite existing entries and force re-OCR."
 )
@@ -50,7 +52,7 @@ def consume(
     overwrite,
     paths,
 ):
-    """Consume PDFs into the vault. Accepts PDF files and/or directories."""
+    """Consume receipt files into the vault. Accepts files and/or directories."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
     if overwrite:
@@ -61,10 +63,10 @@ def consume(
         Mistral(api_key=mistral_api_key) as mistral_client,
         OpenAI(api_key=openai_api_key) as openai_client,
     ):
-        for pdf in interruptible(resolve_pdfs(paths)):
-            click.secho(f"Consume: {pdf}", bold=True)
-            target_dir = ingest_pdf(
-                pdf, vault, path, keep_original=keep_original, overwrite=overwrite
+        for source in interruptible(resolve_sources(paths)):
+            click.secho(f"Consume: {source}", bold=True)
+            target_dir = ingest_source(
+                source, vault, path, keep_original=keep_original, overwrite=overwrite
             )
             if target_dir is None:
                 skipped += 1
@@ -92,6 +94,6 @@ def consume(
             consumed += 1
     total = consumed + skipped
     click.secho(
-        f"{total} PDFs found: {consumed} consumed, {skipped} already in vault",
+        f"{total} files found: {consumed} consumed, {skipped} already in vault",
         bold=True,
     )

@@ -1,6 +1,6 @@
 import os
 
-from utils import newest_file
+from utils import newest_file, source_file
 
 
 def test_nonexistent_dir(tmp_path):
@@ -40,3 +40,31 @@ def test_glob_pattern_filters(tmp_path):
 
     assert newest_file(tmp_path, "*.txt") == txt
     assert newest_file(tmp_path, "*.json") == json_f
+
+
+def test_source_file_finds_pdf(tmp_path):
+    """source_file returns original.pdf when present."""
+    target_dir = tmp_path / "entry"
+    src_dir = target_dir / "src"
+    src_dir.mkdir(parents=True)
+    pdf = src_dir / "original.pdf"
+    pdf.write_bytes(b"pdf data")
+    assert source_file(target_dir) == pdf
+
+
+def test_source_file_finds_jpg(tmp_path):
+    """source_file returns original.jpg when present."""
+    target_dir = tmp_path / "entry"
+    src_dir = target_dir / "src"
+    src_dir.mkdir(parents=True)
+    jpg = src_dir / "original.jpg"
+    jpg.write_bytes(b"jpg data")
+    assert source_file(target_dir) == jpg
+
+
+def test_source_file_returns_none(tmp_path):
+    """source_file returns None when no original.* exists."""
+    target_dir = tmp_path / "entry"
+    src_dir = target_dir / "src"
+    src_dir.mkdir(parents=True)
+    assert source_file(target_dir) is None

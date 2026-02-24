@@ -52,6 +52,14 @@ def newest_file(directory, glob_pattern):
     return newest
 
 
+def source_file(target_dir):
+    """Return the original.* source file under target_dir/src/, or None."""
+    for p in (target_dir / "src").glob("original.*"):
+        if p.is_file():
+            return p
+    return None
+
+
 def make_safe_title(merchant, date, total):
     """Build a filesystem-safe title from receipt metadata fields."""
     total = total or "$0.00"

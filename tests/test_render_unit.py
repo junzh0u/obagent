@@ -5,7 +5,13 @@ import time
 from commands.render import render
 
 
-def _setup_entry_with_llm(vault, sha="abc123", llm_filename="default.json", **fields):
+def _setup_entry_with_llm(
+    vault,
+    sha="abc123",
+    llm_filename="default.json",
+    src_filename="original.pdf",
+    **fields,
+):
     """Create a vault entry with LLM JSON ready for rendering."""
     defaults = {"merchant": "ACME Store", "date": "2024-01-15", "total": "$42.50"}
     defaults.update(fields)
@@ -13,7 +19,7 @@ def _setup_entry_with_llm(vault, sha="abc123", llm_filename="default.json", **fi
     llm_dir = target_dir / "llm"
     llm_dir.mkdir(parents=True)
     (target_dir / "src").mkdir(parents=True)
-    (target_dir / "src" / "original.pdf").write_bytes(b"test")
+    (target_dir / "src" / src_filename).write_bytes(b"test")
     (llm_dir / llm_filename).write_text(json.dumps(defaults))
     return target_dir
 
@@ -258,3 +264,27 @@ def test_render_picks_newest_llm_json(runner, vault):
     assert result.exit_code == 0
     assert "Title: 2025-06-01 - New Shop - $99.00" in result.output
     assert (vault / "papers" / "2025-06-01 - New Shop - $99.00.md").exists()
+
+
+def test_render_jpeg_embed(runner, vault):
+    """JPEG source file produces an embed with original.jpg."""
+    _setup_entry_with_llm(
+        vault,
+        sha="jpgsha",
+        src_filename="original.jpg",
+        merchant="Photo Shop",
+        date="2024-07-01",
+        total="$15.00",
+    )
+
+    result = runner.invoke(
+        render,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    md_file = vault / "papers" / "2024-07-01 - Photo Shop - $15.00.md"
+    assert md_file.exists()
+    content = md_file.read_text()
+    assert "![[_assets_/jpgsha/src/original.jpg#height]]" in content

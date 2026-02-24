@@ -3,8 +3,8 @@ import hashlib
 from commands.scan import scan
 
 
-def test_scan_shows_new_pdfs(runner, vault, source_dir):
-    """Scan reports new PDFs that aren't in the vault."""
+def test_scan_shows_new_files(runner, vault, source_dir):
+    """Scan reports new files that aren't in the vault."""
     pdf = source_dir / "new.pdf"
     pdf.write_bytes(b"new content")
 
@@ -17,11 +17,11 @@ def test_scan_shows_new_pdfs(runner, vault, source_dir):
     assert result.exit_code == 0
     assert "new.pdf" in result.output
     assert "new" in result.output
-    assert "1 PDFs found: 1 new, 0 already consumed" in result.output
+    assert "1 files found: 1 new, 0 already consumed" in result.output
 
 
 def test_scan_shows_duplicates(runner, vault, source_dir):
-    """Scan reports PDFs that already exist in the vault."""
+    """Scan reports files that already exist in the vault."""
     content = b"duplicate content"
     sha256 = hashlib.sha256(content).hexdigest()
 
@@ -41,11 +41,11 @@ def test_scan_shows_duplicates(runner, vault, source_dir):
     assert result.exit_code == 0
     assert "dup.pdf" in result.output
     assert "duplicate" in result.output
-    assert "1 PDFs found: 0 new, 1 already consumed" in result.output
+    assert "1 files found: 0 new, 1 already consumed" in result.output
 
 
 def test_scan_mixed(runner, vault, source_dir):
-    """Scan correctly counts a mix of new and duplicate PDFs."""
+    """Scan correctly counts a mix of new and duplicate files."""
     dup_content = b"existing"
     sha256 = hashlib.sha256(dup_content).hexdigest()
     existing_dir = vault / "papers" / "_assets_" / sha256
@@ -62,7 +62,7 @@ def test_scan_mixed(runner, vault, source_dir):
     )
 
     assert result.exit_code == 0
-    assert "3 PDFs found: 2 new, 1 already consumed" in result.output
+    assert "3 files found: 2 new, 1 already consumed" in result.output
 
 
 def test_scan_no_side_effects(runner, vault, source_dir):
@@ -82,7 +82,7 @@ def test_scan_no_side_effects(runner, vault, source_dir):
 
 
 def test_scan_empty_dir(runner, vault, source_dir):
-    """Scan on an empty directory reports zero PDFs."""
+    """Scan on an empty directory reports zero files."""
     result = runner.invoke(
         scan,
         [str(source_dir)],
@@ -90,4 +90,21 @@ def test_scan_empty_dir(runner, vault, source_dir):
     )
 
     assert result.exit_code == 0
-    assert "0 PDFs found: 0 new, 0 already consumed" in result.output
+    assert "0 files found: 0 new, 0 already consumed" in result.output
+
+
+def test_scan_jpeg(runner, vault, source_dir):
+    """Scan detects JPEG files as new."""
+    jpg = source_dir / "photo.jpg"
+    jpg.write_bytes(b"jpeg scan test")
+
+    result = runner.invoke(
+        scan,
+        [str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert "photo.jpg" in result.output
+    assert "new" in result.output
+    assert "1 files found: 1 new, 0 already consumed" in result.output

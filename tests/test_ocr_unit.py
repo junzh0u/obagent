@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 from mistralai.models import SDKError
 
-from commands.ocr import _ocr_with_retry, ocr
+from commands.ocr import _build_ocr_document, _ocr_with_retry, ocr
 from constants import OCR_MODEL
 
 from tests.conftest import setup_mock_mistral
@@ -240,3 +240,54 @@ def test_ocr_does_not_retry_non_429(mock_sleep):
 
     assert client.ocr.process.call_count == 1
     mock_sleep.assert_not_called()
+
+
+def test_build_ocr_document_pdf(tmp_path):
+    """_build_ocr_document returns document_url payload for PDFs."""
+    pdf = tmp_path / "original.pdf"
+    pdf.write_bytes(b"pdf content")
+    doc = _build_ocr_document(pdf)
+    assert doc["type"] == "document_url"
+    assert doc["document_url"].startswith("data:application/pdf;base64,")
+
+
+def test_build_ocr_document_jpg(tmp_path):
+    """_build_ocr_document returns image_url payload for JPEGs."""
+    jpg = tmp_path / "original.jpg"
+    jpg.write_bytes(b"jpg content")
+    doc = _build_ocr_document(jpg)
+    assert doc["type"] == "image_url"
+    assert doc["image_url"].startswith("data:image/jpeg;base64,")
+
+
+def test_build_ocr_document_jpeg(tmp_path):
+    """_build_ocr_document returns image_url payload for .jpeg extension."""
+    jpeg = tmp_path / "original.jpeg"
+    jpeg.write_bytes(b"jpeg content")
+    doc = _build_ocr_document(jpeg)
+    assert doc["type"] == "image_url"
+    assert doc["image_url"].startswith("data:image/jpeg;base64,")
+
+
+@patch("commands.ocr.Mistral")
+def test_ocr_jpeg_uses_image_url(mock_mistral_cls, runner, vault):
+    """OCR on a JPEG source uses image_url API format."""
+    mock_client = setup_mock_mistral(mock_mistral_cls)
+
+    sha = "jpgsha"
+    target_dir = vault / "papers" / "_assets_" / sha
+    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src" / "original.jpg").write_bytes(b"jpeg data")
+
+    result = runner.invoke(
+        ocr,
+        ["--mistral-api-key", "test-key", sha],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert "OCR completed" in result.output
+    call_kwargs = mock_client.ocr.process.call_args
+    document = call_kwargs.kwargs["document"]
+    assert document["type"] == "image_url"
+    assert document["image_url"].startswith("data:image/jpeg;base64,")

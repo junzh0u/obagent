@@ -76,10 +76,10 @@ def test_default_path_is_receipts(
 
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_consume_multiple_pdfs(
+def test_consume_multiple_files(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
-    """Multiple PDFs are each consumed into separate sha256 directories."""
+    """Multiple files are each consumed into separate sha256 directories."""
     setup_mock_mistral(mock_mistral_cls)
     setup_mock_openai(mock_openai_cls)
 
@@ -114,10 +114,10 @@ def test_consume_multiple_pdfs(
 
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_consume_nested_pdfs(
+def test_consume_nested_files(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
-    """PDFs in subdirectories are found via rglob."""
+    """Files in subdirectories are found via rglob."""
     setup_mock_mistral(mock_mistral_cls)
     setup_mock_openai(mock_openai_cls)
 
@@ -200,10 +200,10 @@ def test_duplicate_skip_via_cli(
 
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_non_pdf_files_are_ignored(
+def test_unsupported_files_are_ignored(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
-    """Only .pdf files are consumed; other files are left untouched."""
+    """Only supported files are consumed; other files are left untouched."""
     setup_mock_mistral(mock_mistral_cls)
     setup_mock_openai(mock_openai_cls)
 
@@ -238,7 +238,7 @@ def test_non_pdf_files_are_ignored(
 def test_keep_original_via_cli(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
-    """--keep-original preserves source PDFs through full CLI."""
+    """--keep-original preserves source files through full CLI."""
     setup_mock_mistral(mock_mistral_cls)
     setup_mock_openai(mock_openai_cls)
 
@@ -524,3 +524,40 @@ def test_title_md_created_via_cli(
     assert 'date: "2024-09-20"' in content
     assert 'total: "$29.99"' in content
     assert f"![[_assets_/{sha}/src/original.pdf#height]]" in content
+
+
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_consume_jpeg_via_cli(
+    mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
+):
+    """End-to-end: JPEG file is consumed through the full CLI pipeline."""
+    setup_mock_mistral(mock_mistral_cls)
+    setup_mock_openai(mock_openai_cls)
+
+    jpg = source_dir / "receipt.jpg"
+    jpg.write_bytes(b"jpeg integration test")
+    expected_hash = hashlib.sha256(b"jpeg integration test").hexdigest()
+
+    result = runner.invoke(
+        cli,
+        [
+            "--vault",
+            str(vault),
+            "receipt",
+            "--path",
+            "photos",
+            "consume",
+            *BOTH_KEYS,
+            str(source_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Ingested" in result.output
+
+    target_dir = vault / "photos" / "_assets_" / expected_hash
+    assert (target_dir / "src" / "original.jpg").exists()
+    assert not (target_dir / "src" / "original.pdf").exists()
+    assert (target_dir / "src" / "metadata.json").exists()
+    assert not jpg.exists()

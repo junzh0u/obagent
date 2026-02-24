@@ -16,7 +16,7 @@ def _setup_ctx_managers(mock_mistral, mock_openai):
 @patch("commands.consume.render_note")
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_pdf")
+@patch("commands.consume.ingest_source")
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
 def test_calls_all_four_steps(
@@ -30,7 +30,7 @@ def test_calls_all_four_steps(
     vault,
     source_dir,
 ):
-    """consume calls ingest_pdf, run_ocr, extract_fields, and render_note in sequence."""
+    """consume calls ingest_source, run_ocr, extract_fields, and render_note in sequence."""
     _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
@@ -57,13 +57,13 @@ def test_calls_all_four_steps(
         overwrite=False,
     )
     mock_render.assert_called_once_with(target_dir)
-    assert "1 PDFs found: 1 consumed, 0 already in vault" in result.output
+    assert "1 files found: 1 consumed, 0 already in vault" in result.output
 
 
 @patch("commands.consume.render_note")
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_pdf")
+@patch("commands.consume.ingest_source")
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
 def test_skips_ocr_llm_render_when_ingest_returns_none(
@@ -77,7 +77,7 @@ def test_skips_ocr_llm_render_when_ingest_returns_none(
     vault,
     source_dir,
 ):
-    """When ingest_pdf returns None (duplicate), OCR, LLM, and render are skipped."""
+    """When ingest_source returns None (duplicate), OCR, LLM, and render are skipped."""
     _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "dup.pdf"
     pdf.write_bytes(b"dup")
@@ -94,13 +94,13 @@ def test_skips_ocr_llm_render_when_ingest_returns_none(
     mock_ocr.assert_not_called()
     mock_llm.assert_not_called()
     mock_render.assert_not_called()
-    assert "1 PDFs found: 0 consumed, 1 already in vault" in result.output
+    assert "1 files found: 0 consumed, 1 already in vault" in result.output
 
 
 @patch("commands.consume.render_note")
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_pdf")
+@patch("commands.consume.ingest_source")
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
 def test_aborts_on_ocr_exception(
@@ -137,7 +137,7 @@ def test_aborts_on_ocr_exception(
 @patch("commands.consume.render_note")
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_pdf")
+@patch("commands.consume.ingest_source")
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
 def test_aborts_on_llm_exception(
@@ -173,7 +173,7 @@ def test_aborts_on_llm_exception(
 @patch("commands.consume.render_note")
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_pdf")
+@patch("commands.consume.ingest_source")
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
 def test_handles_render_exception(
@@ -209,7 +209,7 @@ def test_handles_render_exception(
 @patch("commands.consume.render_note")
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_pdf")
+@patch("commands.consume.ingest_source")
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
 def test_forwards_flags(
@@ -265,10 +265,10 @@ def test_forwards_flags(
 @patch("commands.consume.render_note")
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_pdf")
+@patch("commands.consume.ingest_source")
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_processes_multiple_pdfs(
+def test_processes_multiple_files(
     mock_mistral,
     mock_openai,
     mock_ingest,
@@ -279,7 +279,7 @@ def test_processes_multiple_pdfs(
     vault,
     source_dir,
 ):
-    """Multiple PDFs are each processed through all 4 steps."""
+    """Multiple files are each processed through all 4 steps."""
     _setup_ctx_managers(mock_mistral, mock_openai)
     for name in ["a.pdf", "b.pdf", "c.pdf"]:
         (source_dir / name).write_bytes(name.encode())
@@ -298,16 +298,16 @@ def test_processes_multiple_pdfs(
     assert mock_ocr.call_count == 3
     assert mock_llm.call_count == 3
     assert mock_render.call_count == 3
-    assert "3 PDFs found: 3 consumed, 0 already in vault" in result.output
+    assert "3 files found: 3 consumed, 0 already in vault" in result.output
 
 
 @patch("commands.consume.render_note")
 @patch("commands.consume.extract_fields")
 @patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_pdf")
+@patch("commands.consume.ingest_source")
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_no_pdfs_does_nothing(
+def test_no_files_does_nothing(
     mock_mistral,
     mock_openai,
     mock_ingest,
@@ -331,4 +331,4 @@ def test_no_pdfs_does_nothing(
     mock_ocr.assert_not_called()
     mock_llm.assert_not_called()
     mock_render.assert_not_called()
-    assert "0 PDFs found: 0 consumed, 0 already in vault" in result.output
+    assert "0 files found: 0 consumed, 0 already in vault" in result.output
