@@ -60,6 +60,29 @@ def source_file(target_dir):
     return None
 
 
+def parse_frontmatter(text):
+    """Extract frontmatter fields from markdown text.
+
+    Returns a dict of key-value pairs, or None if no valid frontmatter found.
+    """
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return None
+
+    fields = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if ":" in line:
+            key, _, value = line.partition(":")
+            value = value.strip().strip('"')
+            fields[key.strip()] = value
+    else:
+        return None
+
+    return fields
+
+
 def make_safe_title(merchant, date, total):
     """Build a filesystem-safe title from receipt metadata fields."""
     total = total or "$0.00"

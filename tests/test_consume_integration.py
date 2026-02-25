@@ -294,9 +294,6 @@ def test_overwrite_via_cli(
         ],
     )
 
-    # Plant a stale .md to verify --overwrite cleans it up
-    (vault / "ow" / "stale note.md").write_text("stale")
-
     # Re-create and consume again with --overwrite
     pdf.write_bytes(content)
     result = runner.invoke(
@@ -317,8 +314,6 @@ def test_overwrite_via_cli(
     assert result.exit_code == 0
     assert "Ingested" in result.output
     assert "Warning" not in result.output
-    assert not (vault / "ow" / "stale note.md").exists()
-    assert len(list((vault / "ow").iterdir())) == 2  # _assets_ dir + .md file
     assert (
         vault / "ow" / "_assets_" / sha / "src" / "original.pdf"
     ).read_bytes() == content
@@ -520,9 +515,9 @@ def test_title_md_created_via_cli(
     md_file = vault / "papers" / "2024-09-20 - Bookstore - $29.99.md"
     assert md_file.exists()
     content = md_file.read_text()
-    assert 'merchant: "Bookstore"' in content
-    assert 'date: "2024-09-20"' in content
-    assert 'total: "$29.99"' in content
+    assert "merchant: Bookstore" in content
+    assert "date: 2024-09-20" in content
+    assert "total: $29.99" in content
     assert f"![[_assets_/{sha}/src/original.pdf#height]]" in content
     assert f"![[_assets_/{sha}/src/metadata.json]]" in content
 

@@ -40,9 +40,9 @@ def test_md_created_with_frontmatter(runner, vault):
     md_file = vault / "papers" / "2024-06-01 - Coffee Shop - $5.75.md"
     assert md_file.exists()
     content = md_file.read_text()
-    assert 'merchant: "Coffee Shop"' in content
-    assert 'date: "2024-06-01"' in content
-    assert 'total: "$5.75"' in content
+    assert "merchant: Coffee Shop" in content
+    assert "date: 2024-06-01" in content
+    assert "total: $5.75" in content
     assert "![[_assets_/sha1/src/original.pdf#height]]" in content
     assert "![[_assets_/sha1/src/metadata.json]]" in content
     assert "Title: 2024-06-01 - Coffee Shop - $5.75" in result.output
@@ -89,7 +89,7 @@ def test_null_total_defaults_to_zero(runner, vault):
     assert result.exit_code == 0
     md_file = vault / "papers" / "2024-01-15 - Free Store - $0.00.md"
     assert md_file.exists()
-    assert 'total: "$0.00"' in md_file.read_text()
+    assert "total: $0.00" in md_file.read_text()
 
 
 def test_null_date_defaults_to_empty(runner, vault):
@@ -112,7 +112,7 @@ def test_null_date_defaults_to_empty(runner, vault):
     md_file = vault / "papers" / "Mystery Shop - $10.00.md"
     assert md_file.exists()
     content = md_file.read_text()
-    assert 'date: ""' in content
+    assert "date: " in content
 
 
 def test_skip_existing_md(runner, vault):
@@ -155,7 +155,7 @@ def test_append_different_sha(runner, vault):
 
 
 def test_overwrite_replaces_md(runner, vault):
-    """With --overwrite, old .md files are deleted and new one is created."""
+    """With --overwrite, all .md files are cleared upfront and re-rendered."""
     _setup_entry_with_llm(
         vault, sha="sha4", merchant="New Shop", date="2025-01-01", total="$99.00"
     )
@@ -170,28 +170,30 @@ def test_overwrite_replaces_md(runner, vault):
 
     assert result.exit_code == 0
     assert not (papers_dir / "old title.md").exists()
+    assert "Removed 1 notes" in result.output
     new_md = papers_dir / "2025-01-01 - New Shop - $99.00.md"
     assert new_md.exists()
     content = new_md.read_text()
-    assert 'merchant: "New Shop"' in content
+    assert "merchant: New Shop" in content
 
 
 def test_overwrite_single_sha_deletes_old_md(runner, vault):
-    """With --overwrite and sha256, the old .md referencing that sha is deleted first."""
+    """With --overwrite and sha256, manually edited frontmatter is preserved."""
     _setup_entry_with_llm(
-        vault, sha="sha_ow", merchant="Old Name", date="2024-01-15", total="$42.50"
+        vault, sha="sha_ow", merchant="LLM Name", date="2024-01-15", total="$42.50"
     )
-    # Simulate an existing .md with old title referencing this sha
-    old_md = vault / "papers" / "2024-01-15 - Old Name - $42.50.md"
+    # Simulate an existing .md with manually edited merchant
+    old_md = vault / "papers" / "2024-01-15 - Edited Name - $42.50.md"
     old_md.write_text(
-        '---\nmerchant: "Old Name"\n---\n![[_assets_/sha_ow/src/original.pdf#height]]\n'
+        '---\nmerchant: "Edited Name"\ndate: "2024-01-15"\ntotal: "$42.50"\n---\n'
+        "![[_assets_/sha_ow/src/original.pdf#height]]\n"
     )
-    # Now update the LLM JSON to produce a different title
+    # LLM JSON has different merchant
     import json
 
     llm_json = vault / "papers" / "_assets_" / "sha_ow" / "llm" / "default.json"
     llm_json.write_text(
-        json.dumps({"merchant": "New Name", "date": "2024-01-15", "total": "$42.50"})
+        json.dumps({"merchant": "LLM Name", "date": "2024-01-15", "total": "$42.50"})
     )
 
     result = runner.invoke(
@@ -201,9 +203,11 @@ def test_overwrite_single_sha_deletes_old_md(runner, vault):
     )
 
     assert result.exit_code == 0
-    assert not old_md.exists()
-    new_md = vault / "papers" / "2024-01-15 - New Name - $42.50.md"
+    # Frontmatter was preserved, title uses edited merchant
+    new_md = vault / "papers" / "2024-01-15 - Edited Name - $42.50.md"
     assert new_md.exists()
+    content = new_md.read_text()
+    assert "merchant: Edited Name" in content
 
 
 def test_no_llm_json_no_entries(runner, vault):
@@ -294,3 +298,90 @@ def test_render_jpeg_embed(runner, vault):
     content = md_file.read_text()
     assert "![[_assets_/jpgsha/src/original.jpg]]" in content
     assert "![[_assets_/jpgsha/src/metadata.json]]" in content
+
+
+def test_overwrite_preserves_edited_merchant(runner, vault):
+    """With --overwrite, manually edited frontmatter merchant is preserved in note and filename."""
+    _setup_entry_with_llm(
+        vault, sha="sha_pres", merchant="LLM Corp", date="2024-05-01", total="$25.00"
+    )
+    # First render to create the note
+    runner.invoke(
+        render,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+    # Manually edit the merchant in frontmatter and rename the file
+    old_md = vault / "papers" / "2024-05-01 - LLM Corp - $25.00.md"
+    assert old_md.exists()
+    content = old_md.read_text().replace("merchant: LLM Corp", "merchant: My Shop")
+    new_md = vault / "papers" / "2024-05-01 - My Shop - $25.00.md"
+    new_md.write_text(content)
+    old_md.unlink()
+
+    # Re-render with --overwrite
+    result = runner.invoke(
+        render,
+        ["--overwrite", "sha_pres"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    final_md = vault / "papers" / "2024-05-01 - My Shop - $25.00.md"
+    assert final_md.exists()
+    final_content = final_md.read_text()
+    assert "merchant: My Shop" in final_content
+    # LLM merchant should NOT appear
+    assert "LLM Corp" not in final_content
+
+
+def test_overwrite_no_existing_note_uses_llm(runner, vault):
+    """With --overwrite and no existing note, LLM values are used as-is."""
+    _setup_entry_with_llm(
+        vault,
+        sha="sha_fresh",
+        merchant="Fresh Store",
+        date="2024-08-01",
+        total="$50.00",
+    )
+
+    result = runner.invoke(
+        render,
+        ["--overwrite", "sha_fresh"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    md_file = vault / "papers" / "2024-08-01 - Fresh Store - $50.00.md"
+    assert md_file.exists()
+    content = md_file.read_text()
+    assert "merchant: Fresh Store" in content
+    assert "date: 2024-08-01" in content
+    assert "total: $50.00" in content
+
+
+def test_overwrite_shared_md_preserves_all_embeds(runner, vault):
+    """With --overwrite, two shas sharing a title both end up in the same .md."""
+    _setup_entry_with_llm(vault, sha="dup_a")
+    _setup_entry_with_llm(vault, sha="dup_b")
+    # Pre-create the shared .md with both embeds
+    shared_md = vault / "papers" / "2024-01-15 - ACME Store - $42.50.md"
+    shared_md.write_text(
+        '---\nmerchant: "ACME Store"\ndate: "2024-01-15"\ntotal: "$42.50"\n---\n'
+        "![[_assets_/dup_a/src/original.pdf#height]]\n"
+        "![[_assets_/dup_a/src/metadata.json]]\n"
+        "![[_assets_/dup_b/src/original.pdf#height]]\n"
+        "![[_assets_/dup_b/src/metadata.json]]\n"
+    )
+
+    result = runner.invoke(
+        render,
+        ["--overwrite"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert shared_md.exists()
+    content = shared_md.read_text()
+    assert "![[_assets_/dup_a/src/original.pdf#height]]" in content
+    assert "![[_assets_/dup_b/src/original.pdf#height]]" in content

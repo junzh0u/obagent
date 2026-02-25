@@ -56,7 +56,7 @@ def test_calls_all_four_steps(
         model=LLM_MODEL,
         overwrite=False,
     )
-    mock_render.assert_called_once_with(target_dir)
+    mock_render.assert_called_once_with(target_dir, overwrite=False, note_index=None)
     assert "1 files found: 1 consumed, 0 already in vault" in result.output
 
 
@@ -259,7 +259,7 @@ def test_forwards_flags(
         model="custom-llm",
         overwrite=True,
     )
-    mock_render.assert_called_once_with(target_dir)
+    mock_render.assert_called_once_with(target_dir, overwrite=True, note_index={})
 
 
 @patch("commands.consume.render_note")

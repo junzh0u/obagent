@@ -1,10 +1,41 @@
 import json
+import re
 from pathlib import Path
 
 import click
 
 from constants import ASSETS_DIR
-from utils import interruptible, iter_entries, make_safe_title, newest_file, source_file
+from utils import (
+    interruptible,
+    iter_entries,
+    make_safe_title,
+    newest_file,
+    parse_frontmatter,
+    source_file,
+)
+
+_SHA_RE = re.compile(r"_assets_/([^/]+)/src/")
+
+
+def index_existing_notes(path_dir):
+    """Read all .md files once and build a sha-indexed lookup.
+
+    Returns {sha: (frontmatter_dict_or_None, [md_paths])} for every sha
+    referenced in embed links.
+    """
+    index = {}
+    for md in path_dir.glob("*.md"):
+        text = md.read_text()
+        shas = set(_SHA_RE.findall(text))
+        if not shas:
+            continue
+        fm = parse_frontmatter(text)
+        for sha in shas:
+            if sha not in index:
+                index[sha] = (fm, [md])
+            else:
+                index[sha][1].append(md)
+    return index
 
 
 def clear_notes(path_dir):
@@ -16,15 +47,7 @@ def clear_notes(path_dir):
         click.secho(f"  Removed {len(mds)} notes", fg="green")
 
 
-def clear_note(path_dir, sha256):
-    """Delete .md files in path_dir that reference the given sha256."""
-    for md in path_dir.glob("*.md"):
-        if sha256 in md.read_text():
-            click.secho(f"  Removed: {md.name}", fg="green")
-            md.unlink()
-
-
-def render_note(target_dir, *, overwrite=False):
+def render_note(target_dir, *, overwrite=False, note_index=None):
     """Read LLM JSON and create an Obsidian markdown note.
 
     Writes .md to target_dir's grandparent (vault/path/) for a flat, browsable layout.
@@ -32,6 +55,9 @@ def render_note(target_dir, *, overwrite=False):
     If .md already exists with a different sha256, appends the PDF embed.
     Skips if this sha256 is already referenced.
     Returns safe_title on success, None if skipped.
+
+    note_index: pre-built {sha: (frontmatter, [md_paths])} from
+    index_existing_notes; required when overwrite=True.
     """
     json_path = newest_file(target_dir / "llm", "*.json")
     if json_path is None:
@@ -40,13 +66,23 @@ def render_note(target_dir, *, overwrite=False):
 
     path_dir = target_dir.parent.parent
 
-    if overwrite:
-        clear_note(path_dir, target_dir.name)
-
     fields = json.loads(json_path.read_text())
     merchant = fields["merchant"]
     date = fields["date"] or ""
     total = fields["total"] or "$0.00"
+
+    if overwrite:
+        entry = note_index.get(target_dir.name)
+        if entry:
+            existing_fm, md_paths = entry
+            if existing_fm:
+                merchant = existing_fm.get("merchant") or merchant
+                date = existing_fm.get("date") or date
+                total = existing_fm.get("total") or total
+            for md in md_paths:
+                if md.exists() and target_dir.name in md.read_text():
+                    click.secho(f"  Removed: {md.name}", fg="green")
+                    md.unlink()
     safe_title = make_safe_title(merchant, date, total)
 
     md_path = path_dir / f"{safe_title}.md"
@@ -68,9 +104,7 @@ def render_note(target_dir, *, overwrite=False):
         click.secho(f"  Appended to: {safe_title}", fg="green")
         return safe_title
 
-    frontmatter = (
-        f'---\nmerchant: "{merchant}"\ndate: "{date}"\ntotal: "{total}"\n---\n'
-    )
+    frontmatter = f"---\nmerchant: {merchant}\ndate: {date}\ntotal: {total}\n---\n"
     md_path.write_text(frontmatter + embed + meta_embed)
     click.secho(f"  Title: {safe_title}", fg="green")
     return safe_title
@@ -88,6 +122,7 @@ def render(ctx, overwrite, sha256):
     """Render Obsidian notes from LLM-extracted metadata."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
+    note_index = index_existing_notes(vault / path) if overwrite else None
     if sha256:
         entries = [vault / path / ASSETS_DIR / sha256]
     else:
@@ -97,6 +132,6 @@ def render(ctx, overwrite, sha256):
     for target_dir in interruptible(entries):
         click.secho(f"Render: {target_dir}", bold=True)
         try:
-            render_note(target_dir, overwrite=sha256 and overwrite)
+            render_note(target_dir, overwrite=overwrite, note_index=note_index)
         except Exception as e:
             click.secho(f"  Warning: note rendering failed: {e}", fg="red")

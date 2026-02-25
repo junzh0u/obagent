@@ -2,30 +2,7 @@ from pathlib import Path
 
 import click
 
-from utils import make_safe_title
-
-
-def parse_frontmatter(text):
-    """Extract frontmatter fields from markdown text.
-
-    Returns a dict of key-value pairs, or None if no valid frontmatter found.
-    """
-    lines = text.split("\n")
-    if not lines or lines[0].strip() != "---":
-        return None
-
-    fields = {}
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        if ":" in line:
-            key, _, value = line.partition(":")
-            value = value.strip().strip('"')
-            fields[key.strip()] = value
-    else:
-        return None
-
-    return fields
+from utils import make_safe_title, parse_frontmatter
 
 
 def fix_metadata_embeds(md_path):
@@ -37,7 +14,11 @@ def fix_metadata_embeds(md_path):
     lines = md_path.read_text().splitlines()
 
     # First pass: strip all metadata.json embed lines
-    cleaned = [l for l in lines if not (l.startswith("![[") and "/src/metadata.json]]" in l)]
+    cleaned = [
+        ln
+        for ln in lines
+        if not (ln.startswith("![[") and "/src/metadata.json]]" in ln)
+    ]
 
     # Second pass: re-insert after each source embed
     result = []

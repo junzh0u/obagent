@@ -1,4 +1,5 @@
-from commands.fix import fix, fix_metadata_embeds, parse_frontmatter
+from commands.fix import fix, fix_metadata_embeds
+from utils import parse_frontmatter
 
 
 def _write_note(path_dir, filename, merchant, date, total, extra=""):

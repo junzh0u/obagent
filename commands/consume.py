@@ -7,7 +7,7 @@ from openai import OpenAI
 from commands.ingest import ingest_source, resolve_sources
 from commands.llm import extract_fields
 from commands.ocr import run_ocr
-from commands.render import clear_notes, render_note
+from commands.render import index_existing_notes, render_note
 from constants import LLM_MODEL, OCR_MODEL
 from utils import interruptible
 
@@ -55,8 +55,7 @@ def consume(
     """Consume receipt files into the vault. Accepts files and/or directories."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
-    if overwrite:
-        clear_notes(vault / path)
+    note_index = index_existing_notes(vault / path) if overwrite else None
     consumed = 0
     skipped = 0
     with (
@@ -88,7 +87,7 @@ def consume(
             except Exception as e:
                 raise click.ClickException(f"Field extraction failed: {e}") from e
             try:
-                render_note(target_dir)
+                render_note(target_dir, overwrite=overwrite, note_index=note_index)
             except Exception as e:
                 click.secho(f"  Warning: note rendering failed: {e}", fg="red")
             consumed += 1
