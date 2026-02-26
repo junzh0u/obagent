@@ -80,23 +80,6 @@ def test_account_number_quoted_in_frontmatter(runner, vault):
     assert 'account_number: "56789"' in content
 
 
-def test_skip_existing_md(runner, vault):
-    """Rendering is skipped when .md already references this sha256."""
-    _setup_entry_with_llm(vault, sha="sha2")
-    (
-        vault / "statements" / "2024-01-01 to 2024-01-31 - Chase - Checking - 1234.md"
-    ).write_text("---\nold: true\n---\n![[_assets_/sha2/src/original.pdf#height]]\n")
-
-    result = runner.invoke(
-        render,
-        [],
-        obj={"vault": str(vault), "path": "statements"},
-    )
-
-    assert result.exit_code == 0
-    assert "already exists, skipping" in result.output
-
-
 def test_append_different_sha(runner, vault):
     """When .md exists but for a different sha256, the new embed is appended."""
     _setup_entry_with_llm(vault, sha="sha3a")
@@ -118,8 +101,8 @@ def test_append_different_sha(runner, vault):
     assert "Appended to:" in result.output
 
 
-def test_overwrite_replaces_md(runner, vault):
-    """With --overwrite, all .md files are cleared upfront and re-rendered."""
+def test_render_replaces_old_notes(runner, vault):
+    """All .md files are cleared upfront and re-rendered."""
     _setup_entry_with_llm(
         vault,
         sha="sha4",
@@ -134,7 +117,7 @@ def test_overwrite_replaces_md(runner, vault):
 
     result = runner.invoke(
         render,
-        ["--overwrite"],
+        [],
         obj={"vault": str(vault), "path": "statements"},
     )
 

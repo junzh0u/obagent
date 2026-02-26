@@ -115,24 +115,6 @@ def test_null_date_defaults_to_empty(runner, vault):
     assert "date: " in content
 
 
-def test_skip_existing_md(runner, vault):
-    """Rendering is skipped when .md already references this sha256."""
-    _setup_entry_with_llm(vault, sha="sha3")
-    # Place existing .md that already references sha3
-    (vault / "papers" / "2024-01-15 - ACME Store - $42.50.md").write_text(
-        "---\nold: true\n---\n![[_assets_/sha3/src/original.pdf#height]]\n"
-    )
-
-    result = runner.invoke(
-        render,
-        [],
-        obj={"vault": str(vault), "path": "papers"},
-    )
-
-    assert result.exit_code == 0
-    assert "already exists, skipping" in result.output
-
-
 def test_append_different_sha(runner, vault):
     """When .md exists but for a different sha256, the new PDF embed is appended."""
     _setup_entry_with_llm(vault, sha="sha3a")
@@ -154,8 +136,8 @@ def test_append_different_sha(runner, vault):
     assert "Appended to:" in result.output
 
 
-def test_overwrite_replaces_md(runner, vault):
-    """With --overwrite, all .md files are cleared upfront and re-rendered."""
+def test_render_replaces_old_notes(runner, vault):
+    """All .md files are cleared upfront and re-rendered."""
     _setup_entry_with_llm(
         vault, sha="sha4", merchant="New Shop", date="2025-01-01", total="$99.00"
     )
@@ -164,7 +146,7 @@ def test_overwrite_replaces_md(runner, vault):
 
     result = runner.invoke(
         render,
-        ["--overwrite"],
+        [],
         obj={"vault": str(vault), "path": "papers"},
     )
 
@@ -178,7 +160,7 @@ def test_overwrite_replaces_md(runner, vault):
 
 
 def test_overwrite_single_sha_deletes_old_md(runner, vault):
-    """With --overwrite and sha256, manually edited frontmatter is preserved."""
+    """With sha256, manually edited frontmatter is preserved."""
     _setup_entry_with_llm(
         vault, sha="sha_ow", merchant="LLM Name", date="2024-01-15", total="$42.50"
     )
@@ -198,7 +180,7 @@ def test_overwrite_single_sha_deletes_old_md(runner, vault):
 
     result = runner.invoke(
         render,
-        ["--overwrite", "sha_ow"],
+        ["sha_ow"],
         obj={"vault": str(vault), "path": "papers"},
     )
 
@@ -300,8 +282,8 @@ def test_render_jpeg_embed(runner, vault):
     assert "![[_assets_/jpgsha/src/metadata.json]]" in content
 
 
-def test_overwrite_preserves_edited_merchant(runner, vault):
-    """With --overwrite, manually edited frontmatter merchant is preserved in note and filename."""
+def test_preserves_edited_merchant(runner, vault):
+    """Manually edited frontmatter merchant is preserved in note and filename."""
     _setup_entry_with_llm(
         vault, sha="sha_pres", merchant="LLM Corp", date="2024-05-01", total="$25.00"
     )
@@ -319,10 +301,10 @@ def test_overwrite_preserves_edited_merchant(runner, vault):
     new_md.write_text(content)
     old_md.unlink()
 
-    # Re-render with --overwrite
+    # Re-render (frontmatter preserved by default)
     result = runner.invoke(
         render,
-        ["--overwrite", "sha_pres"],
+        ["sha_pres"],
         obj={"vault": str(vault), "path": "papers"},
     )
 
@@ -335,8 +317,8 @@ def test_overwrite_preserves_edited_merchant(runner, vault):
     assert "LLM Corp" not in final_content
 
 
-def test_overwrite_no_existing_note_uses_llm(runner, vault):
-    """With --overwrite and no existing note, LLM values are used as-is."""
+def test_no_existing_note_uses_llm(runner, vault):
+    """With no existing note, LLM values are used as-is."""
     _setup_entry_with_llm(
         vault,
         sha="sha_fresh",
@@ -347,7 +329,7 @@ def test_overwrite_no_existing_note_uses_llm(runner, vault):
 
     result = runner.invoke(
         render,
-        ["--overwrite", "sha_fresh"],
+        ["sha_fresh"],
         obj={"vault": str(vault), "path": "papers"},
     )
 
@@ -360,8 +342,8 @@ def test_overwrite_no_existing_note_uses_llm(runner, vault):
     assert "total: $50.00" in content
 
 
-def test_overwrite_shared_md_preserves_all_embeds(runner, vault):
-    """With --overwrite, two shas sharing a title both end up in the same .md."""
+def test_shared_md_preserves_all_embeds(runner, vault):
+    """Two shas sharing a title both end up in the same .md after re-render."""
     _setup_entry_with_llm(vault, sha="dup_a")
     _setup_entry_with_llm(vault, sha="dup_b")
     # Pre-create the shared .md with both embeds
@@ -376,7 +358,7 @@ def test_overwrite_shared_md_preserves_all_embeds(runner, vault):
 
     result = runner.invoke(
         render,
-        ["--overwrite"],
+        [],
         obj={"vault": str(vault), "path": "papers"},
     )
 
@@ -385,3 +367,38 @@ def test_overwrite_shared_md_preserves_all_embeds(runner, vault):
     content = shared_md.read_text()
     assert "![[_assets_/dup_a/src/original.pdf#height]]" in content
     assert "![[_assets_/dup_b/src/original.pdf#height]]" in content
+
+
+def test_overwrite_discards_edited_merchant(runner, vault):
+    """With --overwrite, manually-edited frontmatter is ignored and LLM values are used."""
+    _setup_entry_with_llm(
+        vault, sha="sha_disc", merchant="LLM Corp", date="2024-05-01", total="$25.00"
+    )
+    # First render to create the note
+    runner.invoke(
+        render,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+    # Manually edit the merchant in frontmatter and rename the file
+    old_md = vault / "papers" / "2024-05-01 - LLM Corp - $25.00.md"
+    assert old_md.exists()
+    content = old_md.read_text().replace("merchant: LLM Corp", "merchant: My Shop")
+    new_md = vault / "papers" / "2024-05-01 - My Shop - $25.00.md"
+    new_md.write_text(content)
+    old_md.unlink()
+
+    # Re-render with --overwrite discards manual edits
+    result = runner.invoke(
+        render,
+        ["--overwrite", "sha_disc"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    final_md = vault / "papers" / "2024-05-01 - LLM Corp - $25.00.md"
+    assert final_md.exists()
+    final_content = final_md.read_text()
+    assert "merchant: LLM Corp" in final_content
+    # Manual edit should NOT appear
+    assert "My Shop" not in final_content

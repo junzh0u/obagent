@@ -58,13 +58,14 @@ def render_note(
     """Read LLM JSON and create an Obsidian markdown note.
 
     Writes .md to target_dir's grandparent (vault/path/) for a flat, browsable layout.
-    If overwrite, deletes any existing .md referencing this sha256 first.
+    When note_index is provided, deletes any existing .md referencing this sha256
+    and preserves manually-edited frontmatter (unless overwrite=True).
     If .md already exists with a different sha256, appends the PDF embed.
-    Skips if this sha256 is already referenced.
     Returns safe_title on success, None if skipped.
 
     note_index: pre-built {sha: (frontmatter, [md_paths])} from
-    index_existing_notes; required when overwrite=True.
+    index_existing_notes; used for per-entry cleanup and frontmatter preservation.
+    overwrite: if True, discard existing frontmatter and use fresh LLM values.
     field_defaults: dict of default values applied to LLM JSON fields.
     make_title(fields) -> str: builds the filename-safe title.
     format_frontmatter(fields) -> str: formats fields as YAML frontmatter.
@@ -81,11 +82,11 @@ def render_note(
         if not fields.get(key):
             fields[key] = default
 
-    if overwrite:
+    if note_index:
         entry = note_index.get(target_dir.name)
         if entry:
             existing_fm, md_paths = entry
-            if existing_fm:
+            if not overwrite and existing_fm:
                 for key in fields:
                     if existing_fm.get(key):
                         fields[key] = existing_fm[key]
@@ -127,19 +128,20 @@ def make_render_command(*, field_defaults, make_title, format_frontmatter, help_
     @click.option(
         "--overwrite",
         is_flag=True,
-        help="Delete all .md notes and re-render from LLM metadata.",
+        help="Discard manually-edited frontmatter values and use LLM data.",
     )
     @click.argument("sha256", required=False)
     @click.pass_context
     def render(ctx, overwrite, sha256):
         vault = Path(ctx.obj["vault"])
         path = ctx.obj["path"]
-        note_index = index_existing_notes(vault / path) if overwrite else None
+        note_index = None
+        if sha256 or not overwrite:
+            note_index = index_existing_notes(vault / path)
         if sha256:
             entries = [vault / path / ASSETS_DIR / sha256]
         else:
-            if overwrite:
-                clear_notes(vault / path)
+            clear_notes(vault / path)
             entries = iter_entries(vault, path)
         for target_dir in interruptible(entries):
             click.secho(f"Render: {target_dir}", bold=True)
