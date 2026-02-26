@@ -12,7 +12,7 @@ from commands.scan import scan
 @click.group()
 @click.option(
     "--path",
-    default="Bank_Statements",
+    default="Bank Statements",
     show_default=True,
     help="Subdirectory within the vault.",
 )

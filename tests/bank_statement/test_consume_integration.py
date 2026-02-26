@@ -50,7 +50,7 @@ def test_full_consume_via_cli(
 def test_default_path_is_bank_statements(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
-    """Without --path, files are stored under 'Bank_Statements'."""
+    """Without --path, files are stored under 'Bank Statements'."""
     setup_mock_mistral(mock_mistral_cls)
     setup_mock_openai_bs(mock_openai_cls)
 
@@ -72,7 +72,7 @@ def test_default_path_is_bank_statements(
 
     assert result.exit_code == 0
     assert (
-        vault / "Bank_Statements" / "_assets_" / sha / "src" / "original.pdf"
+        vault / "Bank Statements" / "_assets_" / sha / "src" / "original.pdf"
     ).exists()
 
 

@@ -141,10 +141,10 @@ def test_llm_prompt_content(mock_openai_cls, runner, vault):
 
 def test_prompt_function():
     """_prompt builds a prompt with all BS field names."""
-    prompt = _prompt("Bank_Statements", "OCR text here")
+    prompt = _prompt("Bank Statements", "OCR text here")
     assert "date_period" in prompt
     assert "bank_name" in prompt
     assert "account_name" in prompt
     assert "account_number" in prompt
     assert "OCR text here" in prompt
-    assert '"Bank_Statements"' in prompt
+    assert '"Bank Statements"' in prompt
