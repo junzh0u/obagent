@@ -12,8 +12,8 @@ def _prompt(path, ocr_text):
         "- end_date: the statement end date in YYYY-MM-DD format "
         "(empty string if single-day or not applicable)\n"
         "- bank_name: the issuing bank name (short brand name in title case)\n"
-        '- account_name: the account type (e.g. "Checking", "Savings", '
-        '"Credit Card")\n'
+        "- account_name: the account's product name as shown on the statement "
+        '(e.g. "Sapphire Checking", "Total Savings", "Blue Cash Preferred")\n'
         "- account_number: the last 4-5 digits of the account number only\n"
         "Respond ONLY with a JSON object containing these five fields, "
         "no additional text!\n\n" + ocr_text[:4000]
