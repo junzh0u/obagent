@@ -5,6 +5,40 @@ import click
 from utils import make_safe_title, parse_frontmatter
 
 
+def _body_lines(text):
+    """Return everything after the closing --- as a list of lines."""
+    lines = text.split("\n")
+    for i, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return lines[i + 1 :]
+    return lines
+
+
+def _merge_notes(source_path, target_path):
+    """Append unique body lines from source into target, then delete source.
+
+    Deduplicates by comparing stripped line strings so shared embeds
+    aren't doubled.
+    """
+    target_text = target_path.read_text()
+    source_text = source_path.read_text()
+
+    target_body = _body_lines(target_text)
+    source_body = _body_lines(source_text)
+
+    existing = {line.strip() for line in target_body}
+    new_lines = [line for line in source_body if line.strip() not in existing]
+
+    if new_lines:
+        # Ensure target ends with a newline before appending
+        if not target_text.endswith("\n"):
+            target_text += "\n"
+        target_text += "\n".join(new_lines) + "\n"
+        target_path.write_text(target_text)
+
+    source_path.unlink()
+
+
 def fix_metadata_embeds(md_path):
     """Ensure each source embed is followed by its metadata.json embed.
 
@@ -47,6 +81,7 @@ def fix(ctx):
         return
 
     renamed = 0
+    merged = 0
     embeds_fixed = 0
     for md_path in sorted(path_dir.glob("*.md")):
         fields = parse_frontmatter(md_path.read_text())
@@ -73,14 +108,25 @@ def fix(ctx):
 
         new_path = md_path.with_name(f"{expected_stem}.md")
         if new_path.exists():
-            click.secho(
-                f"  Skip (target exists): {md_path.name} -> {new_path.name}",
-                fg="yellow",
-            )
+            target_fields = parse_frontmatter(new_path.read_text())
+            if target_fields == fields:
+                _merge_notes(md_path, new_path)
+                if fix_metadata_embeds(new_path):
+                    embeds_fixed += 1
+                click.secho(f"  Merged: {md_path.name} -> {new_path.name}", fg="green")
+                merged += 1
+            else:
+                click.secho(
+                    f"  Skip (frontmatter differs): {md_path.name} -> {new_path.name}",
+                    fg="yellow",
+                )
             continue
 
         md_path.rename(new_path)
         click.secho(f"  Renamed: {md_path.name} -> {new_path.name}", fg="green")
         renamed += 1
 
-    click.secho(f"Fixed {renamed} name(s), {embeds_fixed} embed(s)", bold=True)
+    click.secho(
+        f"Fixed {renamed} name(s), {merged} merged, {embeds_fixed} embed(s)",
+        bold=True,
+    )

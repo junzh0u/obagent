@@ -45,7 +45,7 @@ def test_skip_when_already_correct(runner, vault):
     assert result.exit_code == 0
     assert (path_dir / "2024-06-01 - Coffee Shop - $5.75.md").exists()
     assert "Renamed:" not in result.output
-    assert "Fixed 0 name(s), 0 embed(s)" in result.output
+    assert "Fixed 0 name(s), 0 merged, 0 embed(s)" in result.output
 
 
 def test_skip_missing_frontmatter(runner, vault):
@@ -74,25 +74,116 @@ def test_skip_missing_required_fields(runner, vault):
     assert "Skip (missing fields): partial.md" in result.output
 
 
-def test_skip_collision(runner, vault):
-    """When target filename already exists, the rename is skipped with a warning."""
+def test_merge_identical_frontmatter(runner, vault):
+    """Two notes with same frontmatter merge; source deleted, target has both embeds."""
     path_dir = vault / "papers"
     path_dir.mkdir()
-    _write_note(path_dir, "Old Name.md", "Coffee Shop", "2024-06-01", "$5.75")
+    _write_note(
+        path_dir,
+        "Old Name.md",
+        "Coffee Shop",
+        "2024-06-01",
+        "$5.75",
+        extra="![[_assets_/sha1/src/original.pdf]]\n",
+    )
     _write_note(
         path_dir,
         "2024-06-01 - Coffee Shop - $5.75.md",
         "Coffee Shop",
         "2024-06-01",
         "$5.75",
-        extra="existing content\n",
+        extra="![[_assets_/sha2/src/original.pdf]]\n",
+    )
+
+    result = runner.invoke(fix, [], obj={"vault": str(vault), "path": "papers"})
+
+    assert result.exit_code == 0
+    assert not (path_dir / "Old Name.md").exists()
+    target = path_dir / "2024-06-01 - Coffee Shop - $5.75.md"
+    content = target.read_text()
+    assert "![[_assets_/sha1/src/original.pdf]]" in content
+    assert "![[_assets_/sha2/src/original.pdf]]" in content
+    assert "Merged:" in result.output
+    assert "1 merged" in result.output
+
+
+def test_skip_collision_different_frontmatter(runner, vault):
+    """Different frontmatter warns, both files remain."""
+    path_dir = vault / "papers"
+    path_dir.mkdir()
+    _write_note(path_dir, "Old Name.md", "Coffee Shop", "2024-06-01", "$5.75")
+    # Same merchant/date/total so the target keeps its name, but extra field
+    # makes frontmatter dicts differ.
+    (path_dir / "2024-06-01 - Coffee Shop - $5.75.md").write_text(
+        '---\nmerchant: "Coffee Shop"\ndate: "2024-06-01"'
+        '\ntotal: "$5.75"\ncategory: "food"\n---\n'
     )
 
     result = runner.invoke(fix, [], obj={"vault": str(vault), "path": "papers"})
 
     assert result.exit_code == 0
     assert (path_dir / "Old Name.md").exists()
-    assert "Skip (target exists):" in result.output
+    assert (path_dir / "2024-06-01 - Coffee Shop - $5.75.md").exists()
+    assert "Skip (frontmatter differs):" in result.output
+
+
+def test_merge_no_duplicate_embeds(runner, vault):
+    """Shared embeds appear only once after merge."""
+    path_dir = vault / "papers"
+    path_dir.mkdir()
+    _write_note(
+        path_dir,
+        "Old Name.md",
+        "Coffee Shop",
+        "2024-06-01",
+        "$5.75",
+        extra="![[_assets_/sha1/src/original.pdf]]\n",
+    )
+    _write_note(
+        path_dir,
+        "2024-06-01 - Coffee Shop - $5.75.md",
+        "Coffee Shop",
+        "2024-06-01",
+        "$5.75",
+        extra="![[_assets_/sha1/src/original.pdf]]\n",
+    )
+
+    result = runner.invoke(fix, [], obj={"vault": str(vault), "path": "papers"})
+
+    assert result.exit_code == 0
+    assert not (path_dir / "Old Name.md").exists()
+    content = (path_dir / "2024-06-01 - Coffee Shop - $5.75.md").read_text()
+    assert content.count("![[_assets_/sha1/src/original.pdf]]") == 1
+    assert "1 merged" in result.output
+
+
+def test_merge_runs_fix_metadata_embeds(runner, vault):
+    """metadata.json embeds are fixed post-merge."""
+    path_dir = vault / "papers"
+    path_dir.mkdir()
+    _write_note(
+        path_dir,
+        "Old Name.md",
+        "Coffee Shop",
+        "2024-06-01",
+        "$5.75",
+        extra="![[_assets_/sha2/src/original.pdf]]\n",
+    )
+    _write_note(
+        path_dir,
+        "2024-06-01 - Coffee Shop - $5.75.md",
+        "Coffee Shop",
+        "2024-06-01",
+        "$5.75",
+        extra="![[_assets_/sha1/src/original.pdf]]\n",
+    )
+
+    result = runner.invoke(fix, [], obj={"vault": str(vault), "path": "papers"})
+
+    assert result.exit_code == 0
+    content = (path_dir / "2024-06-01 - Coffee Shop - $5.75.md").read_text()
+    assert "![[_assets_/sha1/src/metadata.json]]" in content
+    assert "![[_assets_/sha2/src/metadata.json]]" in content
 
 
 def test_multiple_renames(runner, vault):
