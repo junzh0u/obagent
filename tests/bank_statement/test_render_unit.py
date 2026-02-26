@@ -1,6 +1,6 @@
 import json
 
-from commands.bank_statement.render import make_safe_title, render
+from commands.bank_statement.render import make_title, render
 
 
 def _setup_entry_with_llm(
@@ -130,39 +130,54 @@ def test_render_replaces_old_notes(runner, vault):
     assert "bank_name: BofA" in content
 
 
-def test_make_safe_title_all_fields():
+def test_make_title_all_fields():
     """All fields are joined with ' - ' in correct order."""
-    assert (
-        make_safe_title("Chase", "2024-01-01", "2024-01-31", "Checking", "1234")
-        == "2024-01-01 to 2024-01-31 - Chase - Checking - 1234"
-    )
+    fields = {
+        "bank_name": "Chase",
+        "date": "2024-01-01",
+        "end_date": "2024-01-31",
+        "account_name": "Checking",
+        "account_number": "1234",
+    }
+    assert make_title(fields) == "2024-01-01 to 2024-01-31 - Chase - Checking - 1234"
 
 
-def test_make_safe_title_no_end_date():
+def test_make_title_no_end_date():
     """When end_date is empty, only date is used."""
-    assert (
-        make_safe_title("Chase", "2024-01-01", "", "Checking", "1234")
-        == "2024-01-01 - Chase - Checking - 1234"
-    )
+    fields = {
+        "bank_name": "Chase",
+        "date": "2024-01-01",
+        "end_date": "",
+        "account_name": "Checking",
+        "account_number": "1234",
+    }
+    assert make_title(fields) == "2024-01-01 - Chase - Checking - 1234"
 
 
-def test_make_safe_title_missing_fields():
+def test_make_title_missing_fields():
     """Missing fields are omitted from the title."""
     assert (
-        make_safe_title("Chase", "2024-01-01", "", None, None) == "2024-01-01 - Chase"
+        make_title({"bank_name": "Chase", "date": "2024-01-01"}) == "2024-01-01 - Chase"
     )
-    assert make_safe_title(None, "2024-01-01", "", None, "1234") == "2024-01-01 - 1234"
-    assert make_safe_title("Chase", None, None, None, None) == "Chase"
-
-
-def test_make_safe_title_strips_unsafe_chars():
-    """Unsafe filename characters are stripped."""
     assert (
-        make_safe_title('Chase "Bank"', "2024-01-01", "", "Check/Save", "1234")
-        == "2024-01-01 - Chase Bank - CheckSave - 1234"
+        make_title({"date": "2024-01-01", "account_number": "1234"})
+        == "2024-01-01 - 1234"
     )
+    assert make_title({"bank_name": "Chase"}) == "Chase"
 
 
-def test_make_safe_title_empty():
-    """All None fields produce empty string."""
-    assert make_safe_title(None, None, None, None, None) == ""
+def test_make_title_strips_unsafe_chars():
+    """Unsafe filename characters are stripped."""
+    fields = {
+        "bank_name": 'Chase "Bank"',
+        "date": "2024-01-01",
+        "end_date": "",
+        "account_name": "Check/Save",
+        "account_number": "1234",
+    }
+    assert make_title(fields) == "2024-01-01 - Chase Bank - CheckSave - 1234"
+
+
+def test_make_title_empty():
+    """All missing fields produce empty string."""
+    assert make_title({}) == ""

@@ -59,7 +59,7 @@ def index_existing_notes(path_dir):
     return index
 
 
-def clear_notes(path_dir):
+def _clear_notes(path_dir):
     """Delete all .md files in path_dir."""
     mds = list(path_dir.glob("*.md"))
     for md in mds:
@@ -163,7 +163,7 @@ def make_render_command(*, field_defaults, make_title, format_frontmatter, help_
         if sha256:
             entries = [vault / path / ASSETS_DIR / sha256]
         else:
-            clear_notes(vault / path)
+            _clear_notes(vault / path)
             entries = iter_entries(vault, path)
         for target_dir in interruptible(entries):
             click.secho(f"Render: {target_dir}", bold=True)
