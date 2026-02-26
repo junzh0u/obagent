@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from commands.llm import _clean_total, llm
+from commands.receipt.llm import _clean_total, llm
 from constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai

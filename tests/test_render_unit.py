@@ -2,7 +2,7 @@ import json
 import os
 import time
 
-from commands.render import render
+from commands.receipt.render import render
 
 
 def _setup_entry_with_llm(

@@ -1,4 +1,4 @@
-from commands.fix import fix, fix_metadata_embeds
+from commands.receipt.fix import fix, fix_metadata_embeds
 from utils import parse_frontmatter
 
 

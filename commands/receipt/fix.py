@@ -2,7 +2,8 @@ from pathlib import Path
 
 import click
 
-from utils import make_safe_title, parse_frontmatter
+from commands.receipt.render import make_safe_title
+from utils import parse_frontmatter
 
 
 def _body_lines(text):

@@ -73,3 +73,35 @@ def setup_mock_openai(mock_openai_cls, **kwargs):
     mock_client.__exit__ = MagicMock(return_value=False)
     mock_openai_cls.return_value = mock_client
     return mock_client
+
+
+def mock_chat_response_bs(
+    bank_name="Chase",
+    date_period="2024-01",
+    account_name="Checking",
+    account_number="1234",
+):
+    """Create a mock OpenAI chat completion response for bank statement extraction."""
+    content = json.dumps(
+        {
+            "bank_name": bank_name,
+            "date_period": date_period,
+            "account_name": account_name,
+            "account_number": account_number,
+        }
+    )
+    message = SimpleNamespace(content=content)
+    choice = SimpleNamespace(message=message)
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+def setup_mock_openai_bs(mock_openai_cls, **kwargs):
+    """Set up a mock OpenAI client with BS chat response and context manager support."""
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_chat_response_bs(**kwargs)
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_openai_cls.return_value = mock_client
+    return mock_client
