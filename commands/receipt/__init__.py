@@ -1,6 +1,5 @@
 import click
 
-from commands.receipt.fix import fix
 from commands.ingest import ingest
 from commands.ocr import ocr
 from commands.receipt.consume import consume
@@ -24,7 +23,6 @@ def receipt(ctx, path):
 
 
 receipt.add_command(consume)
-receipt.add_command(fix)
 receipt.add_command(remove)
 receipt.add_command(ingest)
 receipt.add_command(ocr)

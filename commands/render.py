@@ -9,11 +9,33 @@ from utils import (
     interruptible,
     iter_entries,
     newest_file,
-    parse_frontmatter,
     source_file,
 )
 
 _SHA_RE = re.compile(r"_assets_/([^/]+)/src/")
+
+
+def _parse_frontmatter(text):
+    """Extract frontmatter fields from markdown text.
+
+    Returns a dict of key-value pairs, or None if no valid frontmatter found.
+    """
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return None
+
+    fields = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if ":" in line:
+            key, _, value = line.partition(":")
+            value = value.strip().strip('"')
+            fields[key.strip()] = value
+    else:
+        return None
+
+    return fields
 
 
 def index_existing_notes(path_dir):
@@ -28,7 +50,7 @@ def index_existing_notes(path_dir):
         shas = set(_SHA_RE.findall(text))
         if not shas:
             continue
-        fm = parse_frontmatter(text)
+        fm = _parse_frontmatter(text)
         for sha in shas:
             if sha not in index:
                 index[sha] = (fm, [md])
