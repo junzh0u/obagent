@@ -25,7 +25,8 @@ def test_llm_json_created(mock_openai_cls, runner, vault):
     setup_mock_openai_bs(
         mock_openai_cls,
         bank_name="Chase",
-        date_period="2024-01",
+        date="2024-01-01",
+        end_date="2024-01-31",
         account_name="Checking",
         account_number="1234",
     )
@@ -43,7 +44,8 @@ def test_llm_json_created(mock_openai_cls, runner, vault):
     assert json_path.exists()
     fields = json.loads(json_path.read_text())
     assert fields["bank_name"] == "Chase"
-    assert fields["date_period"] == "2024-01"
+    assert fields["date"] == "2024-01-01"
+    assert fields["end_date"] == "2024-01-31"
     assert fields["account_name"] == "Checking"
     assert fields["account_number"] == "1234"
     assert "Extracted:" in result.output
@@ -75,7 +77,8 @@ def test_llm_overwrite_reruns(mock_openai_cls, runner, vault):
     setup_mock_openai_bs(
         mock_openai_cls,
         bank_name="Wells Fargo",
-        date_period="2025-02",
+        date="2025-02-01",
+        end_date="2025-02-28",
         account_name="Savings",
         account_number="5678",
     )
@@ -131,7 +134,8 @@ def test_llm_prompt_content(mock_openai_cls, runner, vault):
     mock_client.chat.completions.create.assert_called_once()
     call_kwargs = mock_client.chat.completions.create.call_args
     prompt = call_kwargs.kwargs["messages"][0]["content"]
-    assert "date_period" in prompt
+    assert "date" in prompt
+    assert "end_date" in prompt
     assert "bank_name" in prompt
     assert "account_name" in prompt
     assert "account_number" in prompt
@@ -142,7 +146,8 @@ def test_llm_prompt_content(mock_openai_cls, runner, vault):
 def test_prompt_function():
     """_prompt builds a prompt with all BS field names."""
     prompt = _prompt("Bank Statements", "OCR text here")
-    assert "date_period" in prompt
+    assert "date" in prompt
+    assert "end_date" in prompt
     assert "bank_name" in prompt
     assert "account_name" in prompt
     assert "account_number" in prompt

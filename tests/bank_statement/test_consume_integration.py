@@ -86,7 +86,8 @@ def test_title_md_created_via_cli(
     setup_mock_openai_bs(
         mock_openai_cls,
         bank_name="Chase",
-        date_period="2024-01",
+        date="2024-01-01",
+        end_date="2024-01-31",
         account_name="Checking",
         account_number="1234",
     )
@@ -115,16 +116,18 @@ def test_title_md_created_via_cli(
     assert json_path.exists()
     fields = json.loads(json_path.read_text())
     assert fields["bank_name"] == "Chase"
-    assert fields["date_period"] == "2024-01"
+    assert fields["date"] == "2024-01-01"
+    assert fields["end_date"] == "2024-01-31"
     assert fields["account_name"] == "Checking"
     assert fields["account_number"] == "1234"
     # Rendered markdown at vault/stmts/ level
-    assert "Title: 2024-01 - Chase - Checking - 1234" in result.output
-    md_file = vault / "stmts" / "2024-01 - Chase - Checking - 1234.md"
+    assert "Title: 2024-01-01 to 2024-01-31 - Chase - Checking - 1234" in result.output
+    md_file = vault / "stmts" / "2024-01-01 to 2024-01-31 - Chase - Checking - 1234.md"
     assert md_file.exists()
     content = md_file.read_text()
     assert "bank_name: Chase" in content
-    assert "date_period: 2024-01" in content
+    assert "date: 2024-01-01" in content
+    assert "end_date: 2024-01-31" in content
     assert "account_name: Checking" in content
     assert 'account_number: "1234"' in content
     assert f"![[_assets_/{sha}/src/original.pdf#height]]" in content

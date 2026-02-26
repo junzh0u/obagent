@@ -77,7 +77,8 @@ def setup_mock_openai(mock_openai_cls, **kwargs):
 
 def mock_chat_response_bs(
     bank_name="Chase",
-    date_period="2024-01",
+    date="2024-01-01",
+    end_date="2024-01-31",
     account_name="Checking",
     account_number="1234",
 ):
@@ -85,7 +86,8 @@ def mock_chat_response_bs(
     content = json.dumps(
         {
             "bank_name": bank_name,
-            "date_period": date_period,
+            "date": date,
+            "end_date": end_date,
             "account_name": account_name,
             "account_number": account_number,
         }

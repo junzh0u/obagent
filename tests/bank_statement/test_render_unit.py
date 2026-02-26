@@ -13,7 +13,8 @@ def _setup_entry_with_llm(
     """Create a vault entry with LLM JSON ready for rendering."""
     defaults = {
         "bank_name": "Chase",
-        "date_period": "2024-01",
+        "date": "2024-01-01",
+        "end_date": "2024-01-31",
         "account_name": "Checking",
         "account_number": "1234",
     }
@@ -33,7 +34,8 @@ def test_md_created_with_frontmatter(runner, vault):
         vault,
         sha="sha1",
         bank_name="Chase",
-        date_period="2024-01",
+        date="2024-01-01",
+        end_date="2024-01-31",
         account_name="Checking",
         account_number="1234",
     )
@@ -45,11 +47,14 @@ def test_md_created_with_frontmatter(runner, vault):
     )
 
     assert result.exit_code == 0
-    md_file = vault / "statements" / "2024-01 - Chase - Checking - 1234.md"
+    md_file = (
+        vault / "statements" / "2024-01-01 to 2024-01-31 - Chase - Checking - 1234.md"
+    )
     assert md_file.exists()
     content = md_file.read_text()
     assert "bank_name: Chase" in content
-    assert "date_period: 2024-01" in content
+    assert "date: 2024-01-01" in content
+    assert "end_date: 2024-01-31" in content
     assert "account_name: Checking" in content
     assert 'account_number: "1234"' in content
     assert "![[_assets_/sha1/src/original.pdf#height]]" in content
@@ -67,7 +72,9 @@ def test_account_number_quoted_in_frontmatter(runner, vault):
     )
 
     assert result.exit_code == 0
-    md_file = vault / "statements" / "2024-01 - Chase - Checking - 56789.md"
+    md_file = (
+        vault / "statements" / "2024-01-01 to 2024-01-31 - Chase - Checking - 56789.md"
+    )
     assert md_file.exists()
     content = md_file.read_text()
     assert 'account_number: "56789"' in content
@@ -76,9 +83,9 @@ def test_account_number_quoted_in_frontmatter(runner, vault):
 def test_skip_existing_md(runner, vault):
     """Rendering is skipped when .md already references this sha256."""
     _setup_entry_with_llm(vault, sha="sha2")
-    (vault / "statements" / "2024-01 - Chase - Checking - 1234.md").write_text(
-        "---\nold: true\n---\n![[_assets_/sha2/src/original.pdf#height]]\n"
-    )
+    (
+        vault / "statements" / "2024-01-01 to 2024-01-31 - Chase - Checking - 1234.md"
+    ).write_text("---\nold: true\n---\n![[_assets_/sha2/src/original.pdf#height]]\n")
 
     result = runner.invoke(
         render,
@@ -94,7 +101,9 @@ def test_append_different_sha(runner, vault):
     """When .md exists but for a different sha256, the new embed is appended."""
     _setup_entry_with_llm(vault, sha="sha3a")
     _setup_entry_with_llm(vault, sha="sha3b")
-    md_path = vault / "statements" / "2024-01 - Chase - Checking - 1234.md"
+    md_path = (
+        vault / "statements" / "2024-01-01 to 2024-01-31 - Chase - Checking - 1234.md"
+    )
 
     result = runner.invoke(
         render,
@@ -115,7 +124,8 @@ def test_overwrite_replaces_md(runner, vault):
         vault,
         sha="sha4",
         bank_name="BofA",
-        date_period="2025-01",
+        date="2025-01-01",
+        end_date="2025-01-31",
         account_name="Savings",
         account_number="9999",
     )
@@ -131,35 +141,45 @@ def test_overwrite_replaces_md(runner, vault):
     assert result.exit_code == 0
     assert not (stmts_dir / "old title.md").exists()
     assert "Removed 1 notes" in result.output
-    new_md = stmts_dir / "2025-01 - BofA - Savings - 9999.md"
+    new_md = stmts_dir / "2025-01-01 to 2025-01-31 - BofA - Savings - 9999.md"
     assert new_md.exists()
     content = new_md.read_text()
     assert "bank_name: BofA" in content
 
 
 def test_make_safe_title_all_fields():
-    """All four fields are joined with ' - ' in correct order."""
+    """All fields are joined with ' - ' in correct order."""
     assert (
-        make_safe_title("Chase", "2024-01", "Checking", "1234")
-        == "2024-01 - Chase - Checking - 1234"
+        make_safe_title("Chase", "2024-01-01", "2024-01-31", "Checking", "1234")
+        == "2024-01-01 to 2024-01-31 - Chase - Checking - 1234"
+    )
+
+
+def test_make_safe_title_no_end_date():
+    """When end_date is empty, only date is used."""
+    assert (
+        make_safe_title("Chase", "2024-01-01", "", "Checking", "1234")
+        == "2024-01-01 - Chase - Checking - 1234"
     )
 
 
 def test_make_safe_title_missing_fields():
     """Missing fields are omitted from the title."""
-    assert make_safe_title("Chase", "2024-01", None, None) == "2024-01 - Chase"
-    assert make_safe_title(None, "2024-01", None, "1234") == "2024-01 - 1234"
-    assert make_safe_title("Chase", None, None, None) == "Chase"
+    assert (
+        make_safe_title("Chase", "2024-01-01", "", None, None) == "2024-01-01 - Chase"
+    )
+    assert make_safe_title(None, "2024-01-01", "", None, "1234") == "2024-01-01 - 1234"
+    assert make_safe_title("Chase", None, None, None, None) == "Chase"
 
 
 def test_make_safe_title_strips_unsafe_chars():
     """Unsafe filename characters are stripped."""
     assert (
-        make_safe_title('Chase "Bank"', "2024-01", "Check/Save", "1234")
-        == "2024-01 - Chase Bank - CheckSave - 1234"
+        make_safe_title('Chase "Bank"', "2024-01-01", "", "Check/Save", "1234")
+        == "2024-01-01 - Chase Bank - CheckSave - 1234"
     )
 
 
 def test_make_safe_title_empty():
     """All None fields produce empty string."""
-    assert make_safe_title(None, None, None, None) == ""
+    assert make_safe_title(None, None, None, None, None) == ""
