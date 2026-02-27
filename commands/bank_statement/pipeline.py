@@ -1,11 +1,15 @@
 import re
+from typing import Literal, override
 
 from commands.fields import Fields
 from commands.pipeline import Pipeline
 from constants import TITLE_UNSAFE_CHARS
 
 
-class BankStatementFields(Fields):
+class BankStatementFields(
+    Fields[Literal["bank_name", "date", "end_date", "account_name", "account_number"]],
+):
+    @override
     def postprocess(self) -> None:
         bank = self.get("bank_name", "")
         acct = self.get("account_name", "")
@@ -30,6 +34,7 @@ class BankStatementFields(Fields):
         if digits:
             self["account_number"] = digits[-4:]
 
+    @override
     def make_title(self) -> str:
         date = self.get("date")
         end_date = self.get("end_date")
@@ -52,9 +57,11 @@ class BankStatementPipeline(Pipeline):
     fields_class = BankStatementFields
 
     @property
+    @override
     def name(self) -> str:
         return "bank statement"
 
+    @override
     def prompt(self, path: str, ocr_text: str) -> str:
         return (
             "I will provide you with the content of a document that has been "

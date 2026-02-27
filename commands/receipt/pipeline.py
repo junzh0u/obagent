@@ -1,4 +1,5 @@
 import re
+from typing import Literal, override
 
 from commands.fields import Fields
 from commands.pipeline import Pipeline
@@ -73,17 +74,20 @@ def _clean_total(total: str) -> str:
     return s
 
 
-class ReceiptFields(Fields):
+class ReceiptFields(Fields[Literal["merchant", "date", "total"]]):
+    @override
     def postprocess(self) -> None:
         if "total" in self and self["total"]:
             self["total"] = _clean_total(self["total"])
 
+    @override
     def apply_defaults(self) -> None:
         if not self.get("date"):
             self["date"] = ""
         if not self.get("total"):
             self["total"] = "$0.00"
 
+    @override
     def make_title(self) -> str:
         parts = [
             p for p in (self.get("date"), self.get("merchant"), self.get("total")) if p
@@ -96,9 +100,11 @@ class ReceiptPipeline(Pipeline):
     fields_class = ReceiptFields
 
     @property
+    @override
     def name(self) -> str:
         return "receipt"
 
+    @override
     def prompt(self, path: str, ocr_text: str) -> str:
         return (
             "I will provide you with the content of a document that has been "

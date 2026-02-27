@@ -1,26 +1,32 @@
+from typing import Literal, override
+
 from commands.fields import Fields
 from commands.pipeline import Pipeline
 from constants import TITLE_UNSAFE_CHARS
 
 
-class DocumentFields(Fields):
+class DocumentFields(Fields[Literal["title", "date", "summary"]]):
+    @override
     def apply_defaults(self) -> None:
         if not self.get("date"):
             self["date"] = ""
         if not self.get("summary"):
             self["summary"] = ""
 
+    @override
     def make_title(self) -> str:
         parts = [p for p in (self.get("date"), self.get("title")) if p]
         title = " - ".join(parts)
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
+    @override
     def format_frontmatter(self) -> str:
         # Exclude summary from frontmatter; it goes in the body callout
         title = self.get("title", "")
         date = self.get("date", "")
         return f"---\ntitle: {title}\ndate: {date}\n---\n"
 
+    @override
     def format_body(self) -> str:
         summary = self.get("summary", "")
         if not summary:
@@ -32,9 +38,11 @@ class DocumentPipeline(Pipeline):
     fields_class = DocumentFields
 
     @property
+    @override
     def name(self) -> str:
         return "document"
 
+    @override
     def prompt(self, path: str, ocr_text: str) -> str:
         return (
             "I will provide you with the content of a document that has been "

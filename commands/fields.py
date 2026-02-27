@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class Fields(dict[str, str], ABC):
+class Fields[K: str](dict[K, str], ABC):
     """Abstract base class for document field containers.
 
     Each subclass owns its own postprocess, defaults, title, and formatting logic.
@@ -20,7 +20,7 @@ class Fields(dict[str, str], ABC):
     def apply_defaults(self) -> None:
         """Apply default values to missing/empty fields. Override to customize."""
 
-    def apply_frontmatter(self, frontmatter: dict[str, str]) -> None:
+    def apply_frontmatter(self, frontmatter: dict[K, str]) -> None:
         """Preserve manually-edited frontmatter values into fields.
 
         Default: overwrite every field that has a non-empty frontmatter value.
