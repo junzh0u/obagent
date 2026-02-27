@@ -1,8 +1,6 @@
 import click
 
-from commands.document.consume import consume
-from commands.document.llm import llm
-from commands.document.render import render
+from commands.document.pipeline import document_pipeline
 from commands.ingest import ingest
 from commands.ocr import ocr
 from commands.remove import remove
@@ -22,9 +20,9 @@ def document(ctx, path):
     ctx.obj["path"] = path
 
 
-document.add_command(consume)
-document.add_command(llm)
-document.add_command(render)
+document.add_command(document_pipeline.consume_command, "consume")
+document.add_command(document_pipeline.llm_command, "llm")
+document.add_command(document_pipeline.render_command, "render")
 document.add_command(ingest)
 document.add_command(ocr)
 document.add_command(remove)

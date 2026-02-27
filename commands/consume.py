@@ -12,7 +12,7 @@ from constants import LLM_MODEL, OCR_MODEL
 from utils import interruptible
 
 
-def make_consume_command(*, prompt_fn, postprocess, render_config, help_text):
+def make_consume_command(*, pipeline):
     """Factory: create a click consume command with type-specific config."""
 
     @click.command()
@@ -92,8 +92,7 @@ def make_consume_command(*, prompt_fn, postprocess, render_config, help_text):
                         path,
                         model=llm_model,
                         overwrite=overwrite,
-                        prompt_fn=prompt_fn,
-                        postprocess=postprocess,
+                        pipeline=pipeline,
                     )
                 except Exception as e:
                     raise click.ClickException(f"Field extraction failed: {e}") from e
@@ -102,7 +101,7 @@ def make_consume_command(*, prompt_fn, postprocess, render_config, help_text):
                         target_dir,
                         overwrite=overwrite,
                         note_index=note_index,
-                        **render_config,
+                        pipeline=pipeline,
                     )
                 except Exception as e:
                     click.secho(f"  Warning: note rendering failed: {e}", fg="red")
@@ -113,5 +112,5 @@ def make_consume_command(*, prompt_fn, postprocess, render_config, help_text):
             bold=True,
         )
 
-    consume.__doc__ = help_text
+    consume.__doc__ = pipeline.help_consume
     return consume

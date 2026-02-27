@@ -15,8 +15,7 @@ def extract_fields(
     *,
     model=LLM_MODEL,
     overwrite=False,
-    prompt_fn,
-    postprocess,
+    pipeline,
 ):
     """Use OpenAI to extract metadata from OCR text and save as JSON.
 
@@ -24,8 +23,7 @@ def extract_fields(
     If llm/<model>.json exists and not overwrite, skips and returns None.
     Returns the parsed fields dict on success, None if skipped.
 
-    prompt_fn(path, ocr_text) -> str: builds the LLM prompt.
-    postprocess(fields) -> None: post-processing of extracted fields.
+    pipeline: Pipeline providing prompt() and postprocess() methods.
     """
     llm_dir = target_dir / "llm"
     json_path = llm_dir / f"{model}.json"
@@ -44,20 +42,20 @@ def extract_fields(
         messages=[
             {
                 "role": "user",
-                "content": prompt_fn(path, ocr_text),
+                "content": pipeline.prompt(path, ocr_text),
             },
         ],
     )
     raw = response.choices[0].message.content.strip()
     fields = json.loads(raw)
-    postprocess(fields)
+    pipeline.postprocess(fields)
     llm_dir.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(fields, indent=2) + "\n")
     click.secho(f"  Extracted: {fields}", fg="green")
     return fields
 
 
-def make_llm_command(*, prompt_fn, postprocess, render_config=None, help_text):
+def make_llm_command(*, pipeline):
     """Factory: create a click llm command with type-specific config."""
 
     @click.command()
@@ -93,7 +91,7 @@ def make_llm_command(*, prompt_fn, postprocess, render_config=None, help_text):
             entries = iter_entries(vault, path)
 
         note_index = None
-        if continue_ and render_config:
+        if continue_:
             from commands.render import index_existing_notes
 
             if sha256 or not overwrite:
@@ -109,14 +107,13 @@ def make_llm_command(*, prompt_fn, postprocess, render_config=None, help_text):
                         path,
                         model=llm_model,
                         overwrite=overwrite,
-                        prompt_fn=prompt_fn,
-                        postprocess=postprocess,
+                        pipeline=pipeline,
                     )
                 except Exception as e:
                     click.secho(f"  Warning: field extraction failed: {e}", fg="red")
                     continue
 
-                if continue_ and render_config and fields is not None:
+                if continue_ and fields is not None:
                     from commands.render import render_note
 
                     try:
@@ -124,10 +121,10 @@ def make_llm_command(*, prompt_fn, postprocess, render_config=None, help_text):
                             target_dir,
                             overwrite=overwrite,
                             note_index=note_index,
-                            **render_config,
+                            pipeline=pipeline,
                         )
                     except Exception as e:
                         click.secho(f"  Warning: note rendering failed: {e}", fg="red")
 
-    llm.__doc__ = help_text
+    llm.__doc__ = pipeline.help_llm
     return llm

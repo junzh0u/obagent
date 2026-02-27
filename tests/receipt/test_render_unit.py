@@ -2,7 +2,7 @@ import json
 import os
 import time
 
-from commands.receipt.render import render
+from commands.receipt.pipeline import receipt_pipeline
 
 
 def _setup_entry_with_llm(
@@ -31,7 +31,7 @@ def test_md_created_with_frontmatter(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -55,7 +55,7 @@ def test_sanitizes_unsafe_characters(runner, vault):
     )
 
     runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -81,7 +81,7 @@ def test_null_total_defaults_to_zero(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -103,7 +103,7 @@ def test_null_date_defaults_to_empty(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -122,7 +122,7 @@ def test_append_different_sha(runner, vault):
     md_path = vault / "papers" / "2024-01-15 - ACME Store - $42.50.md"
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -145,7 +145,7 @@ def test_render_replaces_old_notes(runner, vault):
     (papers_dir / "old title.md").write_text("---\nold: true\n---\n")
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -179,7 +179,7 @@ def test_overwrite_single_sha_deletes_old_md(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         ["sha_ow"],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -197,7 +197,7 @@ def test_no_llm_json_no_entries(runner, vault):
     (vault / "papers" / "_assets_" / "sha5").mkdir(parents=True)
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -216,7 +216,7 @@ def test_render_single_sha256(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         ["target"],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -247,7 +247,7 @@ def test_render_picks_newest_llm_json(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -269,7 +269,7 @@ def test_render_jpeg_embed(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -289,7 +289,7 @@ def test_preserves_edited_merchant(runner, vault):
     )
     # First render to create the note
     runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -303,7 +303,7 @@ def test_preserves_edited_merchant(runner, vault):
 
     # Re-render (frontmatter preserved by default)
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         ["sha_pres"],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -328,7 +328,7 @@ def test_no_existing_note_uses_llm(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         ["sha_fresh"],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -357,7 +357,7 @@ def test_shared_md_preserves_all_embeds(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -376,7 +376,7 @@ def test_overwrite_discards_edited_merchant(runner, vault):
     )
     # First render to create the note
     runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -390,7 +390,7 @@ def test_overwrite_discards_edited_merchant(runner, vault):
 
     # Re-render with --overwrite discards manual edits
     result = runner.invoke(
-        render,
+        receipt_pipeline.render_command,
         ["--overwrite", "sha_disc"],
         obj={"vault": str(vault), "path": "papers"},
     )

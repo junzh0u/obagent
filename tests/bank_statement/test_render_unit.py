@@ -1,6 +1,6 @@
 import json
 
-from commands.bank_statement.render import make_title, render
+from commands.bank_statement.pipeline import bank_statement_pipeline
 
 
 def _setup_entry_with_llm(
@@ -41,7 +41,7 @@ def test_md_created_with_frontmatter(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        bank_statement_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -66,7 +66,7 @@ def test_account_number_quoted_in_frontmatter(runner, vault):
     _setup_entry_with_llm(vault, sha="sha_q", account_number="56789")
 
     result = runner.invoke(
-        render,
+        bank_statement_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -89,7 +89,7 @@ def test_append_different_sha(runner, vault):
     )
 
     result = runner.invoke(
-        render,
+        bank_statement_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -116,7 +116,7 @@ def test_render_replaces_old_notes(runner, vault):
     (stmts_dir / "old title.md").write_text("---\nold: true\n---\n")
 
     result = runner.invoke(
-        render,
+        bank_statement_pipeline.render_command,
         [],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -139,7 +139,10 @@ def test_make_title_all_fields():
         "account_name": "Checking",
         "account_number": "1234",
     }
-    assert make_title(fields) == "2024-01-01 to 2024-01-31 - Chase - Checking - 1234"
+    assert (
+        bank_statement_pipeline.make_title(fields)
+        == "2024-01-01 to 2024-01-31 - Chase - Checking - 1234"
+    )
 
 
 def test_make_title_no_end_date():
@@ -151,19 +154,25 @@ def test_make_title_no_end_date():
         "account_name": "Checking",
         "account_number": "1234",
     }
-    assert make_title(fields) == "2024-01-01 - Chase - Checking - 1234"
+    assert (
+        bank_statement_pipeline.make_title(fields)
+        == "2024-01-01 - Chase - Checking - 1234"
+    )
 
 
 def test_make_title_missing_fields():
     """Missing fields are omitted from the title."""
     assert (
-        make_title({"bank_name": "Chase", "date": "2024-01-01"}) == "2024-01-01 - Chase"
+        bank_statement_pipeline.make_title({"bank_name": "Chase", "date": "2024-01-01"})
+        == "2024-01-01 - Chase"
     )
     assert (
-        make_title({"date": "2024-01-01", "account_number": "1234"})
+        bank_statement_pipeline.make_title(
+            {"date": "2024-01-01", "account_number": "1234"}
+        )
         == "2024-01-01 - 1234"
     )
-    assert make_title({"bank_name": "Chase"}) == "Chase"
+    assert bank_statement_pipeline.make_title({"bank_name": "Chase"}) == "Chase"
 
 
 def test_make_title_strips_unsafe_chars():
@@ -175,9 +184,12 @@ def test_make_title_strips_unsafe_chars():
         "account_name": "Check/Save",
         "account_number": "1234",
     }
-    assert make_title(fields) == "2024-01-01 - Chase Bank - CheckSave - 1234"
+    assert (
+        bank_statement_pipeline.make_title(fields)
+        == "2024-01-01 - Chase Bank - CheckSave - 1234"
+    )
 
 
 def test_make_title_empty():
     """All missing fields produce empty string."""
-    assert make_title({}) == ""
+    assert bank_statement_pipeline.make_title({}) == ""

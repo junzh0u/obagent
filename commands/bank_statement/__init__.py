@@ -1,8 +1,6 @@
 import click
 
-from commands.bank_statement.consume import consume
-from commands.bank_statement.llm import llm
-from commands.bank_statement.render import render
+from commands.bank_statement.pipeline import bank_statement_pipeline
 from commands.ingest import ingest
 from commands.ocr import ocr
 from commands.remove import remove
@@ -22,9 +20,9 @@ def bank_statement(ctx, path):
     ctx.obj["path"] = path
 
 
-bank_statement.add_command(consume)
-bank_statement.add_command(llm)
-bank_statement.add_command(render)
+bank_statement.add_command(bank_statement_pipeline.consume_command, "consume")
+bank_statement.add_command(bank_statement_pipeline.llm_command, "llm")
+bank_statement.add_command(bank_statement_pipeline.render_command, "render")
 bank_statement.add_command(ingest)
 bank_statement.add_command(ocr)
 bank_statement.add_command(remove)

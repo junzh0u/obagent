@@ -73,10 +73,7 @@ def render_note(
     *,
     overwrite=False,
     note_index=None,
-    field_defaults,
-    make_title,
-    format_frontmatter,
-    format_body=None,
+    pipeline,
 ):
     """Read LLM JSON and create an Obsidian markdown note.
 
@@ -89,9 +86,8 @@ def render_note(
     note_index: pre-built {sha: (frontmatter, [md_paths])} from
     index_existing_notes; used for per-entry cleanup and frontmatter preservation.
     overwrite: if True, discard existing frontmatter and use fresh LLM values.
-    field_defaults: dict of default values applied to LLM JSON fields.
-    make_title(fields) -> str: builds the filename-safe title.
-    format_frontmatter(fields) -> str: formats fields as YAML frontmatter.
+    pipeline: Pipeline providing field_defaults, make_title(),
+    format_frontmatter(), and format_body().
     """
     json_path = newest_file(target_dir / "llm", "*.json")
     if json_path is None:
@@ -101,7 +97,7 @@ def render_note(
     path_dir = target_dir.parent.parent
 
     fields = json.loads(json_path.read_text())
-    for key, default in field_defaults.items():
+    for key, default in pipeline.field_defaults.items():
         if not fields.get(key):
             fields[key] = default
 
@@ -117,7 +113,7 @@ def render_note(
                 if md.exists() and target_dir.name in md.read_text():
                     click.secho(f"  Removed: {md.name}", fg="green")
                     md.unlink()
-    safe_title = make_title(fields)
+    safe_title = pipeline.make_title(fields)
 
     md_path = path_dir / f"{safe_title}.md"
 
@@ -138,17 +134,15 @@ def render_note(
         click.secho(f"  Appended to: {safe_title}", fg="green")
         return safe_title
 
-    frontmatter = format_frontmatter(fields)
-    body = format_body(fields) if format_body else ""
+    frontmatter = pipeline.format_frontmatter(fields)
+    body = pipeline.format_body(fields)
     content = frontmatter + body + embed + meta_embed
     md_path.write_text(content)
     click.secho(f"  Title: {safe_title}", fg="green")
     return safe_title
 
 
-def make_render_command(
-    *, field_defaults, make_title, format_frontmatter, format_body=None, help_text
-):
+def make_render_command(*, pipeline):
     """Factory: create a click render command with type-specific config."""
 
     @click.command()
@@ -177,13 +171,10 @@ def make_render_command(
                     target_dir,
                     overwrite=overwrite,
                     note_index=note_index,
-                    field_defaults=field_defaults,
-                    make_title=make_title,
-                    format_frontmatter=format_frontmatter,
-                    format_body=format_body,
+                    pipeline=pipeline,
                 )
             except Exception as e:
                 click.secho(f"  Warning: note rendering failed: {e}", fg="red")
 
-    render.__doc__ = help_text
+    render.__doc__ = pipeline.help_render
     return render

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from commands.receipt.llm import _clean_total, llm
+from commands.receipt.pipeline import _clean_total, receipt_pipeline
 from constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai
@@ -32,7 +32,7 @@ def test_llm_json_created(mock_openai_cls, runner, vault):
     _setup_entry_with_ocr(vault, sha="sha1")
 
     result = runner.invoke(
-        llm,
+        receipt_pipeline.llm_command,
         ["--openai-api-key", "test-key"],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -55,7 +55,7 @@ def test_llm_uses_openai_gpt5_mini(mock_openai_cls, runner, vault):
     _setup_entry_with_ocr(vault, sha="sha3")
 
     runner.invoke(
-        llm,
+        receipt_pipeline.llm_command,
         ["--openai-api-key", "test-key"],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -83,7 +83,7 @@ def test_llm_skip_existing_json(mock_openai_cls, runner, vault):
     (llm_dir / f"{LLM_MODEL}.json").write_text('{"merchant": "Old"}')
 
     result = runner.invoke(
-        llm,
+        receipt_pipeline.llm_command,
         ["--openai-api-key", "test-key"],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -105,7 +105,7 @@ def test_llm_overwrite_reruns(mock_openai_cls, runner, vault):
     (llm_dir / f"{LLM_MODEL}.json").write_text('{"merchant": "Old"}')
 
     result = runner.invoke(
-        llm,
+        receipt_pipeline.llm_command,
         ["--openai-api-key", "test-key", "--overwrite"],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -125,7 +125,7 @@ def test_llm_custom_model(mock_openai_cls, runner, vault):
     _setup_entry_with_ocr(vault, sha="sha6")
 
     result = runner.invoke(
-        llm,
+        receipt_pipeline.llm_command,
         ["--openai-api-key", "test-key", "--llm-model", "custom-model"],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -145,7 +145,7 @@ def test_llm_single_sha256(mock_openai_cls, runner, vault):
     _setup_entry_with_ocr(vault, sha="other")
 
     result = runner.invoke(
-        llm,
+        receipt_pipeline.llm_command,
         ["--openai-api-key", "test-key", "target"],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -175,7 +175,7 @@ def test_llm_picks_newest_ocr_txt(mock_openai_cls, runner, vault):
     new_file.write_text("new ocr content")
 
     result = runner.invoke(
-        llm,
+        receipt_pipeline.llm_command,
         ["--openai-api-key", "test-key"],
         obj={"vault": str(vault), "path": "papers"},
     )

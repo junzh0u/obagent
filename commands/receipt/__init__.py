@@ -2,9 +2,7 @@ import click
 
 from commands.ingest import ingest
 from commands.ocr import ocr
-from commands.receipt.consume import consume
-from commands.receipt.llm import llm
-from commands.receipt.render import render
+from commands.receipt.pipeline import receipt_pipeline
 from commands.remove import remove
 from commands.scan import scan
 
@@ -22,10 +20,10 @@ def receipt(ctx, path):
     ctx.obj["path"] = path
 
 
-receipt.add_command(consume)
+receipt.add_command(receipt_pipeline.consume_command, "consume")
+receipt.add_command(receipt_pipeline.llm_command, "llm")
+receipt.add_command(receipt_pipeline.render_command, "render")
 receipt.add_command(remove)
 receipt.add_command(ingest)
 receipt.add_command(ocr)
-receipt.add_command(llm)
-receipt.add_command(render)
 receipt.add_command(scan)

@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from commands.document.llm import _prompt, llm
+from commands.document.pipeline import document_pipeline
 from constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai_doc
@@ -31,7 +31,7 @@ def test_llm_json_created(mock_openai_cls, runner, vault):
     _setup_entry_with_ocr(vault, sha="sha1")
 
     result = runner.invoke(
-        llm,
+        document_pipeline.llm_command,
         ["--openai-api-key", "test-key"],
         obj={"vault": str(vault), "path": "docs"},
     )
@@ -54,7 +54,7 @@ def test_llm_prompt_content(mock_openai_cls, runner, vault):
     _setup_entry_with_ocr(vault, sha="sha_prompt")
 
     runner.invoke(
-        llm,
+        document_pipeline.llm_command,
         ["--openai-api-key", "test-key"],
         obj={"vault": str(vault), "path": "docs"},
     )
@@ -71,7 +71,7 @@ def test_llm_prompt_content(mock_openai_cls, runner, vault):
 
 def test_prompt_function():
     """_prompt builds a prompt with all document field names."""
-    prompt = _prompt("Documents", "OCR text here")
+    prompt = document_pipeline.prompt("Documents", "OCR text here")
     assert "title" in prompt
     assert "date" in prompt
     assert "summary" in prompt
@@ -93,7 +93,7 @@ def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
     (target_dir / "src" / "original.pdf").write_bytes(b"test")
 
     result = runner.invoke(
-        llm,
+        document_pipeline.llm_command,
         ["--openai-api-key", "test-key", "--continue"],
         obj={"vault": str(vault), "path": "docs"},
     )

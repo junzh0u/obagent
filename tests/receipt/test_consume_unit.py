@@ -1,12 +1,6 @@
 from unittest.mock import patch
 
-from commands.receipt.consume import consume
-from commands.receipt.llm import _postprocess, _prompt
-from commands.receipt.render import (
-    FIELD_DEFAULTS,
-    format_frontmatter,
-    make_title,
-)
+from commands.receipt.pipeline import receipt_pipeline
 from constants import LLM_MODEL, OCR_MODEL
 
 from tests.conftest import BOTH_KEYS
@@ -43,7 +37,7 @@ def test_calls_all_four_steps(
     target_dir = vault / "papers" / "sha"
     mock_ingest.return_value = target_dir
     result = runner.invoke(
-        consume,
+        receipt_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -61,16 +55,13 @@ def test_calls_all_four_steps(
         "papers",
         model=LLM_MODEL,
         overwrite=False,
-        prompt_fn=_prompt,
-        postprocess=_postprocess,
+        pipeline=receipt_pipeline,
     )
     mock_render.assert_called_once_with(
         target_dir,
         overwrite=False,
         note_index=None,
-        field_defaults=FIELD_DEFAULTS,
-        make_title=make_title,
-        format_frontmatter=format_frontmatter,
+        pipeline=receipt_pipeline,
     )
     assert "1 files found: 1 consumed, 0 already in vault" in result.output
 
@@ -99,7 +90,7 @@ def test_skips_ocr_llm_render_when_ingest_returns_none(
     mock_ingest.return_value = None
 
     result = runner.invoke(
-        consume,
+        receipt_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -138,7 +129,7 @@ def test_aborts_on_ocr_exception(
     mock_ocr.side_effect = Exception("Status 502")
 
     result = runner.invoke(
-        consume,
+        receipt_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -175,7 +166,7 @@ def test_aborts_on_llm_exception(
     mock_llm.side_effect = ValueError("API error")
 
     result = runner.invoke(
-        consume,
+        receipt_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -211,7 +202,7 @@ def test_handles_render_exception(
     mock_render.side_effect = ValueError("Template error")
 
     result = runner.invoke(
-        consume,
+        receipt_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -246,7 +237,7 @@ def test_forwards_flags(
     mock_ingest.return_value = target_dir
 
     result = runner.invoke(
-        consume,
+        receipt_pipeline.consume_command,
         [
             "--keep-original",
             "--overwrite",
@@ -273,16 +264,13 @@ def test_forwards_flags(
         "papers",
         model="custom-llm",
         overwrite=True,
-        prompt_fn=_prompt,
-        postprocess=_postprocess,
+        pipeline=receipt_pipeline,
     )
     mock_render.assert_called_once_with(
         target_dir,
         overwrite=True,
         note_index={},
-        field_defaults=FIELD_DEFAULTS,
-        make_title=make_title,
-        format_frontmatter=format_frontmatter,
+        pipeline=receipt_pipeline,
     )
 
 
@@ -312,7 +300,7 @@ def test_processes_multiple_files(
     mock_ingest.side_effect = dirs
 
     result = runner.invoke(
-        consume,
+        receipt_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "papers"},
     )
@@ -345,7 +333,7 @@ def test_no_files_does_nothing(
     """An empty source directory calls nothing."""
     _setup_ctx_managers(mock_mistral, mock_openai)
     result = runner.invoke(
-        consume,
+        receipt_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "papers"},
     )

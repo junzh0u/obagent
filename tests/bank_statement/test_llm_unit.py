@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from commands.bank_statement.llm import _postprocess, _prompt, llm
+from commands.bank_statement.pipeline import bank_statement_pipeline
 from constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai_bs
@@ -33,7 +33,7 @@ def test_llm_json_created(mock_openai_cls, runner, vault):
     _setup_entry_with_ocr(vault, sha="sha1")
 
     result = runner.invoke(
-        llm,
+        bank_statement_pipeline.llm_command,
         ["--openai-api-key", "test-key"],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -61,7 +61,7 @@ def test_llm_skip_existing_json(mock_openai_cls, runner, vault):
     (llm_dir / f"{LLM_MODEL}.json").write_text('{"bank_name": "Old"}')
 
     result = runner.invoke(
-        llm,
+        bank_statement_pipeline.llm_command,
         ["--openai-api-key", "test-key"],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -88,7 +88,7 @@ def test_llm_overwrite_reruns(mock_openai_cls, runner, vault):
     (llm_dir / f"{LLM_MODEL}.json").write_text('{"bank_name": "Old"}')
 
     result = runner.invoke(
-        llm,
+        bank_statement_pipeline.llm_command,
         ["--openai-api-key", "test-key", "--overwrite"],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -107,7 +107,7 @@ def test_llm_single_sha256(mock_openai_cls, runner, vault):
     _setup_entry_with_ocr(vault, sha="other")
 
     result = runner.invoke(
-        llm,
+        bank_statement_pipeline.llm_command,
         ["--openai-api-key", "test-key", "target"],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -126,7 +126,7 @@ def test_llm_prompt_content(mock_openai_cls, runner, vault):
     _setup_entry_with_ocr(vault, sha="sha_prompt")
 
     runner.invoke(
-        llm,
+        bank_statement_pipeline.llm_command,
         ["--openai-api-key", "test-key"],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -145,7 +145,7 @@ def test_llm_prompt_content(mock_openai_cls, runner, vault):
 
 def test_prompt_function():
     """_prompt builds a prompt with all BS field names."""
-    prompt = _prompt("Bank Statements", "OCR text here")
+    prompt = bank_statement_pipeline.prompt("Bank Statements", "OCR text here")
     assert "date" in prompt
     assert "end_date" in prompt
     assert "bank_name" in prompt
@@ -171,7 +171,7 @@ def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
     (target_dir / "src" / "original.pdf").write_bytes(b"test")
 
     result = runner.invoke(
-        llm,
+        bank_statement_pipeline.llm_command,
         ["--openai-api-key", "test-key", "--continue"],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -192,7 +192,7 @@ def test_no_continue_skips_render(mock_openai_cls, runner, vault):
     (target_dir / "src" / "original.pdf").write_bytes(b"test")
 
     result = runner.invoke(
-        llm,
+        bank_statement_pipeline.llm_command,
         ["--openai-api-key", "test-key"],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -212,7 +212,7 @@ def test_continue_render_failure_warns(mock_openai_cls, mock_render, runner, vau
     _setup_entry_with_ocr(vault, sha="sha_fail")
 
     result = runner.invoke(
-        llm,
+        bank_statement_pipeline.llm_command,
         ["--openai-api-key", "test-key", "--continue"],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -224,82 +224,82 @@ def test_continue_render_failure_warns(mock_openai_cls, mock_render, runner, vau
 def test_postprocess_strips_bank_name_prefix():
     """account_name with bank_name prefix is cleaned."""
     fields = {"bank_name": "Chase", "account_name": "Chase Total Checking"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_name"] == "Total Checking"
 
 
 def test_postprocess_case_insensitive():
     """Bank name prefix is stripped regardless of case."""
     fields = {"bank_name": "Chase", "account_name": "CHASE Sapphire Checking"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_name"] == "Sapphire Checking"
 
 
 def test_postprocess_no_prefix():
     """account_name without bank_name prefix is unchanged."""
     fields = {"bank_name": "Chase", "account_name": "Total Checking"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_name"] == "Total Checking"
 
 
 def test_postprocess_empty_account_name():
     """Empty account_name is left alone."""
     fields = {"bank_name": "Chase", "account_name": ""}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_name"] == ""
 
 
 def test_postprocess_missing_bank_name():
     """Missing bank_name skips stripping."""
     fields = {"account_name": "Chase Total Checking"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_name"] == "Chase Total Checking"
 
 
 def test_postprocess_strips_colon_suffix():
     """Sub-brand text after colon is stripped from account_name."""
     fields = {"bank_name": "Chase", "account_name": "Freedom: Ultimate Rewards"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_name"] == "Freedom"
 
 
 def test_postprocess_no_colon_unchanged():
     """account_name without colon is unchanged."""
     fields = {"bank_name": "Chase", "account_name": "Total Checking"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_name"] == "Total Checking"
 
 
 def test_postprocess_strips_trailing_card():
     """Trailing 'Card' is stripped from account_name."""
     fields = {"bank_name": "Citi", "account_name": "It Card"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_name"] == "It"
 
 
 def test_postprocess_card_not_stripped_mid_word():
     """'Card' inside a word is not stripped."""
     fields = {"bank_name": "Chase", "account_name": "Cardmember Rewards"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_name"] == "Cardmember Rewards"
 
 
 def test_postprocess_truncates_account_number_to_4_digits():
     """Long account numbers are truncated to last 4 digits."""
     fields = {"account_number": "123456789"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_number"] == "6789"
 
 
 def test_postprocess_strips_non_digits_from_account_number():
     """Non-digit characters are stripped before truncating."""
     fields = {"account_number": "****1234"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_number"] == "1234"
 
 
 def test_postprocess_short_account_number():
     """Account numbers with 4 or fewer digits are kept as-is."""
     fields = {"account_number": "1234"}
-    _postprocess(fields)
+    bank_statement_pipeline.postprocess(fields)
     assert fields["account_number"] == "1234"

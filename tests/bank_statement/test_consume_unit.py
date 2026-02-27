@@ -1,12 +1,6 @@
 from unittest.mock import patch
 
-from commands.bank_statement.consume import consume
-from commands.bank_statement.llm import _prompt
-from commands.bank_statement.render import (
-    FIELD_DEFAULTS,
-    format_frontmatter,
-    make_title,
-)
+from commands.bank_statement.pipeline import bank_statement_pipeline
 from constants import LLM_MODEL, OCR_MODEL
 
 from tests.conftest import BOTH_KEYS
@@ -43,7 +37,7 @@ def test_calls_all_four_steps(
     target_dir = vault / "statements" / "sha"
     mock_ingest.return_value = target_dir
     result = runner.invoke(
-        consume,
+        bank_statement_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -55,14 +49,12 @@ def test_calls_all_four_steps(
     )
     mock_llm.assert_called_once()
     llm_kwargs = mock_llm.call_args
-    assert llm_kwargs.kwargs["prompt_fn"] is _prompt
+    assert llm_kwargs.kwargs["pipeline"] is bank_statement_pipeline
     assert llm_kwargs.kwargs["model"] == LLM_MODEL
     assert llm_kwargs.kwargs["overwrite"] is False
     mock_render.assert_called_once()
     render_kwargs = mock_render.call_args
-    assert render_kwargs.kwargs["field_defaults"] is FIELD_DEFAULTS
-    assert render_kwargs.kwargs["make_title"] is make_title
-    assert render_kwargs.kwargs["format_frontmatter"] is format_frontmatter
+    assert render_kwargs.kwargs["pipeline"] is bank_statement_pipeline
     assert "1 files found: 1 consumed, 0 already in vault" in result.output
 
 
@@ -90,7 +82,7 @@ def test_skips_when_ingest_returns_none(
     mock_ingest.return_value = None
 
     result = runner.invoke(
-        consume,
+        bank_statement_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -127,7 +119,7 @@ def test_aborts_on_ocr_exception(
     mock_ocr.side_effect = Exception("Status 502")
 
     result = runner.invoke(
-        consume,
+        bank_statement_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -163,7 +155,7 @@ def test_handles_render_warning(
     mock_render.side_effect = ValueError("Template error")
 
     result = runner.invoke(
-        consume,
+        bank_statement_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
         obj={"vault": str(vault), "path": "statements"},
     )
@@ -198,7 +190,7 @@ def test_forwards_flags(
     mock_ingest.return_value = target_dir
 
     result = runner.invoke(
-        consume,
+        bank_statement_pipeline.consume_command,
         [
             "--keep-original",
             "--overwrite",
