@@ -76,16 +76,5 @@ class BankStatementPipeline(Pipeline[BankStatementFields]):
         title = " - ".join(parts)
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
-    def format_frontmatter(self, fields: BankStatementFields) -> str:
-        bank_name = fields.get("bank_name", "")
-        date = fields.get("date", "")
-        end_date = fields.get("end_date", "")
-        account_name = fields.get("account_name", "")
-        account_number = fields.get("account_number", "")
-        return (
-            f"---\nbank_name: {bank_name}\ndate: {date}\nend_date: {end_date}\n"
-            f'account_name: {account_name}\naccount_number: "{account_number}"\n---\n'
-        )
-
 
 bank_statement_pipeline = BankStatementPipeline()

@@ -114,11 +114,5 @@ class ReceiptPipeline(Pipeline[ReceiptFields]):
         title = " - ".join(parts)
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
-    def format_frontmatter(self, fields: ReceiptFields) -> str:
-        merchant = fields.get("merchant", "")
-        date = fields.get("date", "")
-        total = fields.get("total", "")
-        return f"---\nmerchant: {merchant}\ndate: {date}\ntotal: {total}\n---\n"
-
 
 receipt_pipeline = ReceiptPipeline()

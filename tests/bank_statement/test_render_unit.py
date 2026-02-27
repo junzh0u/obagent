@@ -59,13 +59,13 @@ def test_md_created_with_frontmatter(runner, vault):
     assert "date: 2024-01-01" in content
     assert "end_date: 2024-01-31" in content
     assert "account_name: Checking" in content
-    assert 'account_number: "1234"' in content
+    assert "account_number: 1234" in content
     assert "![[_assets_/sha1/src/original.pdf#height]]" in content
     assert "![[_assets_/sha1/src/metadata.json]]" in content
 
 
-def test_account_number_quoted_in_frontmatter(runner, vault):
-    """account_number is always quoted in frontmatter."""
+def test_account_number_unquoted_in_frontmatter(runner, vault):
+    """account_number is plain (unquoted) in frontmatter."""
     _setup_entry_with_llm(vault, sha="sha_q", account_number="56789")
 
     result = runner.invoke(
@@ -80,7 +80,7 @@ def test_account_number_quoted_in_frontmatter(runner, vault):
     )
     assert md_file.exists()
     content = md_file.read_text()
-    assert 'account_number: "56789"' in content
+    assert "account_number: 56789" in content
 
 
 def test_append_different_sha(runner, vault):

@@ -41,6 +41,7 @@ class DocumentPipeline(Pipeline[DocumentFields]):
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
     def format_frontmatter(self, fields: DocumentFields) -> str:
+        # Exclude summary from frontmatter; it goes in the body callout
         title = fields.get("title", "")
         date = fields.get("date", "")
         return f"---\ntitle: {title}\ndate: {date}\n---\n"

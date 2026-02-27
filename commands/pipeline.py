@@ -36,9 +36,11 @@ class Pipeline[T](ABC):
     def make_title(self, fields: T) -> str:
         """Build a filesystem-safe title from metadata fields."""
 
-    @abstractmethod
     def format_frontmatter(self, fields: T) -> str:
         """Format fields as YAML frontmatter."""
+        d = cast(dict[str, str], fields)
+        body = "\n".join(f"{k}: {v}" for k, v in d.items())
+        return f"---\n{body}\n---\n"
 
     def format_body(self, fields: T) -> str:
         """Format optional body content. Default returns empty string."""
