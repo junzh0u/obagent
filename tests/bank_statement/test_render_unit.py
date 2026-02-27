@@ -1,6 +1,9 @@
 import json
 
-from commands.bank_statement.pipeline import bank_statement_pipeline
+from commands.bank_statement.pipeline import (
+    BankStatementFields,
+    bank_statement_pipeline,
+)
 
 
 def _setup_entry_with_llm(
@@ -132,7 +135,7 @@ def test_render_replaces_old_notes(runner, vault):
 
 def test_make_title_all_fields():
     """All fields are joined with ' - ' in correct order."""
-    fields = {
+    fields: BankStatementFields = {
         "bank_name": "Chase",
         "date": "2024-01-01",
         "end_date": "2024-01-31",
@@ -147,7 +150,7 @@ def test_make_title_all_fields():
 
 def test_make_title_no_end_date():
     """When end_date is empty, only date is used."""
-    fields = {
+    fields: BankStatementFields = {
         "bank_name": "Chase",
         "date": "2024-01-01",
         "end_date": "",
@@ -162,22 +165,17 @@ def test_make_title_no_end_date():
 
 def test_make_title_missing_fields():
     """Missing fields are omitted from the title."""
-    assert (
-        bank_statement_pipeline.make_title({"bank_name": "Chase", "date": "2024-01-01"})
-        == "2024-01-01 - Chase"
-    )
-    assert (
-        bank_statement_pipeline.make_title(
-            {"date": "2024-01-01", "account_number": "1234"}
-        )
-        == "2024-01-01 - 1234"
-    )
-    assert bank_statement_pipeline.make_title({"bank_name": "Chase"}) == "Chase"
+    f1: BankStatementFields = {"bank_name": "Chase", "date": "2024-01-01"}
+    assert bank_statement_pipeline.make_title(f1) == "2024-01-01 - Chase"
+    f2: BankStatementFields = {"date": "2024-01-01", "account_number": "1234"}
+    assert bank_statement_pipeline.make_title(f2) == "2024-01-01 - 1234"
+    f3: BankStatementFields = {"bank_name": "Chase"}
+    assert bank_statement_pipeline.make_title(f3) == "Chase"
 
 
 def test_make_title_strips_unsafe_chars():
     """Unsafe filename characters are stripped."""
-    fields = {
+    fields: BankStatementFields = {
         "bank_name": 'Chase "Bank"',
         "date": "2024-01-01",
         "end_date": "",
@@ -192,4 +190,5 @@ def test_make_title_strips_unsafe_chars():
 
 def test_make_title_empty():
     """All missing fields produce empty string."""
-    assert bank_statement_pipeline.make_title({}) == ""
+    empty: BankStatementFields = {}
+    assert bank_statement_pipeline.make_title(empty) == ""

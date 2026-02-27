@@ -1,10 +1,16 @@
 import re
+from typing import Literal
 
 from commands.pipeline import Pipeline
 from constants import TITLE_UNSAFE_CHARS
 
 
-class BankStatementPipeline(Pipeline):
+type BankStatementFields = dict[
+    Literal["bank_name", "date", "end_date", "account_name", "account_number"], str
+]
+
+
+class BankStatementPipeline(Pipeline[BankStatementFields]):
     @property
     def name(self) -> str:
         return "bank statement"
@@ -29,7 +35,7 @@ class BankStatementPipeline(Pipeline):
             "no additional text!\n\n" + ocr_text[:4000]
         )
 
-    def postprocess(self, fields: dict[str, str]) -> None:
+    def postprocess(self, fields: BankStatementFields) -> None:
         bank = fields.get("bank_name", "")
         acct = fields.get("account_name", "")
         if bank and acct:
@@ -53,11 +59,7 @@ class BankStatementPipeline(Pipeline):
         if digits:
             fields["account_number"] = digits[-4:]
 
-    @property
-    def field_defaults(self) -> dict[str, str]:
-        return {}
-
-    def make_title(self, fields: dict[str, str]) -> str:
+    def make_title(self, fields: BankStatementFields) -> str:
         date = fields.get("date")
         end_date = fields.get("end_date")
         date_part = f"{date} to {end_date}" if date and end_date else date
@@ -74,7 +76,7 @@ class BankStatementPipeline(Pipeline):
         title = " - ".join(parts)
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
-    def format_frontmatter(self, fields: dict[str, str]) -> str:
+    def format_frontmatter(self, fields: BankStatementFields) -> str:
         bank_name = fields.get("bank_name", "")
         date = fields.get("date", "")
         end_date = fields.get("end_date", "")

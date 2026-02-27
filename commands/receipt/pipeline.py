@@ -1,4 +1,5 @@
 import re
+from typing import Literal
 
 from commands.pipeline import Pipeline
 from constants import TITLE_UNSAFE_CHARS
@@ -72,7 +73,10 @@ def _clean_total(total: str) -> str:
     return s
 
 
-class ReceiptPipeline(Pipeline):
+type ReceiptFields = dict[Literal["merchant", "date", "total"], str]
+
+
+class ReceiptPipeline(Pipeline[ReceiptFields]):
     @property
     def name(self) -> str:
         return "receipt"
@@ -91,24 +95,29 @@ class ReceiptPipeline(Pipeline):
             "no additional text!\n\n" + ocr_text[:4000]
         )
 
-    def postprocess(self, fields: dict[str, str]) -> None:
+    def postprocess(self, fields: ReceiptFields) -> None:
         if "total" in fields and fields["total"]:
             fields["total"] = _clean_total(fields["total"])
 
-    @property
-    def field_defaults(self) -> dict[str, str]:
-        return {"date": "", "total": "$0.00"}
+    def apply_defaults(self, fields: ReceiptFields) -> None:
+        if not fields.get("date"):
+            fields["date"] = ""
+        if not fields.get("total"):
+            fields["total"] = "$0.00"
 
-    def make_title(self, fields: dict[str, str]) -> str:
-        total = fields.get("total") or "$0.00"
-        parts = [p for p in (fields.get("date"), fields.get("merchant"), total) if p]
+    def make_title(self, fields: ReceiptFields) -> str:
+        parts = [
+            p
+            for p in (fields.get("date"), fields.get("merchant"), fields.get("total"))
+            if p
+        ]
         title = " - ".join(parts)
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
-    def format_frontmatter(self, fields: dict[str, str]) -> str:
+    def format_frontmatter(self, fields: ReceiptFields) -> str:
         merchant = fields.get("merchant", "")
         date = fields.get("date", "")
-        total = fields.get("total", "$0.00")
+        total = fields.get("total", "")
         return f"---\nmerchant: {merchant}\ndate: {date}\ntotal: {total}\n---\n"
 
 

@@ -1,8 +1,13 @@
+from typing import Literal
+
 from commands.pipeline import Pipeline
 from constants import TITLE_UNSAFE_CHARS
 
 
-class DocumentPipeline(Pipeline):
+type DocumentFields = dict[Literal["title", "date", "summary"], str]
+
+
+class DocumentPipeline(Pipeline[DocumentFields]):
     @property
     def name(self) -> str:
         return "document"
@@ -24,21 +29,23 @@ class DocumentPipeline(Pipeline):
             "no additional text!\n\n" + ocr_text[:4000]
         )
 
-    @property
-    def field_defaults(self) -> dict[str, str]:
-        return {"date": "", "summary": ""}
+    def apply_defaults(self, fields: DocumentFields) -> None:
+        if not fields.get("date"):
+            fields["date"] = ""
+        if not fields.get("summary"):
+            fields["summary"] = ""
 
-    def make_title(self, fields: dict[str, str]) -> str:
+    def make_title(self, fields: DocumentFields) -> str:
         parts = [p for p in (fields.get("date"), fields.get("title")) if p]
         title = " - ".join(parts)
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
-    def format_frontmatter(self, fields: dict[str, str]) -> str:
+    def format_frontmatter(self, fields: DocumentFields) -> str:
         title = fields.get("title", "")
         date = fields.get("date", "")
         return f"---\ntitle: {title}\ndate: {date}\n---\n"
 
-    def format_body(self, fields: dict[str, str]) -> str:
+    def format_body(self, fields: DocumentFields) -> str:
         summary = fields.get("summary", "")
         if not summary:
             return ""

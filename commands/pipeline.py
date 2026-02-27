@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
+from typing import cast
 
 import click
 
 
-class Pipeline(ABC):
+class Pipeline[T](ABC):
     """Abstract base class for document processing pipelines."""
 
     @property
@@ -16,23 +17,30 @@ class Pipeline(ABC):
     def prompt(self, path: str, ocr_text: str) -> str:
         """Build the LLM prompt for field extraction."""
 
-    def postprocess(self, fields: dict[str, str]) -> None:
+    def postprocess(self, fields: T) -> None:
         """Post-process extracted fields. Default is no-op."""
 
-    @property
-    @abstractmethod
-    def field_defaults(self) -> dict[str, str]:
-        """Dict of default values applied to LLM JSON fields."""
+    def apply_defaults(self, fields: T) -> None:
+        """Apply default values to missing/empty fields. Override to customize."""
+
+    def apply_frontmatter(self, fields: T, frontmatter: dict[str, str]) -> None:
+        """Preserve manually-edited frontmatter values into fields.
+
+        Default: overwrite every field that has a non-empty frontmatter value.
+        """
+        for key, value in frontmatter.items():
+            if value:
+                cast(dict[str, str], fields)[key] = value
 
     @abstractmethod
-    def make_title(self, fields: dict[str, str]) -> str:
+    def make_title(self, fields: T) -> str:
         """Build a filesystem-safe title from metadata fields."""
 
     @abstractmethod
-    def format_frontmatter(self, fields: dict[str, str]) -> str:
+    def format_frontmatter(self, fields: T) -> str:
         """Format fields as YAML frontmatter."""
 
-    def format_body(self, fields: dict[str, str]) -> str:
+    def format_body(self, fields: T) -> str:
         """Format optional body content. Default returns empty string."""
         return ""
 

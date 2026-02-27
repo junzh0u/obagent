@@ -4,6 +4,8 @@ from pathlib import Path
 
 import click
 
+from typing import Any
+
 from commands.pipeline import Pipeline
 from constants import ASSETS_DIR
 from utils import (
@@ -76,7 +78,7 @@ def render_note(
     *,
     overwrite: bool = False,
     note_index: dict[str, tuple[dict[str, str] | None, list[Path]]] | None = None,
-    pipeline: Pipeline,
+    pipeline: Pipeline[Any],
 ) -> str | None:
     """Read LLM JSON and create an Obsidian markdown note.
 
@@ -89,7 +91,7 @@ def render_note(
     note_index: pre-built {sha: (frontmatter, [md_paths])} from
     index_existing_notes; used for per-entry cleanup and frontmatter preservation.
     overwrite: if True, discard existing frontmatter and use fresh LLM values.
-    pipeline: Pipeline providing field_defaults, make_title(),
+    pipeline: Pipeline providing apply_defaults(), make_title(),
     format_frontmatter(), and format_body().
     """
     json_path = newest_file(target_dir / "llm", "*.json")
@@ -100,18 +102,14 @@ def render_note(
     path_dir = target_dir.parent.parent
 
     fields = json.loads(json_path.read_text())
-    for key, default in pipeline.field_defaults.items():
-        if not fields.get(key):
-            fields[key] = default
+    pipeline.apply_defaults(fields)
 
     if note_index:
         entry = note_index.get(target_dir.name)
         if entry:
             existing_fm, md_paths = entry
             if not overwrite and existing_fm:
-                for key in fields:
-                    if existing_fm.get(key):
-                        fields[key] = existing_fm[key]
+                pipeline.apply_frontmatter(fields, existing_fm)
             for md in md_paths:
                 if md.exists() and target_dir.name in md.read_text():
                     click.secho(f"  Removed: {md.name}", fg="green")
@@ -145,7 +143,7 @@ def render_note(
     return safe_title
 
 
-def make_render_command(*, pipeline: Pipeline) -> click.Command:
+def make_render_command(*, pipeline: Pipeline[Any]) -> click.Command:
     """Factory: create a click render command with type-specific config."""
 
     @click.command()
