@@ -19,9 +19,13 @@ def format_frontmatter(fields):
     return f"---\nmerchant: {merchant}\ndate: {date}\ntotal: {total}\n---\n"
 
 
+RENDER_CONFIG = {
+    "field_defaults": FIELD_DEFAULTS,
+    "make_title": make_title,
+    "format_frontmatter": format_frontmatter,
+}
+
 render = make_render_command(
-    field_defaults=FIELD_DEFAULTS,
-    make_title=make_title,
-    format_frontmatter=format_frontmatter,
+    **RENDER_CONFIG,
     help_text="Render Obsidian notes from LLM-extracted metadata.",
 )

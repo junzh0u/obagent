@@ -12,9 +12,7 @@ from constants import LLM_MODEL, OCR_MODEL
 from utils import interruptible
 
 
-def make_consume_command(
-    *, prompt_fn, postprocess, field_defaults, make_title, format_frontmatter, help_text
-):
+def make_consume_command(*, prompt_fn, postprocess, render_config, help_text):
     """Factory: create a click consume command with type-specific config."""
 
     @click.command()
@@ -104,9 +102,7 @@ def make_consume_command(
                         target_dir,
                         overwrite=overwrite,
                         note_index=note_index,
-                        field_defaults=field_defaults,
-                        make_title=make_title,
-                        format_frontmatter=format_frontmatter,
+                        **render_config,
                     )
                 except Exception as e:
                     click.secho(f"  Warning: note rendering failed: {e}", fg="red")

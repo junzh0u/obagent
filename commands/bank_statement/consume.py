@@ -1,16 +1,10 @@
 from commands.bank_statement.llm import _postprocess, _prompt
-from commands.bank_statement.render import (
-    FIELD_DEFAULTS,
-    format_frontmatter,
-    make_title,
-)
+from commands.bank_statement.render import RENDER_CONFIG
 from commands.consume import make_consume_command
 
 consume = make_consume_command(
     prompt_fn=_prompt,
     postprocess=_postprocess,
-    field_defaults=FIELD_DEFAULTS,
-    make_title=make_title,
-    format_frontmatter=format_frontmatter,
+    render_config=RENDER_CONFIG,
     help_text="Consume bank statement files into the vault. Accepts files and/or directories.",
 )

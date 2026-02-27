@@ -35,9 +35,13 @@ def format_frontmatter(fields):
     )
 
 
+RENDER_CONFIG = {
+    "field_defaults": FIELD_DEFAULTS,
+    "make_title": make_title,
+    "format_frontmatter": format_frontmatter,
+}
+
 render = make_render_command(
-    field_defaults=FIELD_DEFAULTS,
-    make_title=make_title,
-    format_frontmatter=format_frontmatter,
+    **RENDER_CONFIG,
     help_text="Render Obsidian notes from LLM-extracted bank statement metadata.",
 )
