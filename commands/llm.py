@@ -98,8 +98,7 @@ def make_llm_command(*, pipeline: Pipeline) -> click.Command:
         if continue_:
             from commands.render import index_existing_notes
 
-            if sha256 or not overwrite:
-                note_index = index_existing_notes(vault / path)
+            note_index = index_existing_notes(vault / path)
 
         with OpenAI(api_key=openai_api_key) as client:
             for target_dir in interruptible(entries):
