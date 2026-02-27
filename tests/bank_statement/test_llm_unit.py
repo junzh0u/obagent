@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from commands.bank_statement.llm import _prompt, llm
+from commands.bank_statement.llm import _postprocess, _prompt, llm
 from constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai_bs
@@ -153,3 +153,38 @@ def test_prompt_function():
     assert "account_number" in prompt
     assert "OCR text here" in prompt
     assert '"Bank Statements"' in prompt
+
+
+def test_postprocess_strips_bank_name_prefix():
+    """account_name with bank_name prefix is cleaned."""
+    fields = {"bank_name": "Chase", "account_name": "Chase Total Checking"}
+    _postprocess(fields)
+    assert fields["account_name"] == "Total Checking"
+
+
+def test_postprocess_case_insensitive():
+    """Bank name prefix is stripped regardless of case."""
+    fields = {"bank_name": "Chase", "account_name": "CHASE Sapphire Checking"}
+    _postprocess(fields)
+    assert fields["account_name"] == "Sapphire Checking"
+
+
+def test_postprocess_no_prefix():
+    """account_name without bank_name prefix is unchanged."""
+    fields = {"bank_name": "Chase", "account_name": "Total Checking"}
+    _postprocess(fields)
+    assert fields["account_name"] == "Total Checking"
+
+
+def test_postprocess_empty_account_name():
+    """Empty account_name is left alone."""
+    fields = {"bank_name": "Chase", "account_name": ""}
+    _postprocess(fields)
+    assert fields["account_name"] == ""
+
+
+def test_postprocess_missing_bank_name():
+    """Missing bank_name skips stripping."""
+    fields = {"account_name": "Chase Total Checking"}
+    _postprocess(fields)
+    assert fields["account_name"] == "Chase Total Checking"
