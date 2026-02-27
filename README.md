@@ -2,6 +2,8 @@
 
 CLI tool that ingests PDFs into an [Obsidian](https://obsidian.md) vault, runs OCR + LLM extraction, and renders browsable markdown notes.
 
+Supports multiple document types — **receipts**, **bank statements**, and **documents** — each with their own field extraction and formatting.
+
 ## Pipeline
 
 ```
@@ -10,14 +12,14 @@ PDF  ──►  ingest  ──►  ocr  ──►  llm  ──►  render  ─�
 
 Each step can be run individually or all at once with `consume`:
 
-| Command   | What it does                                              |
-|-----------|-----------------------------------------------------------|
-| `scan`    | Preview which PDFs are new vs already in the vault        |
-| `ingest`  | Copy/move PDFs into the vault, deduplicated by SHA-256    |
-| `ocr`     | Run Mistral OCR on ingested PDFs                          |
-| `llm`     | Extract structured fields (merchant, date, total) via LLM |
-| `render`  | Generate Obsidian markdown notes from extracted metadata   |
-| `consume` | Run the full pipeline (ingest → ocr → llm → render)      |
+| Command   | What it does                                           |
+|-----------|--------------------------------------------------------|
+| `scan`    | Preview which PDFs are new vs already in the vault     |
+| `ingest`  | Copy/move PDFs into the vault, deduplicated by SHA-256 |
+| `ocr`     | Run Mistral OCR on ingested PDFs                       |
+| `llm`     | Extract structured fields via LLM                      |
+| `render`  | Generate Obsidian markdown notes from extracted fields  |
+| `consume` | Run the full pipeline (ingest → ocr → llm → render)   |
 
 ## Vault structure
 
@@ -25,14 +27,17 @@ Each step can be run individually or all at once with `consume`:
 vault/
   Receipts/
     2024-06-01 - Coffee Shop - $5.75.md
-    2024-09-20 - Bookstore - $29.99.md
     _assets_/
-      <sha256a>/
+      <sha256>/
         src/        ← original.pdf + metadata.json
         ocr/        ← OCR output (json + txt)
         llm/        ← extracted fields (json)
-      <sha256b>/
-        ...
+  Bank Statements/
+    2024-01-01 to 2024-01-31 - Chase - Checking - 1234.md
+    _assets_/...
+  Documents/
+    2024-04-15 - Tax Return 2024.md
+    _assets_/...
 ```
 
 ## Setup
@@ -63,11 +68,13 @@ export OBAGENT_VAULT=/path/to/your/vault
 ## Usage
 
 ```bash
+# Document types: receipt, bank-statement, document
+obagent receipt consume ./inbox
+obagent bank-statement consume ./inbox
+obagent document consume ./inbox
+
 # Preview what would happen (no files moved, no API calls)
 obagent receipt scan ./inbox
-
-# Full pipeline — consume all PDFs from a directory
-obagent receipt consume ./inbox
 
 # Or run steps individually
 obagent receipt ingest ./inbox
@@ -75,8 +82,9 @@ obagent receipt ocr
 obagent receipt llm
 obagent receipt render
 
-# Render a single entry by sha256
-obagent receipt render <sha256>
+# Target specific entries by sha256 (ocr, llm, render, remove)
+obagent receipt render <sha256> <sha256> ...
+obagent receipt remove <sha256>
 
 # Re-process everything from scratch
 obagent receipt consume --overwrite ./inbox

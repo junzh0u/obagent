@@ -9,15 +9,26 @@
 
 ## Project Structure
 
-- `main.py` — CLI entry point, click group with `receipt` subgroup
-- `commands/` — subcommand modules (consume, ingest, ocr, llm, render, scan)
+- `main.py` — CLI entry point, click group with subgroups per document type
+- `commands/fields.py` — `Fields[K]` ABC: dict-based field container with postprocess, defaults, title, and formatting
+- `commands/pipeline.py` — `Pipeline` ABC: orchestration (prompt, CLI command factories)
+- `commands/{receipt,bank_statement,document}/pipeline.py` — concrete `Fields` + `Pipeline` per type
+- `commands/` — shared command modules (consume, ingest, ocr, llm, render, scan)
 - `constants.py` — shared constants (OCR_MODEL, LLM_MODEL, ASSETS_DIR)
 - `utils.py` — shared utilities (iter_entries, newest_file)
 - `tests/` — unit and integration tests with shared fixtures in `conftest.py`
 
+## Architecture
+
+Each document type (receipt, bank_statement, document) defines:
+- A **Fields** subclass (`dict[Literal[...], str]`) that owns field behavior: postprocess, defaults, title formatting
+- A **Pipeline** subclass that owns orchestration: LLM prompt, `fields_class` reference
+
+`Fields.__init__` automatically calls `postprocess()` then `apply_defaults()`, so construction is all that's needed.
+
 ## Pipeline
 
-Each receipt goes through: **ingest → ocr → llm → render** (or all at once via `consume`). Use `scan` to preview without side effects.
+Each document goes through: **ingest → ocr → llm → render** (or all at once via `consume`). Use `scan` to preview without side effects.
 
 Vault layout:
 ```
