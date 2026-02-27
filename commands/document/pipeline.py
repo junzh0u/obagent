@@ -7,13 +7,6 @@ from constants import TITLE_UNSAFE_CHARS
 
 class DocumentFields(Fields[Literal["title", "date", "summary"]]):
     @override
-    def apply_defaults(self) -> None:
-        if not self.get("date"):
-            self["date"] = ""
-        if not self.get("summary"):
-            self["summary"] = ""
-
-    @override
     def make_title(self) -> str:
         parts = [p for p in (self.get("date"), self.get("title")) if p]
         title = " - ".join(parts)

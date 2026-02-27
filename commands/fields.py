@@ -18,7 +18,10 @@ class Fields[K: str](dict[K, str], ABC):
         """Post-process extracted fields. Default is no-op."""
 
     def apply_defaults(self) -> None:
-        """Apply default values to missing/empty fields. Override to customize."""
+        """Replace falsy field values with empty strings. Override to customize."""
+        for key in self:
+            if not self[key]:
+                self[key] = ""
 
     def apply_frontmatter(self, frontmatter: dict[K, str]) -> None:
         """Preserve manually-edited frontmatter values into fields.

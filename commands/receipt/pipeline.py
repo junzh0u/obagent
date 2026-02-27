@@ -82,8 +82,7 @@ class ReceiptFields(Fields[Literal["merchant", "date", "total"]]):
 
     @override
     def apply_defaults(self) -> None:
-        if not self.get("date"):
-            self["date"] = ""
+        super().apply_defaults()
         if not self.get("total"):
             self["total"] = "$0.00"
 
