@@ -1,11 +1,18 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class Fields(dict[str, str], ABC):
     """Abstract base class for document field containers.
 
     Each subclass owns its own postprocess, defaults, title, and formatting logic.
+    Defaults are applied automatically on construction.
     """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.postprocess()
+        self.apply_defaults()
 
     def postprocess(self) -> None:
         """Post-process extracted fields. Default is no-op."""

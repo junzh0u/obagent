@@ -100,7 +100,6 @@ def render_note(
     path_dir = target_dir.parent.parent
 
     fields = pipeline.fields_class(json.loads(json_path.read_text()))
-    fields.apply_defaults()
 
     if note_index:
         entry = note_index.get(target_dir.name)

@@ -53,7 +53,6 @@ def extract_fields(
         return None
     raw = content.strip()
     fields = pipeline.fields_class(json.loads(raw))
-    fields.postprocess()
     llm_dir.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(fields, indent=2) + "\n")
     click.secho(f"  Extracted: {fields}", fg="green")

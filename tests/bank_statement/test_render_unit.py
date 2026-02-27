@@ -66,7 +66,7 @@ def test_md_created_with_frontmatter(runner, vault):
 
 def test_account_number_unquoted_in_frontmatter(runner, vault):
     """account_number is plain (unquoted) in frontmatter."""
-    _setup_entry_with_llm(vault, sha="sha_q", account_number="56789")
+    _setup_entry_with_llm(vault, sha="sha_q", account_number="5678")
 
     result = runner.invoke(
         bank_statement_pipeline.render_command,
@@ -76,11 +76,11 @@ def test_account_number_unquoted_in_frontmatter(runner, vault):
 
     assert result.exit_code == 0
     md_file = (
-        vault / "statements" / "2024-01-01 to 2024-01-31 - Chase - Checking - 56789.md"
+        vault / "statements" / "2024-01-01 to 2024-01-31 - Chase - Checking - 5678.md"
     )
     assert md_file.exists()
     content = md_file.read_text()
-    assert "account_number: 56789" in content
+    assert "account_number: 5678" in content
 
 
 def test_append_different_sha(runner, vault):
