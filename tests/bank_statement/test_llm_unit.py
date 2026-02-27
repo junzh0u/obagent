@@ -188,3 +188,24 @@ def test_postprocess_missing_bank_name():
     fields = {"account_name": "Chase Total Checking"}
     _postprocess(fields)
     assert fields["account_name"] == "Chase Total Checking"
+
+
+def test_postprocess_truncates_account_number_to_4_digits():
+    """Long account numbers are truncated to last 4 digits."""
+    fields = {"account_number": "123456789"}
+    _postprocess(fields)
+    assert fields["account_number"] == "6789"
+
+
+def test_postprocess_strips_non_digits_from_account_number():
+    """Non-digit characters are stripped before truncating."""
+    fields = {"account_number": "****1234"}
+    _postprocess(fields)
+    assert fields["account_number"] == "1234"
+
+
+def test_postprocess_short_account_number():
+    """Account numbers with 4 or fewer digits are kept as-is."""
+    fields = {"account_number": "1234"}
+    _postprocess(fields)
+    assert fields["account_number"] == "1234"

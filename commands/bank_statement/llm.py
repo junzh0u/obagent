@@ -4,13 +4,18 @@ from commands.llm import make_llm_command
 
 
 def _postprocess(fields):
-    """Strip bank_name prefix from account_name if present."""
+    """Clean up bank statement fields after LLM extraction."""
     bank = fields.get("bank_name", "")
     acct = fields.get("account_name", "")
     if bank and acct:
         cleaned = re.sub(rf"^{re.escape(bank)}\s+", "", acct, flags=re.IGNORECASE)
         if cleaned:
             fields["account_name"] = cleaned
+
+    num = fields.get("account_number", "")
+    digits = re.sub(r"\D", "", num)
+    if digits:
+        fields["account_number"] = digits[-4:]
 
 
 def _prompt(path, ocr_text):
@@ -27,7 +32,7 @@ def _prompt(path, ocr_text):
         "- account_name: the account's product name WITHOUT the bank name prefix "
         '(e.g. "Total Checking" not "Chase Total Checking", '
         '"Sapphire Checking", "Blue Cash Preferred")\n'
-        "- account_number: the last 4-5 digits of the account number only\n"
+        "- account_number: the last 4 digits of the account number only\n"
         "Respond ONLY with a JSON object containing these five fields, "
         "no additional text!\n\n" + ocr_text[:4000]
     )
