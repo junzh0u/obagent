@@ -1,5 +1,6 @@
 import re
 
+from commands.bank_statement.render import RENDER_CONFIG
 from commands.llm import make_llm_command
 
 
@@ -48,5 +49,6 @@ def _prompt(path, ocr_text):
 llm = make_llm_command(
     prompt_fn=_prompt,
     postprocess=_postprocess,
+    render_config=RENDER_CONFIG,
     help_text="Extract metadata via LLM from OCR'd bank statement entries.",
 )

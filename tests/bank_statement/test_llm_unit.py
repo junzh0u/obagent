@@ -155,6 +155,72 @@ def test_prompt_function():
     assert '"Bank Statements"' in prompt
 
 
+@patch("commands.llm.OpenAI")
+def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
+    """--continue triggers render after successful LLM extraction."""
+    setup_mock_openai_bs(
+        mock_openai_cls,
+        bank_name="Chase",
+        date="2024-01-01",
+        end_date="2024-01-31",
+        account_name="Checking",
+        account_number="1234",
+    )
+    target_dir = _setup_entry_with_ocr(vault, sha="sha_cont")
+    (target_dir / "src").mkdir(parents=True, exist_ok=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"test")
+
+    result = runner.invoke(
+        llm,
+        ["--openai-api-key", "test-key", "--continue"],
+        obj={"vault": str(vault), "path": "statements"},
+    )
+
+    assert result.exit_code == 0
+    assert "Extracted:" in result.output
+    assert "Title:" in result.output
+    md_files = list((vault / "statements").glob("*.md"))
+    assert len(md_files) == 1
+
+
+@patch("commands.llm.OpenAI")
+def test_no_continue_skips_render(mock_openai_cls, runner, vault):
+    """Without --continue, no markdown note is rendered."""
+    setup_mock_openai_bs(mock_openai_cls)
+    target_dir = _setup_entry_with_ocr(vault, sha="sha_nocont")
+    (target_dir / "src").mkdir(parents=True, exist_ok=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"test")
+
+    result = runner.invoke(
+        llm,
+        ["--openai-api-key", "test-key"],
+        obj={"vault": str(vault), "path": "statements"},
+    )
+
+    assert result.exit_code == 0
+    assert "Extracted:" in result.output
+    assert "Title:" not in result.output
+    md_files = list((vault / "statements").glob("*.md"))
+    assert len(md_files) == 0
+
+
+@patch("commands.render.render_note", side_effect=RuntimeError("render boom"))
+@patch("commands.llm.OpenAI")
+def test_continue_render_failure_warns(mock_openai_cls, mock_render, runner, vault):
+    """Render failure during --continue emits warning but doesn't abort."""
+    setup_mock_openai_bs(mock_openai_cls)
+    _setup_entry_with_ocr(vault, sha="sha_fail")
+
+    result = runner.invoke(
+        llm,
+        ["--openai-api-key", "test-key", "--continue"],
+        obj={"vault": str(vault), "path": "statements"},
+    )
+
+    assert result.exit_code == 0
+    assert "Warning: note rendering failed: render boom" in result.output
+
+
 def test_postprocess_strips_bank_name_prefix():
     """account_name with bank_name prefix is cleaned."""
     fields = {"bank_name": "Chase", "account_name": "Chase Total Checking"}

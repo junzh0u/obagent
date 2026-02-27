@@ -1,6 +1,7 @@
 import re
 
 from commands.llm import make_llm_command
+from commands.receipt.render import RENDER_CONFIG
 
 _CURRENCY_SYMBOLS = {
     "$",
@@ -96,5 +97,6 @@ def _postprocess(fields):
 llm = make_llm_command(
     prompt_fn=_prompt,
     postprocess=_postprocess,
+    render_config=RENDER_CONFIG,
     help_text="Extract metadata via LLM from OCR'd entries in the vault.",
 )

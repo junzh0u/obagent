@@ -57,7 +57,7 @@ def extract_fields(
     return fields
 
 
-def make_llm_command(*, prompt_fn, postprocess, help_text):
+def make_llm_command(*, prompt_fn, postprocess, render_config=None, help_text):
     """Factory: create a click llm command with type-specific config."""
 
     @click.command()
@@ -76,20 +76,34 @@ def make_llm_command(*, prompt_fn, postprocess, help_text):
     @click.option(
         "--overwrite", is_flag=True, help="Overwrite existing markdown files."
     )
+    @click.option(
+        "--continue",
+        "continue_",
+        is_flag=True,
+        help="Continue to render after LLM extraction.",
+    )
     @click.argument("sha256", nargs=-1)
     @click.pass_context
-    def llm(ctx, openai_api_key, llm_model, overwrite, sha256):
+    def llm(ctx, openai_api_key, llm_model, overwrite, continue_, sha256):
         vault = Path(ctx.obj["vault"])
         path = ctx.obj["path"]
         if sha256:
             entries = [vault / path / ASSETS_DIR / s for s in sha256]
         else:
             entries = iter_entries(vault, path)
+
+        note_index = None
+        if continue_ and render_config:
+            from commands.render import index_existing_notes
+
+            if sha256 or not overwrite:
+                note_index = index_existing_notes(vault / path)
+
         with OpenAI(api_key=openai_api_key) as client:
             for target_dir in interruptible(entries):
                 click.secho(f"LLM: {target_dir}", bold=True)
                 try:
-                    extract_fields(
+                    fields = extract_fields(
                         target_dir,
                         client,
                         path,
@@ -100,6 +114,20 @@ def make_llm_command(*, prompt_fn, postprocess, help_text):
                     )
                 except Exception as e:
                     click.secho(f"  Warning: field extraction failed: {e}", fg="red")
+                    continue
+
+                if continue_ and render_config and fields is not None:
+                    from commands.render import render_note
+
+                    try:
+                        render_note(
+                            target_dir,
+                            overwrite=overwrite,
+                            note_index=note_index,
+                            **render_config,
+                        )
+                    except Exception as e:
+                        click.secho(f"  Warning: note rendering failed: {e}", fg="red")
 
     llm.__doc__ = help_text
     return llm
