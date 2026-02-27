@@ -107,3 +107,27 @@ def setup_mock_openai_bs(mock_openai_cls, **kwargs):
     mock_client.__exit__ = MagicMock(return_value=False)
     mock_openai_cls.return_value = mock_client
     return mock_client
+
+
+def mock_chat_response_doc(
+    title="Tax Return 2024",
+    date="2024-04-15",
+    summary="Annual federal tax return filing.",
+):
+    """Create a mock OpenAI chat completion response for document extraction."""
+    content = json.dumps({"title": title, "date": date, "summary": summary})
+    message = SimpleNamespace(content=content)
+    choice = SimpleNamespace(message=message)
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+def setup_mock_openai_doc(mock_openai_cls, **kwargs):
+    """Set up a mock OpenAI client with doc chat response and context manager support."""
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_chat_response_doc(**kwargs)
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_openai_cls.return_value = mock_client
+    return mock_client

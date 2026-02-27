@@ -76,6 +76,7 @@ def render_note(
     field_defaults,
     make_title,
     format_frontmatter,
+    format_body=None,
 ):
     """Read LLM JSON and create an Obsidian markdown note.
 
@@ -138,12 +139,16 @@ def render_note(
         return safe_title
 
     frontmatter = format_frontmatter(fields)
-    md_path.write_text(frontmatter + embed + meta_embed)
+    body = format_body(fields) if format_body else ""
+    content = frontmatter + body + embed + meta_embed
+    md_path.write_text(content)
     click.secho(f"  Title: {safe_title}", fg="green")
     return safe_title
 
 
-def make_render_command(*, field_defaults, make_title, format_frontmatter, help_text):
+def make_render_command(
+    *, field_defaults, make_title, format_frontmatter, format_body=None, help_text
+):
     """Factory: create a click render command with type-specific config."""
 
     @click.command()
@@ -175,6 +180,7 @@ def make_render_command(*, field_defaults, make_title, format_frontmatter, help_
                     field_defaults=field_defaults,
                     make_title=make_title,
                     format_frontmatter=format_frontmatter,
+                    format_body=format_body,
                 )
             except Exception as e:
                 click.secho(f"  Warning: note rendering failed: {e}", fg="red")
