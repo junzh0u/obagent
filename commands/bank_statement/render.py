@@ -1,4 +1,5 @@
 from commands.render import make_render_command
+from constants import TITLE_UNSAFE_CHARS
 
 FIELD_DEFAULTS = {}
 
@@ -19,7 +20,7 @@ def make_title(fields):
         if p
     ]
     title = " - ".join(parts)
-    return "".join(c for c in title if c not in r'\/:*?"<>|').strip()
+    return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
 
 def format_frontmatter(fields):
