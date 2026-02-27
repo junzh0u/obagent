@@ -12,6 +12,12 @@ def _postprocess(fields):
         if cleaned:
             fields["account_name"] = cleaned
 
+    acct = fields.get("account_name", "")
+    if ":" in acct:
+        stripped = acct[: acct.index(":")].strip()
+        if stripped:
+            fields["account_name"] = stripped
+
     num = fields.get("account_number", "")
     digits = re.sub(r"\D", "", num)
     if digits:
@@ -29,8 +35,9 @@ def _prompt(path, ocr_text):
         "- end_date: the statement end date in YYYY-MM-DD format "
         "(empty string if single-day or not applicable)\n"
         "- bank_name: the issuing bank name (short brand name in title case)\n"
-        "- account_name: the account's product name WITHOUT the bank name prefix "
-        '(e.g. "Total Checking" not "Chase Total Checking", '
+        "- account_name: the account's short product line WITHOUT the bank name prefix "
+        "or any sub-brand after a colon "
+        '(e.g. "Freedom" not "Chase Freedom: Ultimate Rewards", '
         '"Sapphire Checking", "Blue Cash Preferred")\n'
         "- account_number: the last 4 digits of the account number only\n"
         "Respond ONLY with a JSON object containing these five fields, "

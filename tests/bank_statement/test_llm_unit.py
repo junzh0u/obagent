@@ -190,6 +190,20 @@ def test_postprocess_missing_bank_name():
     assert fields["account_name"] == "Chase Total Checking"
 
 
+def test_postprocess_strips_colon_suffix():
+    """Sub-brand text after colon is stripped from account_name."""
+    fields = {"bank_name": "Chase", "account_name": "Freedom: Ultimate Rewards"}
+    _postprocess(fields)
+    assert fields["account_name"] == "Freedom"
+
+
+def test_postprocess_no_colon_unchanged():
+    """account_name without colon is unchanged."""
+    fields = {"bank_name": "Chase", "account_name": "Total Checking"}
+    _postprocess(fields)
+    assert fields["account_name"] == "Total Checking"
+
+
 def test_postprocess_truncates_account_number_to_4_digits():
     """Long account numbers are truncated to last 4 digits."""
     fields = {"account_number": "123456789"}
