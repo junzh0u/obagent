@@ -270,6 +270,20 @@ def test_postprocess_no_colon_unchanged():
     assert fields["account_name"] == "Total Checking"
 
 
+def test_postprocess_strips_trailing_card():
+    """Trailing 'Card' is stripped from account_name."""
+    fields = {"bank_name": "Citi", "account_name": "It Card"}
+    _postprocess(fields)
+    assert fields["account_name"] == "It"
+
+
+def test_postprocess_card_not_stripped_mid_word():
+    """'Card' inside a word is not stripped."""
+    fields = {"bank_name": "Chase", "account_name": "Cardmember Rewards"}
+    _postprocess(fields)
+    assert fields["account_name"] == "Cardmember Rewards"
+
+
 def test_postprocess_truncates_account_number_to_4_digits():
     """Long account numbers are truncated to last 4 digits."""
     fields = {"account_number": "123456789"}
