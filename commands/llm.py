@@ -76,13 +76,13 @@ def make_llm_command(*, prompt_fn, postprocess, help_text):
     @click.option(
         "--overwrite", is_flag=True, help="Overwrite existing markdown files."
     )
-    @click.argument("sha256", required=False)
+    @click.argument("sha256", nargs=-1)
     @click.pass_context
     def llm(ctx, openai_api_key, llm_model, overwrite, sha256):
         vault = Path(ctx.obj["vault"])
         path = ctx.obj["path"]
         if sha256:
-            entries = [vault / path / ASSETS_DIR / sha256]
+            entries = [vault / path / ASSETS_DIR / s for s in sha256]
         else:
             entries = iter_entries(vault, path)
         with OpenAI(api_key=openai_api_key) as client:

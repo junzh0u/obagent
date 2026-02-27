@@ -38,8 +38,12 @@ def _emit_command(path, cmd, lines):
 
     for param in cmd.params:
         if isinstance(param, click.Argument):
+            is_path = isinstance(param.type, click.Path)
             if param.nargs == -1:
-                args.append("        '*:path:_files'")
+                if is_path:
+                    args.append("        '*:path:_files'")
+                else:
+                    args.append(f"        '*:{param.human_readable_name}:'")
             else:
                 args.append(f"        ':{param.human_readable_name}:'")
 

@@ -6,14 +6,8 @@ import click
 from constants import ASSETS_DIR
 
 
-@click.command()
-@click.argument("sha256")
-@click.pass_context
-def remove(ctx, sha256):
-    """Remove a vault entry by its sha256 hash."""
-    vault = Path(ctx.obj["vault"])
-    path = ctx.obj["path"]
-    path_dir = vault / path
+def _remove_entry(path_dir, sha256, ctx):
+    """Remove a single vault entry and its .md references."""
     target_dir = path_dir / ASSETS_DIR / sha256
 
     if not target_dir.exists():
@@ -40,3 +34,15 @@ def remove(ctx, sha256):
     # Remove the data directory
     shutil.rmtree(target_dir)
     click.secho(f"  Removed: {target_dir.name}", fg="green")
+
+
+@click.command()
+@click.argument("sha256", nargs=-1, required=True)
+@click.pass_context
+def remove(ctx, sha256):
+    """Remove vault entries by their sha256 hashes."""
+    vault = Path(ctx.obj["vault"])
+    path = ctx.obj["path"]
+    path_dir = vault / path
+    for s in sha256:
+        _remove_entry(path_dir, s, ctx)

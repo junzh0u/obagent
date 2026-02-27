@@ -152,7 +152,7 @@ def make_render_command(*, field_defaults, make_title, format_frontmatter, help_
         is_flag=True,
         help="Discard manually-edited frontmatter values and use LLM data.",
     )
-    @click.argument("sha256", required=False)
+    @click.argument("sha256", nargs=-1)
     @click.pass_context
     def render(ctx, overwrite, sha256):
         vault = Path(ctx.obj["vault"])
@@ -161,7 +161,7 @@ def make_render_command(*, field_defaults, make_title, format_frontmatter, help_
         if sha256 or not overwrite:
             note_index = index_existing_notes(vault / path)
         if sha256:
-            entries = [vault / path / ASSETS_DIR / sha256]
+            entries = [vault / path / ASSETS_DIR / s for s in sha256]
         else:
             _clear_notes(vault / path)
             entries = iter_entries(vault, path)

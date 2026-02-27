@@ -80,14 +80,14 @@ def run_ocr(target_dir, client, *, model=OCR_MODEL, overwrite=False):
     "--ocr-model", default=OCR_MODEL, show_default=True, help="Mistral OCR model name."
 )
 @click.option("--overwrite", is_flag=True, help="Overwrite existing OCR results.")
-@click.argument("sha256", required=False)
+@click.argument("sha256", nargs=-1)
 @click.pass_context
 def ocr(ctx, mistral_api_key, ocr_model, overwrite, sha256):
     """Run OCR on ingested files in the vault."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
     if sha256:
-        entries = [vault / path / ASSETS_DIR / sha256]
+        entries = [vault / path / ASSETS_DIR / s for s in sha256]
     else:
         entries = iter_entries(vault, path)
     with Mistral(api_key=mistral_api_key) as client:
