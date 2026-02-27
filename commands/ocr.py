@@ -5,7 +5,8 @@ from pathlib import Path
 
 import click
 from mistralai import Mistral
-from mistralai.models import SDKError
+from mistralai.models import OCRResponse, SDKError
+from mistralai.models.ocrrequest import DocumentURLChunk, ImageURLChunk
 
 from constants import ASSETS_DIR, OCR_MODEL
 from utils import interruptible, iter_entries, source_file
@@ -14,22 +15,26 @@ MAX_RETRIES = 5
 INITIAL_BACKOFF = 2
 
 
-def _build_ocr_document(src_path):
+def _build_ocr_document(src_path: Path) -> DocumentURLChunk | ImageURLChunk:
     """Build the Mistral OCR document payload for a source file."""
     raw = base64.standard_b64encode(src_path.read_bytes()).decode("utf-8")
     ext = src_path.suffix.lower()
     if ext == ".pdf":
-        return {
-            "type": "document_url",
-            "document_url": f"data:application/pdf;base64,{raw}",
-        }
-    return {
-        "type": "image_url",
-        "image_url": f"data:image/jpeg;base64,{raw}",
-    }
+        return DocumentURLChunk(
+            document_url=f"data:application/pdf;base64,{raw}",
+        )
+    return ImageURLChunk(
+        image_url=f"data:image/jpeg;base64,{raw}",
+    )
 
 
-def _ocr_with_retry(client, model, document, *, max_retries=MAX_RETRIES):
+def _ocr_with_retry(
+    client: Mistral,
+    model: str,
+    document: DocumentURLChunk | ImageURLChunk,
+    *,
+    max_retries: int = MAX_RETRIES,
+) -> OCRResponse:
     """Call OCR with exponential backoff on rate-limit (429) responses."""
     for attempt in range(max_retries + 1):
         try:
@@ -40,9 +45,16 @@ def _ocr_with_retry(client, model, document, *, max_retries=MAX_RETRIES):
             wait = INITIAL_BACKOFF * (2**attempt)
             click.secho(f"  Rate limited, retrying in {wait}s…", fg="yellow")
             time.sleep(wait)
+    raise RuntimeError("unreachable")
 
 
-def run_ocr(target_dir, client, *, model=OCR_MODEL, overwrite=False):
+def run_ocr(
+    target_dir: Path,
+    client: Mistral,
+    *,
+    model: str = OCR_MODEL,
+    overwrite: bool = False,
+) -> None:
     """Run Mistral OCR on the consumed source file and save results.
 
     If OCR output exists and not overwrite, skips the API call.
@@ -56,6 +68,9 @@ def run_ocr(target_dir, client, *, model=OCR_MODEL, overwrite=False):
         return
 
     src_path = source_file(target_dir)
+    if src_path is None:
+        click.secho("  No source file found, skipping OCR", fg="yellow")
+        return
     document = _build_ocr_document(src_path)
 
     ocr_response = _ocr_with_retry(client, model, document=document)

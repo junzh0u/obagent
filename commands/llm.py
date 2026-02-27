@@ -4,19 +4,20 @@ from pathlib import Path
 import click
 from openai import OpenAI
 
+from commands.pipeline import Pipeline
 from constants import ASSETS_DIR, LLM_MODEL
 from utils import interruptible, iter_entries, newest_file
 
 
 def extract_fields(
-    target_dir,
-    client,
-    path,
+    target_dir: Path,
+    client: OpenAI,
+    path: str,
     *,
-    model=LLM_MODEL,
-    overwrite=False,
-    pipeline,
-):
+    model: str = LLM_MODEL,
+    overwrite: bool = False,
+    pipeline: Pipeline,
+) -> dict[str, str] | None:
     """Use OpenAI to extract metadata from OCR text and save as JSON.
 
     Discovers the newest OCR .txt file under target_dir/ocr/.
@@ -46,7 +47,11 @@ def extract_fields(
             },
         ],
     )
-    raw = response.choices[0].message.content.strip()
+    content = response.choices[0].message.content
+    if content is None:
+        click.secho("  LLM returned empty response, skipping", fg="yellow")
+        return None
+    raw = content.strip()
     fields = json.loads(raw)
     pipeline.postprocess(fields)
     llm_dir.mkdir(parents=True, exist_ok=True)
@@ -55,7 +60,7 @@ def extract_fields(
     return fields
 
 
-def make_llm_command(*, pipeline):
+def make_llm_command(*, pipeline: Pipeline) -> click.Command:
     """Factory: create a click llm command with type-specific config."""
 
     @click.command()

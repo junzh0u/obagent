@@ -6,7 +6,7 @@ import click
 from constants import ASSETS_DIR
 
 
-def _remove_entry(path_dir, sha256, ctx):
+def _remove_entry(path_dir: Path, sha256: str, ctx: click.Context) -> None:
     """Remove a single vault entry and its .md references."""
     target_dir = path_dir / ASSETS_DIR / sha256
 

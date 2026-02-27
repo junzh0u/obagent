@@ -6,10 +6,10 @@ from constants import TITLE_UNSAFE_CHARS
 
 class BankStatementPipeline(Pipeline):
     @property
-    def name(self):
+    def name(self) -> str:
         return "bank statement"
 
-    def prompt(self, path, ocr_text):
+    def prompt(self, path: str, ocr_text: str) -> str:
         return (
             "I will provide you with the content of a document that has been "
             "partially read by OCR (so it may contain errors).\n"
@@ -29,7 +29,7 @@ class BankStatementPipeline(Pipeline):
             "no additional text!\n\n" + ocr_text[:4000]
         )
 
-    def postprocess(self, fields):
+    def postprocess(self, fields: dict[str, str]) -> None:
         bank = fields.get("bank_name", "")
         acct = fields.get("account_name", "")
         if bank and acct:
@@ -54,10 +54,10 @@ class BankStatementPipeline(Pipeline):
             fields["account_number"] = digits[-4:]
 
     @property
-    def field_defaults(self):
+    def field_defaults(self) -> dict[str, str]:
         return {}
 
-    def make_title(self, fields):
+    def make_title(self, fields: dict[str, str]) -> str:
         date = fields.get("date")
         end_date = fields.get("end_date")
         date_part = f"{date} to {end_date}" if date and end_date else date
@@ -74,7 +74,7 @@ class BankStatementPipeline(Pipeline):
         title = " - ".join(parts)
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
-    def format_frontmatter(self, fields):
+    def format_frontmatter(self, fields: dict[str, str]) -> str:
         bank_name = fields.get("bank_name", "")
         date = fields.get("date", "")
         end_date = fields.get("end_date", "")

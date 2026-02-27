@@ -24,4 +24,5 @@ only-include = ["main.py", "commands", "constants.py", "utils.py"]
 dev = [
     "pytest>=9.0.2",
     "ruff>=0.15.2",
+    "ty>=0.0.1a7",
 ]

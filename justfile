@@ -8,6 +8,7 @@ install:
 check:
     uv run ruff format --check .
     uv run ruff check .
+    uv run ty check
     uv run pytest tests/ -v
 
 # Auto-fix formatting and lint issues

@@ -25,7 +25,7 @@ _CURRENCY_CODE_RE = re.compile(
 )
 
 
-def _clean_total(total):
+def _clean_total(total: str) -> str:
     """Strip currency codes/names, keeping only the symbol and number.
 
     "USD$ 88.41" -> "$88.41", "$5.00 USD" -> "$5.00", "EUR 10.00" -> "\u20ac10.00"
@@ -74,10 +74,10 @@ def _clean_total(total):
 
 class ReceiptPipeline(Pipeline):
     @property
-    def name(self):
+    def name(self) -> str:
         return "receipt"
 
-    def prompt(self, path, ocr_text):
+    def prompt(self, path: str, ocr_text: str) -> str:
         return (
             "I will provide you with the content of a document that has been "
             "partially read by OCR (so it may contain errors).\n"
@@ -91,21 +91,21 @@ class ReceiptPipeline(Pipeline):
             "no additional text!\n\n" + ocr_text[:4000]
         )
 
-    def postprocess(self, fields):
+    def postprocess(self, fields: dict[str, str]) -> None:
         if "total" in fields and fields["total"]:
             fields["total"] = _clean_total(fields["total"])
 
     @property
-    def field_defaults(self):
+    def field_defaults(self) -> dict[str, str]:
         return {"date": "", "total": "$0.00"}
 
-    def make_title(self, fields):
+    def make_title(self, fields: dict[str, str]) -> str:
         total = fields.get("total") or "$0.00"
         parts = [p for p in (fields.get("date"), fields.get("merchant"), total) if p]
         title = " - ".join(parts)
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
-    def format_frontmatter(self, fields):
+    def format_frontmatter(self, fields: dict[str, str]) -> str:
         merchant = fields.get("merchant", "")
         date = fields.get("date", "")
         total = fields.get("total", "$0.00")

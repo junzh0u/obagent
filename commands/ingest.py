@@ -10,7 +10,14 @@ from constants import ASSETS_DIR, SUPPORTED_EXTENSIONS
 from utils import interruptible
 
 
-def ingest_source(source, vault, path, *, keep_original=False, overwrite=False):
+def ingest_source(
+    source: Path,
+    vault: Path,
+    path: str,
+    *,
+    keep_original: bool = False,
+    overwrite: bool = False,
+) -> Path | None:
     """Ingest a single source file into the vault.
 
     Returns target_dir on success, None if duplicate skipped.
@@ -37,7 +44,7 @@ def ingest_source(source, vault, path, *, keep_original=False, overwrite=False):
     return target_dir
 
 
-def resolve_sources(paths):
+def resolve_sources(paths: tuple[str, ...]) -> list[Path]:
     """Resolve a list of paths to supported source files, recursing into directories."""
     sources = []
     for p in paths:

@@ -1,11 +1,16 @@
 import signal
+from collections.abc import Iterable, Iterator
+from pathlib import Path
+from typing import TypeVar
 
 import click
 
 from constants import ASSETS_DIR
 
+T = TypeVar("T")
 
-def interruptible(iterable):
+
+def interruptible(iterable: Iterable[T]) -> Iterator[T]:
     """Yield items, allowing graceful Ctrl+C between iterations.
 
     First Ctrl+C: finish current item, stop before next.
@@ -36,14 +41,14 @@ def interruptible(iterable):
         signal.signal(signal.SIGINT, original)
 
 
-def iter_entries(vault, path):
+def iter_entries(vault: Path, path: str) -> Iterator[Path]:
     """Yield sorted sha256 target dirs under vault/path/_assets_/."""
     assets_dir = vault / path / ASSETS_DIR
     if assets_dir.is_dir():
         yield from sorted(p for p in assets_dir.iterdir() if p.is_dir())
 
 
-def newest_file(directory, glob_pattern):
+def newest_file(directory: Path, glob_pattern: str) -> Path | None:
     """Return the newest file (by mtime) matching glob_pattern in directory, or None."""
     newest = None
     for p in directory.glob(glob_pattern) if directory.exists() else ():
@@ -52,7 +57,7 @@ def newest_file(directory, glob_pattern):
     return newest
 
 
-def source_file(target_dir):
+def source_file(target_dir: Path) -> Path | None:
     """Return the original.* source file under target_dir/src/, or None."""
     for p in (target_dir / "src").glob("original.*"):
         if p.is_file():

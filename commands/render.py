@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from commands.pipeline import Pipeline
 from constants import ASSETS_DIR
 from utils import (
     interruptible,
@@ -15,7 +16,7 @@ from utils import (
 _SHA_RE = re.compile(r"_assets_/([^/]+)/src/")
 
 
-def _parse_frontmatter(text):
+def _parse_frontmatter(text: str) -> dict[str, str] | None:
     """Extract frontmatter fields from markdown text.
 
     Returns a dict of key-value pairs, or None if no valid frontmatter found.
@@ -38,7 +39,9 @@ def _parse_frontmatter(text):
     return fields
 
 
-def index_existing_notes(path_dir):
+def index_existing_notes(
+    path_dir: Path,
+) -> dict[str, tuple[dict[str, str] | None, list[Path]]]:
     """Read all .md files once and build a sha-indexed lookup.
 
     Returns {sha: (frontmatter_dict_or_None, [md_paths])} for every sha
@@ -59,7 +62,7 @@ def index_existing_notes(path_dir):
     return index
 
 
-def _clear_notes(path_dir):
+def _clear_notes(path_dir: Path) -> None:
     """Delete all .md files in path_dir."""
     mds = list(path_dir.glob("*.md"))
     for md in mds:
@@ -69,12 +72,12 @@ def _clear_notes(path_dir):
 
 
 def render_note(
-    target_dir,
+    target_dir: Path,
     *,
-    overwrite=False,
-    note_index=None,
-    pipeline,
-):
+    overwrite: bool = False,
+    note_index: dict[str, tuple[dict[str, str] | None, list[Path]]] | None = None,
+    pipeline: Pipeline,
+) -> str | None:
     """Read LLM JSON and create an Obsidian markdown note.
 
     Writes .md to target_dir's grandparent (vault/path/) for a flat, browsable layout.
@@ -142,7 +145,7 @@ def render_note(
     return safe_title
 
 
-def make_render_command(*, pipeline):
+def make_render_command(*, pipeline: Pipeline) -> click.Command:
     """Factory: create a click render command with type-specific config."""
 
     @click.command()

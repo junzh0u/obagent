@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 from mistralai.models import SDKError
+from mistralai.models.ocrrequest import DocumentURLChunk, ImageURLChunk
 
 from commands.ocr import _build_ocr_document, _ocr_with_retry, ocr
 from constants import OCR_MODEL
@@ -203,7 +204,9 @@ def test_ocr_retries_on_429(mock_sleep):
         success,
     ]
 
-    result = _ocr_with_retry(client, "model", document={"type": "test"}, max_retries=3)
+    result = _ocr_with_retry(
+        client, "model", document=ImageURLChunk(image_url="test"), max_retries=3
+    )
 
     assert result is success
     assert client.ocr.process.call_count == 3
@@ -218,7 +221,9 @@ def test_ocr_raises_after_max_retries(mock_sleep):
     client.ocr.process.side_effect = _make_sdk_error(429)
 
     try:
-        _ocr_with_retry(client, "model", document={"type": "test"}, max_retries=2)
+        _ocr_with_retry(
+            client, "model", document=ImageURLChunk(image_url="test"), max_retries=2
+        )
         assert False, "Should have raised"
     except SDKError:
         pass
@@ -233,7 +238,9 @@ def test_ocr_does_not_retry_non_429(mock_sleep):
     client.ocr.process.side_effect = _make_sdk_error(502)
 
     try:
-        _ocr_with_retry(client, "model", document={"type": "test"}, max_retries=3)
+        _ocr_with_retry(
+            client, "model", document=ImageURLChunk(image_url="test"), max_retries=3
+        )
         assert False, "Should have raised"
     except SDKError:
         pass
@@ -243,30 +250,32 @@ def test_ocr_does_not_retry_non_429(mock_sleep):
 
 
 def test_build_ocr_document_pdf(tmp_path):
-    """_build_ocr_document returns document_url payload for PDFs."""
+    """_build_ocr_document returns DocumentURLChunk for PDFs."""
     pdf = tmp_path / "original.pdf"
     pdf.write_bytes(b"pdf content")
     doc = _build_ocr_document(pdf)
-    assert doc["type"] == "document_url"
-    assert doc["document_url"].startswith("data:application/pdf;base64,")
+    assert isinstance(doc, DocumentURLChunk)
+    assert doc.document_url.startswith("data:application/pdf;base64,")
 
 
 def test_build_ocr_document_jpg(tmp_path):
-    """_build_ocr_document returns image_url payload for JPEGs."""
+    """_build_ocr_document returns ImageURLChunk for JPEGs."""
     jpg = tmp_path / "original.jpg"
     jpg.write_bytes(b"jpg content")
     doc = _build_ocr_document(jpg)
-    assert doc["type"] == "image_url"
-    assert doc["image_url"].startswith("data:image/jpeg;base64,")
+    assert isinstance(doc, ImageURLChunk)
+    assert isinstance(doc.image_url, str)
+    assert doc.image_url.startswith("data:image/jpeg;base64,")
 
 
 def test_build_ocr_document_jpeg(tmp_path):
-    """_build_ocr_document returns image_url payload for .jpeg extension."""
+    """_build_ocr_document returns ImageURLChunk for .jpeg extension."""
     jpeg = tmp_path / "original.jpeg"
     jpeg.write_bytes(b"jpeg content")
     doc = _build_ocr_document(jpeg)
-    assert doc["type"] == "image_url"
-    assert doc["image_url"].startswith("data:image/jpeg;base64,")
+    assert isinstance(doc, ImageURLChunk)
+    assert isinstance(doc.image_url, str)
+    assert doc.image_url.startswith("data:image/jpeg;base64,")
 
 
 @patch("commands.ocr.Mistral")
@@ -289,5 +298,6 @@ def test_ocr_jpeg_uses_image_url(mock_mistral_cls, runner, vault):
     assert "OCR completed" in result.output
     call_kwargs = mock_client.ocr.process.call_args
     document = call_kwargs.kwargs["document"]
-    assert document["type"] == "image_url"
-    assert document["image_url"].startswith("data:image/jpeg;base64,")
+    assert isinstance(document, ImageURLChunk)
+    assert isinstance(document.image_url, str)
+    assert document.image_url.startswith("data:image/jpeg;base64,")

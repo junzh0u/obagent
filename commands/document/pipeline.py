@@ -4,10 +4,10 @@ from constants import TITLE_UNSAFE_CHARS
 
 class DocumentPipeline(Pipeline):
     @property
-    def name(self):
+    def name(self) -> str:
         return "document"
 
-    def prompt(self, path, ocr_text):
+    def prompt(self, path: str, ocr_text: str) -> str:
         return (
             "I will provide you with the content of a document that has been "
             "partially read by OCR (so it may contain errors).\n"
@@ -25,20 +25,20 @@ class DocumentPipeline(Pipeline):
         )
 
     @property
-    def field_defaults(self):
+    def field_defaults(self) -> dict[str, str]:
         return {"date": "", "summary": ""}
 
-    def make_title(self, fields):
+    def make_title(self, fields: dict[str, str]) -> str:
         parts = [p for p in (fields.get("date"), fields.get("title")) if p]
         title = " - ".join(parts)
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
-    def format_frontmatter(self, fields):
+    def format_frontmatter(self, fields: dict[str, str]) -> str:
         title = fields.get("title", "")
         date = fields.get("date", "")
         return f"---\ntitle: {title}\ndate: {date}\n---\n"
 
-    def format_body(self, fields):
+    def format_body(self, fields: dict[str, str]) -> str:
         summary = fields.get("summary", "")
         if not summary:
             return ""
