@@ -1,16 +1,56 @@
 import re
-from typing import Literal
 
+from commands.fields import Fields
 from commands.pipeline import Pipeline
 from constants import TITLE_UNSAFE_CHARS
 
 
-type BankStatementFields = dict[
-    Literal["bank_name", "date", "end_date", "account_name", "account_number"], str
-]
+class BankStatementFields(Fields):
+    def postprocess(self) -> None:
+        bank = self.get("bank_name", "")
+        acct = self.get("account_name", "")
+        if bank and acct:
+            cleaned = re.sub(rf"^{re.escape(bank)}\s+", "", acct, flags=re.IGNORECASE)
+            if cleaned:
+                self["account_name"] = cleaned
+
+        acct = self.get("account_name", "")
+        if ":" in acct:
+            stripped = acct[: acct.index(":")].strip()
+            if stripped:
+                self["account_name"] = stripped
+
+        acct = self.get("account_name", "")
+        stripped = re.sub(r"\s+Card$", "", acct, flags=re.IGNORECASE).strip()
+        if stripped:
+            self["account_name"] = stripped
+
+        num = self.get("account_number", "")
+        digits = re.sub(r"\D", "", num)
+        if digits:
+            self["account_number"] = digits[-4:]
+
+    def make_title(self) -> str:
+        date = self.get("date")
+        end_date = self.get("end_date")
+        date_part = f"{date} to {end_date}" if date and end_date else date
+        parts = [
+            p
+            for p in (
+                date_part,
+                self.get("bank_name"),
+                self.get("account_name"),
+                self.get("account_number"),
+            )
+            if p
+        ]
+        title = " - ".join(parts)
+        return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
 
-class BankStatementPipeline(Pipeline[BankStatementFields]):
+class BankStatementPipeline(Pipeline):
+    fields_class = BankStatementFields
+
     @property
     def name(self) -> str:
         return "bank statement"
@@ -34,47 +74,6 @@ class BankStatementPipeline(Pipeline[BankStatementFields]):
             "Respond ONLY with a JSON object containing these five fields, "
             "no additional text!\n\n" + ocr_text[:4000]
         )
-
-    def postprocess(self, fields: BankStatementFields) -> None:
-        bank = fields.get("bank_name", "")
-        acct = fields.get("account_name", "")
-        if bank and acct:
-            cleaned = re.sub(rf"^{re.escape(bank)}\s+", "", acct, flags=re.IGNORECASE)
-            if cleaned:
-                fields["account_name"] = cleaned
-
-        acct = fields.get("account_name", "")
-        if ":" in acct:
-            stripped = acct[: acct.index(":")].strip()
-            if stripped:
-                fields["account_name"] = stripped
-
-        acct = fields.get("account_name", "")
-        stripped = re.sub(r"\s+Card$", "", acct, flags=re.IGNORECASE).strip()
-        if stripped:
-            fields["account_name"] = stripped
-
-        num = fields.get("account_number", "")
-        digits = re.sub(r"\D", "", num)
-        if digits:
-            fields["account_number"] = digits[-4:]
-
-    def make_title(self, fields: BankStatementFields) -> str:
-        date = fields.get("date")
-        end_date = fields.get("end_date")
-        date_part = f"{date} to {end_date}" if date and end_date else date
-        parts = [
-            p
-            for p in (
-                date_part,
-                fields.get("bank_name"),
-                fields.get("account_name"),
-                fields.get("account_number"),
-            )
-            if p
-        ]
-        title = " - ".join(parts)
-        return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
 
 bank_statement_pipeline = BankStatementPipeline()

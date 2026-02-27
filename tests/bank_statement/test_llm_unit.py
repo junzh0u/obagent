@@ -226,101 +226,95 @@ def test_continue_render_failure_warns(mock_openai_cls, mock_render, runner, vau
 
 def test_postprocess_strips_bank_name_prefix():
     """account_name with bank_name prefix is cleaned."""
-    fields: BankStatementFields = {
-        "bank_name": "Chase",
-        "account_name": "Chase Total Checking",
-    }
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields(
+        {"bank_name": "Chase", "account_name": "Chase Total Checking"}
+    )
+    fields.postprocess()
     assert fields["account_name"] == "Total Checking"
 
 
 def test_postprocess_case_insensitive():
     """Bank name prefix is stripped regardless of case."""
-    fields: BankStatementFields = {
-        "bank_name": "Chase",
-        "account_name": "CHASE Sapphire Checking",
-    }
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields(
+        {"bank_name": "Chase", "account_name": "CHASE Sapphire Checking"}
+    )
+    fields.postprocess()
     assert fields["account_name"] == "Sapphire Checking"
 
 
 def test_postprocess_no_prefix():
     """account_name without bank_name prefix is unchanged."""
-    fields: BankStatementFields = {
-        "bank_name": "Chase",
-        "account_name": "Total Checking",
-    }
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields(
+        {"bank_name": "Chase", "account_name": "Total Checking"}
+    )
+    fields.postprocess()
     assert fields["account_name"] == "Total Checking"
 
 
 def test_postprocess_empty_account_name():
     """Empty account_name is left alone."""
-    fields: BankStatementFields = {"bank_name": "Chase", "account_name": ""}
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields({"bank_name": "Chase", "account_name": ""})
+    fields.postprocess()
     assert fields["account_name"] == ""
 
 
 def test_postprocess_missing_bank_name():
     """Missing bank_name skips stripping."""
-    fields: BankStatementFields = {"account_name": "Chase Total Checking"}
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields({"account_name": "Chase Total Checking"})
+    fields.postprocess()
     assert fields["account_name"] == "Chase Total Checking"
 
 
 def test_postprocess_strips_colon_suffix():
     """Sub-brand text after colon is stripped from account_name."""
-    fields: BankStatementFields = {
-        "bank_name": "Chase",
-        "account_name": "Freedom: Ultimate Rewards",
-    }
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields(
+        {"bank_name": "Chase", "account_name": "Freedom: Ultimate Rewards"}
+    )
+    fields.postprocess()
     assert fields["account_name"] == "Freedom"
 
 
 def test_postprocess_no_colon_unchanged():
     """account_name without colon is unchanged."""
-    fields: BankStatementFields = {
-        "bank_name": "Chase",
-        "account_name": "Total Checking",
-    }
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields(
+        {"bank_name": "Chase", "account_name": "Total Checking"}
+    )
+    fields.postprocess()
     assert fields["account_name"] == "Total Checking"
 
 
 def test_postprocess_strips_trailing_card():
     """Trailing 'Card' is stripped from account_name."""
-    fields: BankStatementFields = {"bank_name": "Citi", "account_name": "It Card"}
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields({"bank_name": "Citi", "account_name": "It Card"})
+    fields.postprocess()
     assert fields["account_name"] == "It"
 
 
 def test_postprocess_card_not_stripped_mid_word():
     """'Card' inside a word is not stripped."""
-    fields: BankStatementFields = {
-        "bank_name": "Chase",
-        "account_name": "Cardmember Rewards",
-    }
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields(
+        {"bank_name": "Chase", "account_name": "Cardmember Rewards"}
+    )
+    fields.postprocess()
     assert fields["account_name"] == "Cardmember Rewards"
 
 
 def test_postprocess_truncates_account_number_to_4_digits():
     """Long account numbers are truncated to last 4 digits."""
-    fields: BankStatementFields = {"account_number": "123456789"}
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields({"account_number": "123456789"})
+    fields.postprocess()
     assert fields["account_number"] == "6789"
 
 
 def test_postprocess_strips_non_digits_from_account_number():
     """Non-digit characters are stripped before truncating."""
-    fields: BankStatementFields = {"account_number": "****1234"}
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields({"account_number": "****1234"})
+    fields.postprocess()
     assert fields["account_number"] == "1234"
 
 
 def test_postprocess_short_account_number():
     """Account numbers with 4 or fewer digits are kept as-is."""
-    fields: BankStatementFields = {"account_number": "1234"}
-    bank_statement_pipeline.postprocess(fields)
+    fields = BankStatementFields({"account_number": "1234"})
+    fields.postprocess()
     assert fields["account_number"] == "1234"

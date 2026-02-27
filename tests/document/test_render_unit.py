@@ -57,58 +57,54 @@ def test_md_created_with_frontmatter(runner, vault):
 
 def test_make_title_date_and_title():
     """date and title are joined with ' - '."""
-    fields: DocumentFields = {"title": "Tax Return 2024", "date": "2024-04-15"}
-    assert document_pipeline.make_title(fields) == "2024-04-15 - Tax Return 2024"
+    fields = DocumentFields({"title": "Tax Return 2024", "date": "2024-04-15"})
+    assert fields.make_title() == "2024-04-15 - Tax Return 2024"
 
 
 def test_make_title_no_date():
     """When date is empty, only title is used."""
-    fields: DocumentFields = {"title": "Tax Return 2024", "date": ""}
-    assert document_pipeline.make_title(fields) == "Tax Return 2024"
+    fields = DocumentFields({"title": "Tax Return 2024", "date": ""})
+    assert fields.make_title() == "Tax Return 2024"
 
 
 def test_make_title_no_title():
     """When title is missing, only date is used."""
-    fields: DocumentFields = {"date": "2024-04-15"}
-    assert document_pipeline.make_title(fields) == "2024-04-15"
+    fields = DocumentFields({"date": "2024-04-15"})
+    assert fields.make_title() == "2024-04-15"
 
 
 def test_make_title_strips_unsafe_chars():
     """Unsafe filename and Obsidian-reserved characters are stripped."""
-    fields: DocumentFields = {"title": 'Report: "Q1/Q2"', "date": "2024-04-15"}
-    assert document_pipeline.make_title(fields) == "2024-04-15 - Report Q1Q2"
-    fields: DocumentFields = {"title": "Section #1 [Draft] ^ref", "date": "2024-04-15"}
-    assert document_pipeline.make_title(fields) == "2024-04-15 - Section 1 Draft ref"
+    fields = DocumentFields({"title": 'Report: "Q1/Q2"', "date": "2024-04-15"})
+    assert fields.make_title() == "2024-04-15 - Report Q1Q2"
+    fields = DocumentFields({"title": "Section #1 [Draft] ^ref", "date": "2024-04-15"})
+    assert fields.make_title() == "2024-04-15 - Section 1 Draft ref"
 
 
 def test_make_title_empty():
     """All missing fields produce empty string."""
-    empty: DocumentFields = {}
-    assert document_pipeline.make_title(empty) == ""
+    empty = DocumentFields({})
+    assert empty.make_title() == ""
 
 
 def test_frontmatter_excludes_summary():
     """summary is not included in frontmatter."""
-    fields: DocumentFields = {
-        "title": "Doc",
-        "date": "2024-01-01",
-        "summary": "A short summary.",
-    }
-    fm = document_pipeline.format_frontmatter(fields)
+    fields = DocumentFields(
+        {"title": "Doc", "date": "2024-01-01", "summary": "A short summary."}
+    )
+    fm = fields.format_frontmatter()
     assert "summary" not in fm
 
 
 def test_format_body_summary_callout():
     """format_body renders summary as an Obsidian callout."""
-    fields: DocumentFields = {"summary": "A short summary."}
-    assert (
-        document_pipeline.format_body(fields) == "> [!summary]\n> A short summary.\n\n"
-    )
+    fields = DocumentFields({"summary": "A short summary."})
+    assert fields.format_body() == "> [!summary]\n> A short summary.\n\n"
 
 
 def test_format_body_empty_summary():
     """format_body returns empty string when summary is missing."""
-    empty: DocumentFields = {}
-    assert document_pipeline.format_body(empty) == ""
-    no_summary: DocumentFields = {"summary": ""}
-    assert document_pipeline.format_body(no_summary) == ""
+    empty = DocumentFields({})
+    assert empty.format_body() == ""
+    no_summary = DocumentFields({"summary": ""})
+    assert no_summary.format_body() == ""

@@ -1,13 +1,36 @@
-from typing import Literal
-
+from commands.fields import Fields
 from commands.pipeline import Pipeline
 from constants import TITLE_UNSAFE_CHARS
 
 
-type DocumentFields = dict[Literal["title", "date", "summary"], str]
+class DocumentFields(Fields):
+    def apply_defaults(self) -> None:
+        if not self.get("date"):
+            self["date"] = ""
+        if not self.get("summary"):
+            self["summary"] = ""
+
+    def make_title(self) -> str:
+        parts = [p for p in (self.get("date"), self.get("title")) if p]
+        title = " - ".join(parts)
+        return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
+
+    def format_frontmatter(self) -> str:
+        # Exclude summary from frontmatter; it goes in the body callout
+        title = self.get("title", "")
+        date = self.get("date", "")
+        return f"---\ntitle: {title}\ndate: {date}\n---\n"
+
+    def format_body(self) -> str:
+        summary = self.get("summary", "")
+        if not summary:
+            return ""
+        return f"> [!summary]\n> {summary}\n\n"
 
 
-class DocumentPipeline(Pipeline[DocumentFields]):
+class DocumentPipeline(Pipeline):
+    fields_class = DocumentFields
+
     @property
     def name(self) -> str:
         return "document"
@@ -28,29 +51,6 @@ class DocumentPipeline(Pipeline[DocumentFields]):
             "Respond ONLY with a JSON object containing these three fields, "
             "no additional text!\n\n" + ocr_text[:4000]
         )
-
-    def apply_defaults(self, fields: DocumentFields) -> None:
-        if not fields.get("date"):
-            fields["date"] = ""
-        if not fields.get("summary"):
-            fields["summary"] = ""
-
-    def make_title(self, fields: DocumentFields) -> str:
-        parts = [p for p in (fields.get("date"), fields.get("title")) if p]
-        title = " - ".join(parts)
-        return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
-
-    def format_frontmatter(self, fields: DocumentFields) -> str:
-        # Exclude summary from frontmatter; it goes in the body callout
-        title = fields.get("title", "")
-        date = fields.get("date", "")
-        return f"---\ntitle: {title}\ndate: {date}\n---\n"
-
-    def format_body(self, fields: DocumentFields) -> str:
-        summary = fields.get("summary", "")
-        if not summary:
-            return ""
-        return f"> [!summary]\n> {summary}\n\n"
 
 
 document_pipeline = DocumentPipeline()

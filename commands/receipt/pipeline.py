@@ -1,6 +1,6 @@
 import re
-from typing import Literal
 
+from commands.fields import Fields
 from commands.pipeline import Pipeline
 from constants import TITLE_UNSAFE_CHARS
 
@@ -73,10 +73,28 @@ def _clean_total(total: str) -> str:
     return s
 
 
-type ReceiptFields = dict[Literal["merchant", "date", "total"], str]
+class ReceiptFields(Fields):
+    def postprocess(self) -> None:
+        if "total" in self and self["total"]:
+            self["total"] = _clean_total(self["total"])
+
+    def apply_defaults(self) -> None:
+        if not self.get("date"):
+            self["date"] = ""
+        if not self.get("total"):
+            self["total"] = "$0.00"
+
+    def make_title(self) -> str:
+        parts = [
+            p for p in (self.get("date"), self.get("merchant"), self.get("total")) if p
+        ]
+        title = " - ".join(parts)
+        return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
 
-class ReceiptPipeline(Pipeline[ReceiptFields]):
+class ReceiptPipeline(Pipeline):
+    fields_class = ReceiptFields
+
     @property
     def name(self) -> str:
         return "receipt"
@@ -94,25 +112,6 @@ class ReceiptPipeline(Pipeline[ReceiptFields]):
             "Respond ONLY with a JSON object containing these three fields, "
             "no additional text!\n\n" + ocr_text[:4000]
         )
-
-    def postprocess(self, fields: ReceiptFields) -> None:
-        if "total" in fields and fields["total"]:
-            fields["total"] = _clean_total(fields["total"])
-
-    def apply_defaults(self, fields: ReceiptFields) -> None:
-        if not fields.get("date"):
-            fields["date"] = ""
-        if not fields.get("total"):
-            fields["total"] = "$0.00"
-
-    def make_title(self, fields: ReceiptFields) -> str:
-        parts = [
-            p
-            for p in (fields.get("date"), fields.get("merchant"), fields.get("total"))
-            if p
-        ]
-        title = " - ".join(parts)
-        return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
 
 receipt_pipeline = ReceiptPipeline()

@@ -4,8 +4,6 @@ from pathlib import Path
 
 import click
 
-from typing import Any
-
 from commands.pipeline import Pipeline
 from constants import ASSETS_DIR
 from utils import (
@@ -78,7 +76,7 @@ def render_note(
     *,
     overwrite: bool = False,
     note_index: dict[str, tuple[dict[str, str] | None, list[Path]]] | None = None,
-    pipeline: Pipeline[Any],
+    pipeline: Pipeline,
 ) -> str | None:
     """Read LLM JSON and create an Obsidian markdown note.
 
@@ -101,20 +99,20 @@ def render_note(
 
     path_dir = target_dir.parent.parent
 
-    fields = json.loads(json_path.read_text())
-    pipeline.apply_defaults(fields)
+    fields = pipeline.fields_class(json.loads(json_path.read_text()))
+    fields.apply_defaults()
 
     if note_index:
         entry = note_index.get(target_dir.name)
         if entry:
             existing_fm, md_paths = entry
             if not overwrite and existing_fm:
-                pipeline.apply_frontmatter(fields, existing_fm)
+                fields.apply_frontmatter(existing_fm)
             for md in md_paths:
                 if md.exists() and target_dir.name in md.read_text():
                     click.secho(f"  Removed: {md.name}", fg="green")
                     md.unlink()
-    safe_title = pipeline.make_title(fields)
+    safe_title = fields.make_title()
 
     md_path = path_dir / f"{safe_title}.md"
 
@@ -135,15 +133,15 @@ def render_note(
         click.secho(f"  Appended to: {safe_title}", fg="green")
         return safe_title
 
-    frontmatter = pipeline.format_frontmatter(fields)
-    body = pipeline.format_body(fields)
+    frontmatter = fields.format_frontmatter()
+    body = fields.format_body()
     content = frontmatter + body + embed + meta_embed
     md_path.write_text(content)
     click.secho(f"  Title: {safe_title}", fg="green")
     return safe_title
 
 
-def make_render_command(*, pipeline: Pipeline[Any]) -> click.Command:
+def make_render_command(*, pipeline: Pipeline) -> click.Command:
     """Factory: create a click render command with type-specific config."""
 
     @click.command()
