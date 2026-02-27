@@ -24,13 +24,8 @@ class Fields[K: str](dict[K, str], ABC):
                 self[key] = ""
 
     def apply_frontmatter(self, frontmatter: dict[K, str]) -> None:
-        """Preserve manually-edited frontmatter values into fields.
-
-        Default: overwrite every field that has a non-empty frontmatter value.
-        """
-        for key, value in frontmatter.items():
-            if value:
-                self[key] = value
+        """Overwrite fields with non-empty frontmatter values."""
+        self |= {k: v for k, v in frontmatter.items() if v}
 
     @abstractmethod
     def make_title(self) -> str:
