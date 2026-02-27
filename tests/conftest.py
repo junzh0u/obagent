@@ -112,10 +112,13 @@ def setup_mock_openai_bs(mock_openai_cls, **kwargs):
 def mock_chat_response_doc(
     title="Tax Return 2024",
     date="2024-04-15",
+    tags="finance, tax",
     summary="Annual federal tax return filing.",
 ):
     """Create a mock OpenAI chat completion response for document extraction."""
-    content = json.dumps({"title": title, "date": date, "summary": summary})
+    content = json.dumps(
+        {"title": title, "date": date, "tags": tags, "summary": summary}
+    )
     message = SimpleNamespace(content=content)
     choice = SimpleNamespace(message=message)
     response = MagicMock()

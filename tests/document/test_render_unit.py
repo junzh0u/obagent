@@ -14,6 +14,7 @@ def _setup_entry_with_llm(
     defaults = {
         "title": "Tax Return 2024",
         "date": "2024-04-15",
+        "tags": "finance, tax",
         "summary": "Annual federal tax return filing.",
     }
     defaults.update(fields)
@@ -33,6 +34,7 @@ def test_md_created_with_frontmatter(runner, vault):
         sha="sha1",
         title="Tax Return 2024",
         date="2024-04-15",
+        tags="finance, tax",
         summary="Annual federal tax return filing.",
     )
 
@@ -46,9 +48,12 @@ def test_md_created_with_frontmatter(runner, vault):
     md_file = vault / "docs" / "2024-04-15 - Tax Return 2024.md"
     assert md_file.exists()
     content = md_file.read_text()
-    assert "title: Tax Return 2024" in content
-    assert "date: 2024-04-15" in content
-    assert "summary" not in content.split("---")[1]  # not in frontmatter
+    fm = content.split("---")[1]
+    assert "title: Tax Return 2024" in fm
+    assert "date: 2024-04-15" in fm
+    assert "- finance" in fm
+    assert "- tax" in fm
+    assert "summary" not in fm
     assert "> [!summary]" in content
     assert "> Annual federal tax return filing." in content
     assert "![[_assets_/sha1/src/original.pdf#height]]" in content
@@ -94,6 +99,20 @@ def test_frontmatter_excludes_summary():
     )
     fm = fields.format_frontmatter()
     assert "summary" not in fm
+
+
+def test_frontmatter_tags_as_yaml_list():
+    """Comma-separated tags are rendered as a YAML list."""
+    fields = DocumentFields({"title": "Doc", "date": "", "tags": "finance, tax, y2024"})
+    fm = fields.format_frontmatter()
+    assert "tags:\n  - finance\n  - tax\n  - y2024\n" in fm
+
+
+def test_frontmatter_empty_tags():
+    """Empty tags produce an empty YAML key."""
+    fields = DocumentFields({"title": "Doc", "date": "", "tags": ""})
+    fm = fields.format_frontmatter()
+    assert "tags:\n---" in fm
 
 
 def test_format_body_summary_callout():
