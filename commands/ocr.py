@@ -35,15 +35,16 @@ def _ocr_with_retry(
     *,
     max_retries: int = MAX_RETRIES,
 ) -> OCRResponse:
-    """Call OCR with exponential backoff on rate-limit (429) responses."""
+    """Call OCR with exponential backoff on retryable (429, 500) responses."""
     for attempt in range(max_retries + 1):
         try:
             return client.ocr.process(model=model, document=document)
         except SDKError as e:
-            if e.status_code != 429 or attempt == max_retries:
+            if e.status_code not in (429, 500) or attempt == max_retries:
                 raise
             wait = INITIAL_BACKOFF * (2**attempt)
-            click.secho(f"  Rate limited, retrying in {wait}s…", fg="yellow")
+            reason = "Rate limited" if e.status_code == 429 else "Server error"
+            click.secho(f"  {reason}, retrying in {wait}s…", fg="yellow")
             time.sleep(wait)
     raise RuntimeError("unreachable")
 

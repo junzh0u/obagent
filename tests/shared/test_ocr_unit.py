@@ -232,8 +232,29 @@ def test_ocr_raises_after_max_retries(mock_sleep):
 
 
 @patch("commands.ocr.time.sleep")
-def test_ocr_does_not_retry_non_429(mock_sleep):
-    """_ocr_with_retry does not retry on non-429 errors."""
+def test_ocr_retries_on_500(mock_sleep):
+    """_ocr_with_retry retries on 500 server errors with exponential backoff."""
+    client = MagicMock()
+    success = MagicMock()
+    client.ocr.process.side_effect = [
+        _make_sdk_error(500),
+        _make_sdk_error(500),
+        success,
+    ]
+
+    result = _ocr_with_retry(
+        client, "model", document=ImageURLChunk(image_url="test"), max_retries=3
+    )
+
+    assert result is success
+    assert client.ocr.process.call_count == 3
+    assert mock_sleep.call_args_list[0].args[0] == 2
+    assert mock_sleep.call_args_list[1].args[0] == 4
+
+
+@patch("commands.ocr.time.sleep")
+def test_ocr_does_not_retry_non_retryable(mock_sleep):
+    """_ocr_with_retry does not retry on non-retryable errors."""
     client = MagicMock()
     client.ocr.process.side_effect = _make_sdk_error(502)
 
