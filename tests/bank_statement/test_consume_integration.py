@@ -129,6 +129,6 @@ def test_title_md_created_via_cli(
     assert "date: 2024-01-01" in content
     assert "end_date: 2024-01-31" in content
     assert "account_name: Checking" in content
-    assert "account_number: 1234" in content
+    assert 'account_number: "1234"' in content
     assert f"![[_assets_/{sha}/src/original.pdf#height]]" in content
     assert f"![[_assets_/{sha}/src/metadata.json]]" in content

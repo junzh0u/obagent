@@ -33,7 +33,10 @@ class Fields[K: str](dict[K, str], ABC):
 
     def format_frontmatter(self) -> str:
         """Format fields as YAML frontmatter."""
-        body = "\n".join(f"{k}: {v}" for k, v in self.items())
+        fmt = '{}: "{}"'.format
+        body = "\n".join(
+            fmt(k, v) if v.isdigit() else f"{k}: {v}" for k, v in self.items()
+        )
         return f"---\n{body}\n---\n"
 
     def format_body(self) -> str:
