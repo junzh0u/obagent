@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
+from typing import ClassVar
 
 import click
 
@@ -9,12 +10,22 @@ from commands.fields import Fields
 class Pipeline(ABC):
     """Abstract base class for document processing pipelines."""
 
+    _registry: ClassVar[list["Pipeline"]] = []
+
     fields_class: type[Fields]
+
+    def __init__(self):
+        Pipeline._registry.append(self)
 
     @property
     @abstractmethod
     def name(self) -> str:
         """Short name for this document type (e.g. 'receipt')."""
+
+    @property
+    @abstractmethod
+    def default_path(self) -> str:
+        """Default vault subdirectory for this document type (e.g. 'Receipts')."""
 
     @abstractmethod
     def prompt(self, path: str, ocr_text: str) -> str:

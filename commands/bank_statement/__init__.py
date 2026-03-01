@@ -10,7 +10,7 @@ from commands.scan import scan
 @click.group()
 @click.option(
     "--path",
-    default="Bank Statements",
+    default=bank_statement_pipeline.default_path,
     show_default=True,
     help="Subdirectory within the vault.",
 )

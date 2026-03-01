@@ -61,6 +61,11 @@ class BankStatementPipeline(Pipeline):
     def name(self) -> str:
         return "bank statement"
 
+    @property
+    @override
+    def default_path(self) -> str:
+        return "Bank Statements"
+
     @override
     def prompt(self, path: str, ocr_text: str) -> str:
         return (

@@ -3,6 +3,7 @@ import click
 from commands.bank_statement import bank_statement
 from commands.document import document
 from commands.receipt import receipt
+from commands.render import render_all
 
 
 @click.group()
@@ -22,6 +23,7 @@ def cli(ctx, vault):
 cli.add_command(receipt)
 cli.add_command(bank_statement)
 cli.add_command(document)
+cli.add_command(render_all, "render")
 
 if __name__ == "__main__":
     cli()

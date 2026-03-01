@@ -103,6 +103,11 @@ class ReceiptPipeline(Pipeline):
     def name(self) -> str:
         return "receipt"
 
+    @property
+    @override
+    def default_path(self) -> str:
+        return "Receipts"
+
     @override
     def prompt(self, path: str, ocr_text: str) -> str:
         return (

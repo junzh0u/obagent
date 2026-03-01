@@ -183,3 +183,33 @@ def make_render_command(*, pipeline: Pipeline) -> click.Command:
 
     render.__doc__ = pipeline.help_render
     return render
+
+
+@click.command("render")
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Discard manually-edited frontmatter values and use LLM data.",
+)
+@click.pass_context
+def render_all(ctx, overwrite):
+    """Re-render Obsidian notes for all document types."""
+    vault = Path(ctx.obj["vault"])
+    for pipeline in Pipeline._registry:
+        path = pipeline.default_path
+        click.secho(f"\n=== {pipeline.name.title()} ({path}) ===", bold=True)
+        note_index = None
+        if not overwrite:
+            note_index = index_existing_notes(vault / path)
+        _clear_notes(vault / path)
+        for target_dir in interruptible(iter_entries(vault, path)):
+            click.secho(f"Render: {target_dir}", bold=True)
+            try:
+                render_note(
+                    target_dir,
+                    overwrite=overwrite,
+                    note_index=note_index,
+                    pipeline=pipeline,
+                )
+            except Exception as e:
+                click.secho(f"  Warning: note rendering failed: {e}", fg="red")

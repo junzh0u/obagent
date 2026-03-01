@@ -53,6 +53,11 @@ class DocumentPipeline(Pipeline):
     def name(self) -> str:
         return "document"
 
+    @property
+    @override
+    def default_path(self) -> str:
+        return "Documents"
+
     @override
     def prompt(self, path: str, ocr_text: str) -> str:
         return (
