@@ -10,6 +10,7 @@ def _setup_entry_with_llm(
     sha="abc123",
     llm_filename="default.json",
     src_filename="original.pdf",
+    consumed_at="2024-06-01T12:00:00+00:00",
     **fields,
 ):
     """Create a vault entry with LLM JSON ready for rendering."""
@@ -18,8 +19,17 @@ def _setup_entry_with_llm(
     target_dir = vault / "papers" / "_assets_" / sha
     llm_dir = target_dir / "llm"
     llm_dir.mkdir(parents=True)
-    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src").mkdir(parents=True, exist_ok=True)
     (target_dir / "src" / src_filename).write_bytes(b"test")
+    (target_dir / "src" / "metadata.json").write_text(
+        json.dumps(
+            {
+                "original_filepath": "/test/path",
+                "sha256": sha,
+                "consumed_at": consumed_at,
+            }
+        )
+    )
     (llm_dir / llm_filename).write_text(json.dumps(defaults))
     return target_dir
 
@@ -43,6 +53,7 @@ def test_md_created_with_frontmatter(runner, vault):
     assert "merchant: Coffee Shop" in content
     assert "date: 2024-06-01" in content
     assert "total: $5.75" in content
+    assert "consumed_at: 2024-06-01T12:00:00+00:00" in content
     assert "![[_assets_/sha1/src/original.pdf#height]]" in content
     assert "![[_assets_/sha1/src/metadata.json]]" in content
     assert "Title: 2024-06-01 - Coffee Shop - $5.75" in result.output
@@ -402,3 +413,56 @@ def test_overwrite_discards_edited_merchant(runner, vault):
     assert "merchant: LLM Corp" in final_content
     # Manual edit should NOT appear
     assert "My Shop" not in final_content
+
+
+def test_consumed_at_not_overwritten_by_frontmatter(runner, vault):
+    """consumed_at is always from metadata.json, not from existing frontmatter."""
+    _setup_entry_with_llm(
+        vault,
+        sha="sha_ca",
+        merchant="Shop",
+        date="2024-01-01",
+        total="$1.00",
+        consumed_at="2024-06-01T12:00:00+00:00",
+    )
+    old_md = vault / "papers" / "2024-01-01 - Shop - $1.00.md"
+    old_md.write_text(
+        "---\nmerchant: Shop\ndate: 2024-01-01\ntotal: $1.00\n"
+        "consumed_at: 1999-01-01T00:00:00+00:00\n---\n"
+        "![[_assets_/sha_ca/src/original.pdf#height]]\n"
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        ["sha_ca"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    final_md = vault / "papers" / "2024-01-01 - Shop - $1.00.md"
+    content = final_md.read_text()
+    assert "consumed_at: 2024-06-01T12:00:00+00:00" in content
+    assert "1999-01-01" not in content
+
+
+def test_missing_metadata_json_empty_consumed_at(runner, vault):
+    """When metadata.json is missing, consumed_at is an empty string."""
+    target_dir = vault / "papers" / "_assets_" / "sha_nometa"
+    llm_dir = target_dir / "llm"
+    llm_dir.mkdir(parents=True)
+    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"test")
+    (llm_dir / "default.json").write_text(
+        json.dumps({"merchant": "NoMeta", "date": "2024-01-01", "total": "$1.00"})
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    md_file = vault / "papers" / "2024-01-01 - NoMeta - $1.00.md"
+    assert md_file.exists()
+    assert "consumed_at: \n" in md_file.read_text()

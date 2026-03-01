@@ -25,14 +25,17 @@ class DocumentFields(Fields[Literal["title", "date", "tags", "summary"]]):
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
     @override
-    def format_frontmatter(self) -> str:
+    def format_frontmatter(self, *, consumed_at: str = "") -> str:
         # Exclude summary from frontmatter; it goes in the body callout
         title = self.get("title", "")
         date = self.get("date", "")
         tags = self.get("tags", "")
         tag_list = tags.split(",") if tags else []
         tag_lines = "".join(f"\n  - {t}" for t in tag_list)
-        return f"---\ntitle: {title}\ndate: {date}\ntags:{tag_lines}\n---\n"
+        return (
+            f"---\ntitle: {title}\ndate: {date}\ntags:{tag_lines}\n"
+            f"consumed_at: {consumed_at}\n---\n"
+        )
 
     @override
     def format_body(self) -> str:
@@ -68,8 +71,8 @@ class DocumentPipeline(Pipeline):
             "underscores, and / are allowed; each tag must contain at least "
             'one non-numeric character; e.g. "finance, tax" or '
             '"medical, insurance, claim"); use broad category tags, not '
-            "document-specific words; omit generic tags like \"document\" "
-            "and year-only tags like \"2024\" or \"y2024\"\n"
+            'document-specific words; omit generic tags like "document" '
+            'and year-only tags like "2024" or "y2024"\n'
             "- summary: a 1-2 sentence summary of the document\n"
             "Respond ONLY with a JSON object containing these four fields, "
             "no additional text!\n\n" + ocr_text[:4000]

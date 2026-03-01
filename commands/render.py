@@ -111,6 +111,13 @@ def render_note(
                 if md.exists() and target_dir.name in md.read_text():
                     click.secho(f"  Removed: {md.name}", fg="green")
                     md.unlink()
+
+    consumed_at = ""
+    metadata_path = target_dir / "src" / "metadata.json"
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text())
+        consumed_at = metadata.get("consumed_at", "")
+
     safe_title = fields.make_title()
 
     md_path = path_dir / f"{safe_title}.md"
@@ -132,7 +139,7 @@ def render_note(
         click.secho(f"  Appended to: {safe_title}", fg="green")
         return safe_title
 
-    frontmatter = fields.format_frontmatter()
+    frontmatter = fields.format_frontmatter(consumed_at=consumed_at)
     body = fields.format_body()
     content = frontmatter + body + embed + meta_embed
     md_path.write_text(content)

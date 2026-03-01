@@ -11,6 +11,7 @@ def _setup_entry_with_llm(
     sha="abc123",
     llm_filename="default.json",
     src_filename="original.pdf",
+    consumed_at="2024-06-01T12:00:00+00:00",
     **fields,
 ):
     """Create a vault entry with LLM JSON ready for rendering."""
@@ -25,8 +26,17 @@ def _setup_entry_with_llm(
     target_dir = vault / "statements" / "_assets_" / sha
     llm_dir = target_dir / "llm"
     llm_dir.mkdir(parents=True)
-    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src").mkdir(parents=True, exist_ok=True)
     (target_dir / "src" / src_filename).write_bytes(b"test")
+    (target_dir / "src" / "metadata.json").write_text(
+        json.dumps(
+            {
+                "original_filepath": "/test/path",
+                "sha256": sha,
+                "consumed_at": consumed_at,
+            }
+        )
+    )
     (llm_dir / llm_filename).write_text(json.dumps(defaults))
     return target_dir
 
@@ -60,6 +70,7 @@ def test_md_created_with_frontmatter(runner, vault):
     assert "end_date: 2024-01-31" in content
     assert "account_name: Checking" in content
     assert 'account_number: "1234"' in content
+    assert "consumed_at: 2024-06-01T12:00:00+00:00" in content
     assert "![[_assets_/sha1/src/original.pdf#height]]" in content
     assert "![[_assets_/sha1/src/metadata.json]]" in content
 

@@ -57,6 +57,7 @@ def test_full_consume_via_cli(
     content = md_file.read_text()
     assert "title: Tax Return 2024" in content
     assert "date: 2024-04-15" in content
+    assert "consumed_at: " in content
     assert "> [!summary]" in content
     assert "> Annual federal tax return filing." in content
     assert f"![[_assets_/{expected_hash}/src/original.pdf#height]]" in content

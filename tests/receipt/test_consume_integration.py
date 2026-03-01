@@ -518,6 +518,7 @@ def test_title_md_created_via_cli(
     assert "merchant: Bookstore" in content
     assert "date: 2024-09-20" in content
     assert "total: $29.99" in content
+    assert "consumed_at: " in content
     assert f"![[_assets_/{sha}/src/original.pdf#height]]" in content
     assert f"![[_assets_/{sha}/src/metadata.json]]" in content
 

@@ -23,21 +23,23 @@ class Fields[K: str](dict[K, str], ABC):
             if not self[key]:
                 self[key] = ""
 
-    def apply_frontmatter(self, frontmatter: dict[K, str]) -> None:
+    def apply_frontmatter(self, frontmatter: dict[str, str]) -> None:
         """Overwrite fields with non-empty frontmatter values."""
-        self |= {k: v for k, v in frontmatter.items() if v}
+        for k in self:
+            if k in frontmatter and frontmatter[k]:
+                self[k] = frontmatter[k]
 
     @abstractmethod
     def make_title(self) -> str:
         """Build a filesystem-safe title from metadata fields."""
 
-    def format_frontmatter(self) -> str:
+    def format_frontmatter(self, *, consumed_at: str = "") -> str:
         """Format fields as YAML frontmatter."""
         fmt = '{}: "{}"'.format
         body = "\n".join(
             fmt(k, v) if v.isdigit() else f"{k}: {v}" for k, v in self.items()
         )
-        return f"---\n{body}\n---\n"
+        return f"---\n{body}\nconsumed_at: {consumed_at}\n---\n"
 
     def format_body(self) -> str:
         """Format optional body content. Default returns empty string."""

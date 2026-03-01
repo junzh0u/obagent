@@ -8,6 +8,7 @@ def _setup_entry_with_llm(
     sha="abc123",
     llm_filename="default.json",
     src_filename="original.pdf",
+    consumed_at="2024-06-01T12:00:00+00:00",
     **fields,
 ):
     """Create a vault entry with LLM JSON ready for rendering."""
@@ -21,8 +22,17 @@ def _setup_entry_with_llm(
     target_dir = vault / "docs" / "_assets_" / sha
     llm_dir = target_dir / "llm"
     llm_dir.mkdir(parents=True)
-    (target_dir / "src").mkdir(parents=True)
+    (target_dir / "src").mkdir(parents=True, exist_ok=True)
     (target_dir / "src" / src_filename).write_bytes(b"test")
+    (target_dir / "src" / "metadata.json").write_text(
+        json.dumps(
+            {
+                "original_filepath": "/test/path",
+                "sha256": sha,
+                "consumed_at": consumed_at,
+            }
+        )
+    )
     (llm_dir / llm_filename).write_text(json.dumps(defaults))
     return target_dir
 
@@ -53,6 +63,7 @@ def test_md_created_with_frontmatter(runner, vault):
     assert "date: 2024-04-15" in fm
     assert "- finance" in fm
     assert "- tax" in fm
+    assert "consumed_at: 2024-06-01T12:00:00+00:00" in fm
     assert "summary" not in fm
     assert "> [!summary]" in content
     assert "> Annual federal tax return filing." in content
@@ -112,7 +123,8 @@ def test_frontmatter_empty_tags():
     """Empty tags produce an empty YAML key."""
     fields = DocumentFields({"title": "Doc", "date": "", "tags": ""})
     fm = fields.format_frontmatter()
-    assert "tags:\n---" in fm
+    assert "tags:\n" in fm
+    assert "tags:\n  -" not in fm
 
 
 def test_format_body_summary_callout():
