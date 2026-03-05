@@ -318,3 +318,27 @@ def test_postprocess_short_account_number():
     fields = BankStatementFields({"account_number": "1234"})
     fields.postprocess()
     assert fields["account_number"] == "1234"
+
+
+def test_postprocess_swaps_end_date_to_date_when_date_empty():
+    """end_date is moved to date when date is empty."""
+    fields = BankStatementFields({"date": "", "end_date": "2024-03-15"})
+    fields.postprocess()
+    assert fields["date"] == "2024-03-15"
+    assert fields.get("end_date", "") == ""
+
+
+def test_postprocess_swaps_end_date_to_date_when_date_missing():
+    """end_date is moved to date when date key is missing."""
+    fields = BankStatementFields({"end_date": "2024-03-15"})
+    fields.postprocess()
+    assert fields["date"] == "2024-03-15"
+    assert fields.get("end_date", "") == ""
+
+
+def test_postprocess_no_swap_when_both_dates_present():
+    """Both date and end_date are kept when both are present."""
+    fields = BankStatementFields({"date": "2024-03-01", "end_date": "2024-03-31"})
+    fields.postprocess()
+    assert fields["date"] == "2024-03-01"
+    assert fields["end_date"] == "2024-03-31"

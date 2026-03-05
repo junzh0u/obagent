@@ -29,6 +29,9 @@ class BankStatementFields(
         if stripped:
             self["account_name"] = stripped
 
+        if not self.get("date") and self.get("end_date"):
+            self["date"] = self.pop("end_date")
+
         num = self.get("account_number", "")
         digits = re.sub(r"\D", "", num)
         if digits:
