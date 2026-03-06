@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, get_args
 
 
 class Fields[K: str](dict[K, str], ABC):
@@ -8,6 +8,17 @@ class Fields[K: str](dict[K, str], ABC):
     Each subclass owns its own postprocess, defaults, title, and formatting logic.
     Defaults are applied automatically on construction.
     """
+
+    @classmethod
+    def expected_keys(cls) -> set[str]:
+        """Return the set of field names declared in the Literal type parameter."""
+        for base in cls.__orig_bases__:
+            args = get_args(base)
+            if args:
+                keys = get_args(args[0])
+                if keys:
+                    return set(keys)
+        return set()
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

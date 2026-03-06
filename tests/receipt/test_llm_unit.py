@@ -212,6 +212,84 @@ def test_llm_picks_newest_ocr_txt(mock_openai_cls, runner, vault):
     assert "old ocr content" not in prompt
 
 
+@patch("commands.llm.OpenAI")
+def test_migrate_re_extracts_when_fields_missing(mock_openai_cls, runner, vault):
+    """--migrate re-runs LLM when existing JSON is missing a field."""
+    setup_mock_openai(
+        mock_openai_cls, merchant="Coffee Shop", date="2024-06-01", total="$5.75"
+    )
+    target_dir = _setup_entry_with_ocr(vault, sha="sha_mig")
+    llm_dir = target_dir / "llm"
+    llm_dir.mkdir(parents=True)
+    # JSON missing "total"
+    (llm_dir / f"{LLM_MODEL}.json").write_text(
+        json.dumps({"merchant": "Old", "date": "2024-01-01"})
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.llm_command,
+        ["--openai-api-key", "test-key", "--migrate"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert "Missing fields, re-extracting" in result.output
+    fields = json.loads((llm_dir / f"{LLM_MODEL}.json").read_text())
+    assert fields["merchant"] == "Coffee Shop"
+    assert fields["total"] == "$5.75"
+
+
+@patch("commands.llm.OpenAI")
+def test_migrate_skips_when_all_fields_present(mock_openai_cls, runner, vault):
+    """--migrate skips entries that already have all expected fields."""
+    setup_mock_openai(mock_openai_cls)
+    target_dir = _setup_entry_with_ocr(vault, sha="sha_mig_skip")
+    llm_dir = target_dir / "llm"
+    llm_dir.mkdir(parents=True)
+    (llm_dir / f"{LLM_MODEL}.json").write_text(
+        json.dumps({"merchant": "Shop", "date": "2024-01-01", "total": "$5.00"})
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.llm_command,
+        ["--openai-api-key", "test-key", "--migrate"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert "already exists, skipping" in result.output
+    mock_openai_cls.return_value.chat.completions.create.assert_not_called()
+
+
+@patch("commands.llm.OpenAI")
+def test_migrate_implies_continue(mock_openai_cls, runner, vault):
+    """--migrate renders after extraction without needing --continue."""
+    setup_mock_openai(
+        mock_openai_cls, merchant="Shop", date="2024-06-01", total="$5.00"
+    )
+    target_dir = _setup_entry_with_ocr(vault, sha="sha_mig_cont")
+    (target_dir / "src").mkdir(parents=True, exist_ok=True)
+    (target_dir / "src" / "original.pdf").write_bytes(b"test")
+    llm_dir = target_dir / "llm"
+    llm_dir.mkdir(parents=True)
+    # Missing "total" to trigger re-extraction
+    (llm_dir / f"{LLM_MODEL}.json").write_text(
+        json.dumps({"merchant": "Old", "date": "2024-01-01"})
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.llm_command,
+        ["--openai-api-key", "test-key", "--migrate"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert "Extracted:" in result.output
+    assert "Title:" in result.output
+    md_files = list((vault / "papers").glob("*.md"))
+    assert len(md_files) == 1
+
+
 @pytest.mark.parametrize(
     "raw, expected",
     [
