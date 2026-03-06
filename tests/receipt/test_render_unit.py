@@ -59,6 +59,30 @@ def test_md_created_with_frontmatter(runner, vault):
     assert "Title: 2024-06-01 - Coffee Shop - $5.75" in result.output
 
 
+def test_prompt_in_json_excluded_from_frontmatter(runner, vault):
+    """A 'prompt' key in the LLM JSON is not rendered into frontmatter."""
+    target_dir = _setup_entry_with_llm(
+        vault, sha="sha_pp", merchant="Shop", date="2024-01-01", total="$5.00"
+    )
+    # Add a prompt key to the JSON (as the llm command now does)
+    llm_json = target_dir / "llm" / "default.json"
+    data = json.loads(llm_json.read_text())
+    data["prompt"] = "Extract the following fields..."
+    llm_json.write_text(json.dumps(data))
+
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    md_file = vault / "papers" / "2024-01-01 - Shop - $5.00.md"
+    assert md_file.exists()
+    content = md_file.read_text()
+    assert "prompt" not in content
+
+
 def test_sanitizes_unsafe_characters(runner, vault):
     """Unsafe filename characters are stripped from the title."""
     _setup_entry_with_llm(

@@ -58,12 +58,13 @@ class DocumentPipeline(Pipeline):
     def default_path(self) -> str:
         return "Documents"
 
+    @property
     @override
-    def prompt(self, path: str, ocr_text: str) -> str:
+    def prompt_template(self) -> str:
         return (
             "I will provide you with the content of a document that has been "
             "partially read by OCR (so it may contain errors).\n"
-            f'The document is stored under the path "{path}".\n'
+            'The document is stored under the path "{path}".\n'
             "Extract the following fields:\n"
             "- title: a concise, descriptive document title that captures the "
             "key subject and the sender or organization (do not just copy a "
@@ -80,7 +81,7 @@ class DocumentPipeline(Pipeline):
             'and year-only tags like "2024" or "y2024"\n'
             "- summary: a 1-2 sentence summary of the document\n"
             "Respond ONLY with a JSON object containing these four fields, "
-            "no additional text!\n\n" + ocr_text[:4000]
+            "no additional text!\n\n{ocr_text}"
         )
 
 

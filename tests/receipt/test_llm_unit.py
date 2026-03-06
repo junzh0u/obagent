@@ -49,6 +49,31 @@ def test_llm_json_created(mock_openai_cls, runner, vault):
 
 
 @patch("commands.llm.OpenAI")
+def test_llm_json_includes_prompt(mock_openai_cls, runner, vault):
+    """llm/<LLM_MODEL>.json includes the prompt used for extraction."""
+    setup_mock_openai(
+        mock_openai_cls, merchant="Coffee Shop", date="2024-06-01", total="$5.75"
+    )
+    _setup_entry_with_ocr(vault, sha="sha_prompt_saved")
+
+    result = runner.invoke(
+        receipt_pipeline.llm_command,
+        ["--openai-api-key", "test-key"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    target_dir = vault / "papers" / "_assets_" / "sha_prompt_saved"
+    json_path = target_dir / "llm" / f"{LLM_MODEL}.json"
+    data = json.loads(json_path.read_text())
+    assert "prompt" in data
+    assert "partially read by OCR" in data["prompt"]
+    assert "{path}" in data["prompt"]
+    assert "{ocr_text}" in data["prompt"]
+    assert "# Page 1" not in data["prompt"]
+
+
+@patch("commands.llm.OpenAI")
 def test_llm_uses_openai_gpt5_mini(mock_openai_cls, runner, vault):
     """Field extraction calls OpenAI with correct model and OCR text."""
     mock_openai_client = setup_mock_openai(mock_openai_cls)

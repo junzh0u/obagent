@@ -38,12 +38,13 @@ def extract_fields(
         return None
     ocr_text = txt_path.read_text()
 
+    prompt_text = pipeline.prompt(path, ocr_text)
     response = client.chat.completions.create(
         model=model,
         messages=[
             {
                 "role": "user",
-                "content": pipeline.prompt(path, ocr_text),
+                "content": prompt_text,
             },
         ],
     )
@@ -54,7 +55,9 @@ def extract_fields(
     raw = content.strip()
     fields = pipeline.fields_class(json.loads(raw))
     llm_dir.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(fields, indent=2) + "\n")
+    json_path.write_text(
+        json.dumps({**fields, "prompt": pipeline.prompt_template}, indent=2) + "\n"
+    )
     click.secho(f"  Extracted: {fields}", fg="green")
     return fields
 

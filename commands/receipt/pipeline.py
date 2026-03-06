@@ -108,19 +108,20 @@ class ReceiptPipeline(Pipeline):
     def default_path(self) -> str:
         return "Receipts"
 
+    @property
     @override
-    def prompt(self, path: str, ocr_text: str) -> str:
+    def prompt_template(self) -> str:
         return (
             "I will provide you with the content of a document that has been "
             "partially read by OCR (so it may contain errors).\n"
-            f'The document is stored under the path "{path}".\n'
+            'The document is stored under the path "{path}".\n'
             "Extract the following fields:\n"
             "- merchant: the merchant or vendor name (short brand name only in title case, "
             "preserve acronyms like CVS or IKEA, omit store numbers, locations, and addresses)\n"
             "- date: the document date in YYYY-MM-DD format\n"
             "- total: the total amount with currency symbol only, no currency code or name\n"
             "Respond ONLY with a JSON object containing these three fields, "
-            "no additional text!\n\n" + ocr_text[:4000]
+            "no additional text!\n\n{ocr_text}"
         )
 
 

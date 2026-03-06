@@ -11,6 +11,7 @@ class Fields[K: str](dict[K, str], ABC):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.pop("prompt", None)
         self.postprocess()
         self.apply_defaults()
 

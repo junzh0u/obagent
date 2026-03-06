@@ -69,12 +69,13 @@ class BankStatementPipeline(Pipeline):
     def default_path(self) -> str:
         return "Bank Statements"
 
+    @property
     @override
-    def prompt(self, path: str, ocr_text: str) -> str:
+    def prompt_template(self) -> str:
         return (
             "I will provide you with the content of a document that has been "
             "partially read by OCR (so it may contain errors).\n"
-            f'The document is stored under the path "{path}".\n'
+            'The document is stored under the path "{path}".\n'
             "Extract the following fields:\n"
             "- date: the statement start date in YYYY-MM-DD format\n"
             "- end_date: the statement end date in YYYY-MM-DD format "
@@ -89,7 +90,7 @@ class BankStatementPipeline(Pipeline):
             '"Blue Cash Preferred")\n'
             "- account_number: the last 4 digits of the account number only\n"
             "Respond ONLY with a JSON object containing these five fields, "
-            "no additional text!\n\n" + ocr_text[:4000]
+            "no additional text!\n\n{ocr_text}"
         )
 
 

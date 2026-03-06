@@ -27,9 +27,14 @@ class Pipeline(ABC):
     def default_path(self) -> str:
         """Default vault subdirectory for this document type (e.g. 'Receipts')."""
 
+    @property
     @abstractmethod
+    def prompt_template(self) -> str:
+        """Prompt template with ``{path}`` and ``{ocr_text}`` placeholders."""
+
     def prompt(self, path: str, ocr_text: str) -> str:
         """Build the LLM prompt for field extraction."""
+        return self.prompt_template.format(path=path, ocr_text=ocr_text[:4000])
 
     @property
     def help_consume(self) -> str:
