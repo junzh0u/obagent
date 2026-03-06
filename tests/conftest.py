@@ -113,11 +113,12 @@ def mock_chat_response_doc(
     title="Tax Return 2024",
     date="2024-04-15",
     tags="finance, tax",
+    people="",
     summary="Annual federal tax return filing.",
 ):
     """Create a mock OpenAI chat completion response for document extraction."""
     content = json.dumps(
-        {"title": title, "date": date, "tags": tags, "summary": summary}
+        {"title": title, "date": date, "tags": tags, "people": people, "summary": summary}
     )
     message = SimpleNamespace(content=content)
     choice = SimpleNamespace(message=message)

@@ -65,6 +65,7 @@ def test_llm_prompt_content(mock_openai_cls, runner, vault):
     assert "title" in prompt
     assert "date" in prompt
     assert "tags" in prompt
+    assert "people" in prompt
     assert "summary" in prompt
     assert "JSON" in prompt
     assert '"docs"' in prompt
@@ -76,6 +77,7 @@ def test_prompt_function():
     assert "title" in prompt
     assert "date" in prompt
     assert "tags" in prompt
+    assert "people" in prompt
     assert "summary" in prompt
     assert "OCR text here" in prompt
     assert '"Documents"' in prompt

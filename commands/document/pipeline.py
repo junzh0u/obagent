@@ -8,7 +8,7 @@ from constants import TITLE_UNSAFE_CHARS
 TAG_CHARS = re.compile(r"[^a-zA-Z0-9_/\-]")
 
 
-class DocumentFields(Fields[Literal["title", "date", "tags", "summary"]]):
+class DocumentFields(Fields[Literal["title", "date", "tags", "people", "summary"]]):
     @override
     def postprocess(self) -> None:
         tags = self.get("tags", "")
@@ -32,9 +32,12 @@ class DocumentFields(Fields[Literal["title", "date", "tags", "summary"]]):
         tags = self.get("tags", "")
         tag_list = tags.split(",") if tags else []
         tag_lines = "".join(f"\n  - {t}" for t in tag_list)
+        people = self.get("people", "")
+        people_list = [p.strip() for p in people.split(",") if p.strip()] if people else []
+        people_lines = "".join(f"\n  - {p}" for p in people_list)
         return (
             f"---\ntitle: {title}\ndate: {date}\ntags:{tag_lines}\n"
-            f"consumed_at: {consumed_at}\n---\n"
+            f"people:{people_lines}\nconsumed_at: {consumed_at}\n---\n"
         )
 
     @override
@@ -79,8 +82,13 @@ class DocumentPipeline(Pipeline):
             '"medical, insurance, claim"); use broad category tags, not '
             'document-specific words; omit generic tags like "document" '
             'and year-only tags like "2024" or "y2024"\n'
+            "- people: a comma-separated list of people names relevant to the "
+            "document (e.g. recipients, senders, account holders, signers); "
+            'format each name as "First Last" in title case '
+            "(e.g. \"John Smith\", not \"SMITH, JOHN\" or \"john smith\"); "
+            "empty string if no specific people are mentioned\n"
             "- summary: a 1-2 sentence summary of the document\n"
-            "Respond ONLY with a JSON object containing these four fields, "
+            "Respond ONLY with a JSON object containing these five fields, "
             "no additional text!\n\n{ocr_text}"
         )
 
