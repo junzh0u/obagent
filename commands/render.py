@@ -105,8 +105,11 @@ def render_note(
         entry = note_index.get(target_dir.name)
         if entry:
             existing_fm, md_paths = entry
-            if not overwrite and existing_fm:
-                fields.apply_frontmatter(existing_fm)
+            if existing_fm:
+                if overwrite:
+                    fields.fill_gaps(existing_fm)
+                else:
+                    fields.apply_frontmatter(existing_fm)
             for md in md_paths:
                 if md.exists() and target_dir.name in md.read_text():
                     click.secho(f"  Removed: {md.name}", fg="green")
@@ -161,9 +164,7 @@ def make_render_command(*, pipeline: Pipeline) -> click.Command:
     def render(ctx, overwrite, sha256):
         vault = Path(ctx.obj["vault"])
         path = ctx.obj["path"]
-        note_index = None
-        if sha256 or not overwrite:
-            note_index = index_existing_notes(vault / path)
+        note_index = index_existing_notes(vault / path)
         if sha256:
             entries = [vault / path / ASSETS_DIR / s for s in sha256]
         else:
@@ -198,9 +199,7 @@ def render_all(ctx, overwrite):
     for pipeline in Pipeline._registry:
         path = pipeline.default_path
         click.secho(f"\n=== {pipeline.name.title()} ({path}) ===", bold=True)
-        note_index = None
-        if not overwrite:
-            note_index = index_existing_notes(vault / path)
+        note_index = index_existing_notes(vault / path)
         _clear_notes(vault / path)
         for target_dir in interruptible(iter_entries(vault, path)):
             click.secho(f"Render: {target_dir}", bold=True)

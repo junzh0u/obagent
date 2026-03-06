@@ -439,6 +439,30 @@ def test_overwrite_discards_edited_merchant(runner, vault):
     assert "My Shop" not in final_content
 
 
+def test_overwrite_fills_empty_fields_from_frontmatter(runner, vault):
+    """With --overwrite, empty LLM fields are filled from existing frontmatter."""
+    _setup_entry_with_llm(
+        vault, sha="sha_fill", merchant="", date="2024-05-01", total="$25.00"
+    )
+    # Create existing note with a merchant value
+    old_md = vault / "papers" / "2024-05-01 - Old Shop - $25.00.md"
+    old_md.write_text(
+        '---\nmerchant: "Old Shop"\ndate: "2024-05-01"\ntotal: "$25.00"\n---\n'
+        "![[_assets_/sha_fill/src/original.pdf#height]]\n"
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        ["--overwrite", "sha_fill"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    final_md = vault / "papers" / "2024-05-01 - Old Shop - $25.00.md"
+    assert final_md.exists()
+    assert "merchant: Old Shop" in final_md.read_text()
+
+
 def test_consumed_at_not_overwritten_by_frontmatter(runner, vault):
     """consumed_at is always from metadata.json, not from existing frontmatter."""
     _setup_entry_with_llm(

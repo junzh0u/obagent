@@ -30,6 +30,12 @@ class Fields[K: str](dict[K, str], ABC):
             if k in frontmatter and frontmatter[k]:
                 self[k] = frontmatter[k]
 
+    def fill_gaps(self, frontmatter: dict[str, str]) -> None:
+        """Fill empty fields with values from frontmatter."""
+        for k in self:
+            if not self[k] and k in frontmatter and frontmatter[k]:
+                self[k] = frontmatter[k]
+
     @abstractmethod
     def make_title(self) -> str:
         """Build a filesystem-safe title from metadata fields."""
