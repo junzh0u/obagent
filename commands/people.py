@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 import click
+import questionary
 
 from commands.render import _parse_frontmatter
 
@@ -89,11 +90,8 @@ def rename(ctx, old_name, new_name):
     click.secho(f"{count} file(s) updated", bold=True)
 
 
-@people.command("list")
-@click.pass_context
-def list_people(ctx):
-    """List all unique people names across vault notes."""
-    vault = Path(ctx.obj["vault"])
+def _collect_names(vault: Path) -> list[str]:
+    """Return sorted unique people names across all vault notes."""
     names: set[str] = set()
     for md in _iter_notes(vault):
         fm = _parse_frontmatter(md.read_text())
@@ -102,17 +100,38 @@ def list_people(ctx):
                 n = n.strip()
                 if n:
                     names.add(n)
-    for name in sorted(names):
+    return sorted(names)
+
+
+@people.command("list")
+@click.pass_context
+def list_people(ctx):
+    """List all unique people names across vault notes."""
+    vault = Path(ctx.obj["vault"])
+    for name in _collect_names(vault):
         click.echo(name)
 
 
 @people.command()
-@click.argument("names", nargs=-1, required=True)
+@click.argument("names", nargs=-1)
 @click.pass_context
 def remove(ctx, names):
     """Remove one or more people from all notes in the vault."""
     vault = Path(ctx.obj["vault"])
-    to_remove = set(names)
+    if not names:
+        all_names = _collect_names(vault)
+        if not all_names:
+            click.echo("No people found in vault.")
+            return
+        selected = questionary.checkbox(
+            "Select people to remove:", choices=all_names
+        ).ask()
+        if not selected:
+            click.echo("No names selected.")
+            return
+        to_remove = set(selected)
+    else:
+        to_remove = set(names)
     count = 0
     for md in _iter_notes(vault):
         if _remove_in_file(md, to_remove):
