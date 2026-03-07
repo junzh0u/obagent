@@ -460,6 +460,47 @@ def test_shared_md_preserves_all_embeds(runner, vault):
     assert "![[_assets_/dup_b/src/original.pdf#height]]" in content
 
 
+def test_shared_md_render_is_idempotent(runner, vault):
+    """Re-rendering a shared note twice produces identical output."""
+    _setup_entry_with_llm(
+        vault,
+        sha="dup_x",
+        consumed_at="2024-01-01T00:00:00+00:00",
+    )
+    _setup_entry_with_llm(
+        vault,
+        sha="dup_y",
+        consumed_at="2024-02-01T00:00:00+00:00",
+    )
+    shared_md = vault / "papers" / "2024-01-15 - ACME Store - $42.50.md"
+    shared_md.write_text(
+        "---\nmerchant: ACME Store\ndate: 2024-01-15\ntotal: $42.50\n"
+        "consumed_at: 2024-01-01T00:00:00+00:00\n---\n"
+        "![[_assets_/dup_x/src/original.pdf#height]]\n"
+        "![[_assets_/dup_x/src/metadata.json]]\n"
+        "![[_assets_/dup_y/src/original.pdf#height]]\n"
+        "![[_assets_/dup_y/src/metadata.json]]\n"
+    )
+
+    # First re-render
+    runner.invoke(
+        receipt_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+    content_after_first = shared_md.read_text()
+
+    # Second re-render
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert shared_md.read_text() == content_after_first
+
+
 def test_overwrite_discards_edited_merchant(runner, vault):
     """With --overwrite, manually-edited frontmatter is ignored and LLM values are used."""
     _setup_entry_with_llm(
@@ -519,8 +560,8 @@ def test_overwrite_fills_empty_fields_from_frontmatter(runner, vault):
     assert "merchant: Old Shop" in final_md.read_text()
 
 
-def test_consumed_at_not_overwritten_by_frontmatter(runner, vault):
-    """consumed_at is always from metadata.json, not from existing frontmatter."""
+def test_consumed_at_preserved_from_frontmatter(runner, vault):
+    """consumed_at from existing frontmatter is preserved for idempotency."""
     _setup_entry_with_llm(
         vault,
         sha="sha_ca",
@@ -545,8 +586,7 @@ def test_consumed_at_not_overwritten_by_frontmatter(runner, vault):
     assert result.exit_code == 0
     final_md = vault / "papers" / "2024-01-01 - Shop - $1.00.md"
     content = final_md.read_text()
-    assert "consumed_at: 2024-06-01T12:00:00+00:00" in content
-    assert "1999-01-01" not in content
+    assert "consumed_at: 1999-01-01T00:00:00+00:00" in content
 
 
 def test_missing_metadata_json_empty_consumed_at(runner, vault):

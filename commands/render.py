@@ -145,11 +145,18 @@ def render_note(
                 else:
                     fields.apply_frontmatter(existing_fm)
 
+    # Preserve existing consumed_at from frontmatter for idempotency;
+    # only read from metadata.json for new notes.
     consumed_at = ""
-    metadata_path = target_dir / "src" / "metadata.json"
-    if metadata_path.exists():
-        metadata = json.loads(metadata_path.read_text())
-        consumed_at = metadata.get("consumed_at", "")
+    if note_index:
+        entry = note_index.get(target_dir.name)
+        if entry and entry[0]:
+            consumed_at = entry[0].get("consumed_at", "")
+    if not consumed_at:
+        metadata_path = target_dir / "src" / "metadata.json"
+        if metadata_path.exists():
+            metadata = json.loads(metadata_path.read_text())
+            consumed_at = metadata.get("consumed_at", "")
 
     safe_title = fields.make_title()
 
@@ -175,14 +182,23 @@ def render_note(
 
     if old_md is not None:
         if old_md == md_path:
-            # Same path — check if content changed
-            if old_md.read_text() == content:
-                return md_path, "unchanged"
-            # Shared note (has other embeds): only check frontmatter portion
             old_text = old_md.read_text()
+            # Same path — check if content changed
+            if old_text == content:
+                return md_path, "unchanged"
+            # Shared note (has other embeds): preserve embed order
             if embed in old_text and old_text.startswith(frontmatter + body):
                 return md_path, "unchanged"
-            md_path.write_text(content)
+            # Rebuild content preserving existing embeds from other shas
+            embed_lines = [
+                ln + "\n" for ln in old_text.split("\n") if ln.startswith("![[")
+            ]
+            if embed not in embed_lines:
+                embed_lines.extend([embed, meta_embed])
+            new_content = frontmatter + body + "".join(embed_lines)
+            if old_text == new_content:
+                return md_path, "unchanged"
+            md_path.write_text(new_content)
             _log_target()
             click.secho(f"  Updated: {safe_title}", fg="green")
             return md_path, "updated"
