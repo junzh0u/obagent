@@ -70,6 +70,9 @@ class DocumentPipeline(Pipeline):
             "I will provide you with the content of a document that has been "
             "partially read by OCR (so it may contain errors).\n"
             'The document is stored under the path "{path}".\n'
+            'The original filename is "{filename}".\n'
+            "The filename may contain useful hints, but prefer the document "
+            "content when it provides clear information.\n"
             "Extract the following fields:\n"
             "- title: a concise, descriptive document title that captures the "
             "key subject and the sender or organization (do not just copy a "

@@ -30,11 +30,13 @@ class Pipeline(ABC):
     @property
     @abstractmethod
     def prompt_template(self) -> str:
-        """Prompt template with ``{path}`` and ``{ocr_text}`` placeholders."""
+        """Prompt template with ``{path}``, ``{filename}``, and ``{ocr_text}`` placeholders."""
 
-    def prompt(self, path: str, ocr_text: str) -> str:
+    def prompt(self, path: str, ocr_text: str, filename: str = "") -> str:
         """Build the LLM prompt for field extraction."""
-        return self.prompt_template.format(path=path, ocr_text=ocr_text[:4000])
+        return self.prompt_template.format(
+            path=path, filename=filename, ocr_text=ocr_text[:4000]
+        )
 
     @property
     def help_consume(self) -> str:

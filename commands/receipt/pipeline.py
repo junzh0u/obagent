@@ -115,6 +115,9 @@ class ReceiptPipeline(Pipeline):
             "I will provide you with the content of a document that has been "
             "partially read by OCR (so it may contain errors).\n"
             'The document is stored under the path "{path}".\n'
+            'The original filename is "{filename}".\n'
+            "The filename may contain useful hints, but prefer the document "
+            "content when it provides clear information.\n"
             "Extract the following fields:\n"
             "- merchant: the merchant or vendor name (short brand name only in title case, "
             "preserve acronyms like CVS or IKEA, omit store numbers, locations, and addresses)\n"

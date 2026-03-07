@@ -48,7 +48,15 @@ def extract_fields(
         return None
     ocr_text = txt_path.read_text()
 
-    prompt_text = pipeline.prompt(path, ocr_text)
+    filename = ""
+    metadata_path = target_dir / "src" / "metadata.json"
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text())
+        orig = metadata.get("original_filepath", "")
+        if orig:
+            filename = Path(orig).name
+
+    prompt_text = pipeline.prompt(path, ocr_text, filename)
     response = client.chat.completions.create(
         model=model,
         messages=[
