@@ -57,6 +57,9 @@ def _parse_frontmatter(text: str) -> dict[str, str] | None:
     return fields
 
 
+_SUMMARY_RE = re.compile(r"> \[!summary]\n> (.+)")
+
+
 def index_existing_notes(
     path_dir: Path,
 ) -> dict[str, tuple[dict[str, str] | None, list[Path]]]:
@@ -72,6 +75,9 @@ def index_existing_notes(
         if not shas:
             continue
         fm = _parse_frontmatter(text)
+        m = _SUMMARY_RE.search(text)
+        if m and fm is not None:
+            fm["summary"] = m.group(1)
         for sha in shas:
             if sha not in index:
                 index[sha] = (fm, [md])

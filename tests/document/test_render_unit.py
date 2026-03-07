@@ -182,6 +182,77 @@ def test_frontmatter_empty_people():
     assert "people:\n  -" not in fm
 
 
+def test_manual_summary_edit_preserved(runner, vault):
+    """Manually edited summary in body callout is preserved on re-render."""
+    _setup_entry_with_llm(
+        vault,
+        sha="sha_sum",
+        title="Insurance Policy",
+        date="2024-01-01",
+        tags="insurance",
+        summary="Original summary.",
+    )
+    # First render
+    runner.invoke(
+        document_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+    # Manually edit the summary callout
+    md_file = vault / "docs" / "2024-01-01 - Insurance Policy.md"
+    assert md_file.exists()
+    content = md_file.read_text()
+    content = content.replace("> Original summary.", "> Edited summary.")
+    md_file.write_text(content)
+
+    # Re-render (without --overwrite)
+    result = runner.invoke(
+        document_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+
+    assert result.exit_code == 0
+    final_content = md_file.read_text()
+    assert "> Edited summary." in final_content
+    assert "Original summary" not in final_content
+
+
+def test_overwrite_restores_llm_summary(runner, vault):
+    """With --overwrite, LLM summary replaces manually edited summary."""
+    _setup_entry_with_llm(
+        vault,
+        sha="sha_sum_ow",
+        title="Insurance Policy",
+        date="2024-01-01",
+        tags="insurance",
+        summary="LLM summary.",
+    )
+    # First render
+    runner.invoke(
+        document_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+    # Manually edit the summary
+    md_file = vault / "docs" / "2024-01-01 - Insurance Policy.md"
+    content = md_file.read_text()
+    content = content.replace("> LLM summary.", "> Edited summary.")
+    md_file.write_text(content)
+
+    # Re-render with --overwrite
+    result = runner.invoke(
+        document_pipeline.render_command,
+        ["--overwrite", "sha_sum_ow"],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+
+    assert result.exit_code == 0
+    final_content = md_file.read_text()
+    assert "> LLM summary." in final_content
+    assert "Edited summary" not in final_content
+
+
 def test_format_body_summary_callout():
     """format_body renders summary as an Obsidian callout."""
     fields = DocumentFields({"summary": "A short summary."})
