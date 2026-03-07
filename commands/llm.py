@@ -24,6 +24,7 @@ def extract_fields(
     overwrite: bool = False,
     migrate: bool = False,
     pipeline: Pipeline,
+    save_prompt: bool = False,
 ) -> dict[str, str] | None:
     """Use OpenAI to extract metadata from OCR text and save as JSON.
 
@@ -73,8 +74,9 @@ def extract_fields(
     raw = content.strip()
     fields = pipeline.fields_class(json.loads(raw))
     llm_dir.mkdir(parents=True, exist_ok=True)
+    saved_prompt = prompt_text if save_prompt else pipeline.prompt_template
     json_path.write_text(
-        json.dumps({**fields, "prompt": pipeline.prompt_template}, indent=2) + "\n"
+        json.dumps({**fields, "prompt": saved_prompt}, indent=2) + "\n"
     )
     click.secho(f"  Extracted: {fields}", fg="green")
     return fields
@@ -110,9 +112,23 @@ def make_llm_command(*, pipeline: Pipeline) -> click.Command:
         is_flag=True,
         help="Re-extract only entries with missing fields, then render.",
     )
+    @click.option(
+        "--save-prompt",
+        is_flag=True,
+        help="Save the full rendered prompt instead of the template.",
+    )
     @click.argument("sha256", nargs=-1)
     @click.pass_context
-    def llm(ctx, openai_api_key, llm_model, overwrite, continue_, migrate, sha256):
+    def llm(
+        ctx,
+        openai_api_key,
+        llm_model,
+        overwrite,
+        continue_,
+        migrate,
+        save_prompt,
+        sha256,
+    ):
         vault = Path(ctx.obj["vault"])
         path = ctx.obj["path"]
         if sha256:
@@ -127,6 +143,8 @@ def make_llm_command(*, pipeline: Pipeline) -> click.Command:
 
             note_index = index_existing_notes(vault / path)
 
+        pipeline.prepare_context(vault)
+
         with OpenAI(api_key=openai_api_key) as client:
             for target_dir in interruptible(entries):
                 click.secho(f"LLM: {target_dir}", bold=True)
@@ -139,6 +157,7 @@ def make_llm_command(*, pipeline: Pipeline) -> click.Command:
                         overwrite=overwrite,
                         migrate=migrate,
                         pipeline=pipeline,
+                        save_prompt=save_prompt,
                     )
                 except Exception as e:
                     click.secho(f"  Warning: field extraction failed: {e}", fg="red")

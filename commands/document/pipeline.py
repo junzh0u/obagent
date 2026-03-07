@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from typing import Literal, override
 
 from commands.fields import Fields
@@ -52,6 +53,7 @@ class DocumentFields(Fields[Literal["title", "date", "tags", "people", "summary"
 
 class DocumentPipeline(Pipeline):
     fields_class = DocumentFields
+    _known_names: list[str] = []
 
     @property
     @override
@@ -62,6 +64,32 @@ class DocumentPipeline(Pipeline):
     @override
     def default_path(self) -> str:
         return "Documents"
+
+    @override
+    def prepare_context(self, vault: Path) -> None:
+        from commands.people import _collect_names
+
+        self._known_names = _collect_names(vault)
+
+    @override
+    def prompt(self, path: str, ocr_text: str, filename: str = "") -> str:
+        known_names_block = ""
+        if self._known_names:
+            joined = ", ".join(self._known_names)
+            known_names_block = (
+                f"Known people names in the vault: [{joined}]\n"
+                "You MUST use the exact full name from this list when the "
+                'person matches (e.g. if the list has "Zoey Zhou" and the '
+                'document mentions "Zoey", output "Zoey Zhou"). '
+                "Only introduce a new name if you are confident the person "
+                "is not already on the list.\n"
+            )
+        return self.prompt_template.format(
+            path=path,
+            filename=filename,
+            ocr_text=ocr_text[:4000],
+            known_names=known_names_block,
+        )
 
     @property
     @override
@@ -87,6 +115,7 @@ class DocumentPipeline(Pipeline):
             '"medical, insurance, claim"); use broad category tags, not '
             'document-specific words; omit generic tags like "document" '
             'and year-only tags like "2024" or "y2024"\n'
+            "{known_names}"
             "- people: a comma-separated list of people names relevant to the "
             "document (e.g. recipients, senders, account holders, signers); "
             'format each name as "First Last" in title case '

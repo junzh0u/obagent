@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
+from pathlib import Path
 from typing import ClassVar
 
 import click
@@ -37,6 +38,12 @@ class Pipeline(ABC):
         return self.prompt_template.format(
             path=path, filename=filename, ocr_text=ocr_text[:4000]
         )
+
+    def prepare_context(self, vault: Path) -> None:
+        """Collect any vault-wide context needed before LLM extraction.
+
+        Called once before processing entries. Default is no-op.
+        """
 
     @property
     def help_consume(self) -> str:

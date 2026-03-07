@@ -83,6 +83,24 @@ def test_prompt_function():
     assert '"Documents"' in prompt
 
 
+def test_prompt_includes_known_names(tmp_path):
+    """Known names are included in the prompt after prepare_context."""
+    from commands.document.pipeline import DocumentPipeline
+
+    p = DocumentPipeline.__new__(DocumentPipeline)
+    p._known_names = ["Alice Smith", "Bob Jones"]
+    prompt = p.prompt("Documents", "OCR text")
+    assert "Alice Smith" in prompt
+    assert "Bob Jones" in prompt
+    assert "MUST use the exact full name" in prompt
+
+
+def test_prompt_without_known_names():
+    """No known-names block when no context has been prepared."""
+    prompt = document_pipeline.prompt("Documents", "OCR text")
+    assert "Known people names" not in prompt
+
+
 @patch("commands.llm.OpenAI")
 def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
     """--continue triggers render after successful LLM extraction."""
