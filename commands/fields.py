@@ -12,7 +12,7 @@ class Fields[K: str](dict[K, str], ABC):
     @classmethod
     def expected_keys(cls) -> set[str]:
         """Return the set of field names declared in the Literal type parameter."""
-        for base in cls.__orig_bases__:
+        for base in cls.__orig_bases__:  # type: ignore[attr-defined]
             args = get_args(base)
             if args:
                 keys = get_args(args[0])
@@ -22,7 +22,7 @@ class Fields[K: str](dict[K, str], ABC):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.pop("prompt", None)
+        self.pop("prompt", None)  # type: ignore[arg-type]
         self.postprocess()
         self.apply_defaults()
 

@@ -20,19 +20,36 @@ def _parse_frontmatter(text: str) -> dict[str, str] | None:
     """Extract frontmatter fields from markdown text.
 
     Returns a dict of key-value pairs, or None if no valid frontmatter found.
+    Handles YAML list values (``- item``) by joining them as comma-separated.
     """
     lines = text.split("\n")
     if not lines or lines[0].strip() != "---":
         return None
 
-    fields = {}
+    fields: dict[str, str] = {}
+    current_key: str | None = None
+    list_items: list[str] = []
+
+    def _flush() -> None:
+        if current_key is not None and list_items:
+            fields[current_key] = ",".join(list_items)
+
     for line in lines[1:]:
         if line.strip() == "---":
+            _flush()
             break
+        if line.startswith("  - "):
+            list_items.append(line[4:].strip())
+            continue
+        _flush()
+        list_items = []
         if ":" in line:
             key, _, value = line.partition(":")
             value = value.strip().strip('"')
-            fields[key.strip()] = value
+            current_key = key.strip()
+            fields[current_key] = value
+        else:
+            current_key = None
     else:
         return None
 
@@ -62,13 +79,12 @@ def index_existing_notes(
     return index
 
 
-def _clear_notes(path_dir: Path) -> None:
-    """Delete all .md files in path_dir."""
-    mds = list(path_dir.glob("*.md"))
-    for md in mds:
-        md.unlink()
-    if mds:
-        click.secho(f"  Removed {len(mds)} notes", fg="green")
+def _remove_orphans(path_dir: Path, rendered: set[Path]) -> None:
+    """Delete .md files in path_dir that were not rendered (orphans)."""
+    for md in path_dir.glob("*.md"):
+        if md not in rendered:
+            click.secho(f"  Removed: {md.name}", fg="green")
+            md.unlink()
 
 
 def render_note(
@@ -77,20 +93,14 @@ def render_note(
     overwrite: bool = False,
     note_index: dict[str, tuple[dict[str, str] | None, list[Path]]] | None = None,
     pipeline: Pipeline,
-) -> str | None:
+) -> Path | None:
     """Read LLM JSON and create an Obsidian markdown note.
 
     Writes .md to target_dir's grandparent (vault/path/) for a flat, browsable layout.
-    When note_index is provided, deletes any existing .md referencing this sha256
-    and preserves manually-edited frontmatter (unless overwrite=True).
-    If .md already exists with a different sha256, appends the PDF embed.
-    Returns safe_title on success, None if skipped.
-
-    note_index: pre-built {sha: (frontmatter, [md_paths])} from
-    index_existing_notes; used for per-entry cleanup and frontmatter preservation.
-    overwrite: if True, discard existing frontmatter and use fresh LLM values.
-    pipeline: Pipeline providing apply_defaults(), make_title(),
-    format_frontmatter(), and format_body().
+    When note_index is provided, preserves manually-edited frontmatter (unless
+    overwrite=True).  Compares new content against existing note and only writes
+    when something actually changed.
+    Returns the md_path on success, None if skipped.
     """
     json_path = newest_file(target_dir / "llm", "*.json")
     if json_path is None:
@@ -101,19 +111,16 @@ def render_note(
 
     fields = pipeline.fields_class(json.loads(json_path.read_text()))
 
+    old_md_paths: list[Path] = []
     if note_index:
         entry = note_index.get(target_dir.name)
         if entry:
-            existing_fm, md_paths = entry
+            existing_fm, old_md_paths = entry
             if existing_fm:
                 if overwrite:
                     fields.fill_gaps(existing_fm)
                 else:
                     fields.apply_frontmatter(existing_fm)
-            for md in md_paths:
-                if md.exists() and target_dir.name in md.read_text():
-                    click.secho(f"  Removed: {md.name}", fg="green")
-                    md.unlink()
 
     consumed_at = ""
     metadata_path = target_dir / "src" / "metadata.json"
@@ -132,22 +139,52 @@ def render_note(
     embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/{src_name}{anchor}]]\n"
     meta_embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/metadata.json]]\n"
 
+    frontmatter = fields.format_frontmatter(consumed_at=consumed_at)
+    body = fields.format_body()
+    content = frontmatter + body + embed + meta_embed
+
+    # Find existing note for this sha
+    old_md = None
+    for candidate in old_md_paths:
+        if candidate.exists() and target_dir.name in candidate.read_text():
+            old_md = candidate
+            break
+
+    if old_md is not None:
+        if old_md == md_path:
+            # Same path — check if content changed
+            if old_md.read_text() == content:
+                click.secho("  Unchanged", fg="yellow")
+                return md_path
+            # Shared note (has other embeds): only check frontmatter portion
+            old_text = old_md.read_text()
+            if embed in old_text and old_text.startswith(frontmatter + body):
+                click.secho("  Unchanged", fg="yellow")
+                return md_path
+            md_path.write_text(content)
+            click.secho(f"  Updated: {safe_title}", fg="green")
+            return md_path
+        # Title changed — delete old, create at new path
+        old_md.unlink()
+        click.secho(f"  Renamed: {old_md.name} -> {md_path.name}", fg="green")
+        md_path.write_text(content)
+        return md_path
+
+    # No existing note for this sha
     if md_path.exists():
+        # Another sha already has a note at this path — append
         if target_dir.name in md_path.read_text():
-            click.secho("  Markdown already exists, skipping", fg="yellow")
-            return None
+            click.secho("  Unchanged", fg="yellow")
+            return md_path
         with md_path.open("a") as f:
             f.write(embed)
             f.write(meta_embed)
         click.secho(f"  Appended to: {safe_title}", fg="green")
-        return safe_title
+        return md_path
 
-    frontmatter = fields.format_frontmatter(consumed_at=consumed_at)
-    body = fields.format_body()
-    content = frontmatter + body + embed + meta_embed
     md_path.write_text(content)
-    click.secho(f"  Title: {safe_title}", fg="green")
-    return safe_title
+    click.secho(f"  Created: {safe_title}", fg="green")
+    return md_path
 
 
 def make_render_command(*, pipeline: Pipeline) -> click.Command:
@@ -164,23 +201,28 @@ def make_render_command(*, pipeline: Pipeline) -> click.Command:
     def render(ctx, overwrite, sha256):
         vault = Path(ctx.obj["vault"])
         path = ctx.obj["path"]
-        note_index = index_existing_notes(vault / path)
+        path_dir = vault / path
+        note_index = index_existing_notes(path_dir)
         if sha256:
-            entries = [vault / path / ASSETS_DIR / s for s in sha256]
+            entries = [path_dir / ASSETS_DIR / s for s in sha256]
         else:
-            _clear_notes(vault / path)
             entries = iter_entries(vault, path)
+        rendered: set[Path] = set()
         for target_dir in interruptible(entries):
             click.secho(f"Render: {target_dir}", bold=True)
             try:
-                render_note(
+                md_path = render_note(
                     target_dir,
                     overwrite=overwrite,
                     note_index=note_index,
                     pipeline=pipeline,
                 )
+                if md_path:
+                    rendered.add(md_path)
             except Exception as e:
                 click.secho(f"  Warning: note rendering failed: {e}", fg="red")
+        if not sha256:
+            _remove_orphans(path_dir, rendered)
 
     render.__doc__ = pipeline.help_render
     return render
@@ -198,17 +240,21 @@ def render_all(ctx, overwrite):
     vault = Path(ctx.obj["vault"])
     for pipeline in Pipeline._registry:
         path = pipeline.default_path
+        path_dir = vault / path
         click.secho(f"\n=== {pipeline.name.title()} ({path}) ===", bold=True)
-        note_index = index_existing_notes(vault / path)
-        _clear_notes(vault / path)
+        note_index = index_existing_notes(path_dir)
+        rendered: set[Path] = set()
         for target_dir in interruptible(iter_entries(vault, path)):
             click.secho(f"Render: {target_dir}", bold=True)
             try:
-                render_note(
+                md_path = render_note(
                     target_dir,
                     overwrite=overwrite,
                     note_index=note_index,
                     pipeline=pipeline,
                 )
+                if md_path:
+                    rendered.add(md_path)
             except Exception as e:
                 click.secho(f"  Warning: note rendering failed: {e}", fg="red")
+        _remove_orphans(path_dir, rendered)

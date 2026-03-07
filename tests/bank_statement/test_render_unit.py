@@ -137,7 +137,7 @@ def test_render_replaces_old_notes(runner, vault):
 
     assert result.exit_code == 0
     assert not (stmts_dir / "old title.md").exists()
-    assert "Removed 1 notes" in result.output
+    assert "Removed: old title.md" in result.output
     new_md = stmts_dir / "2025-01-01 to 2025-01-31 - BofA - Savings - 9999.md"
     assert new_md.exists()
     content = new_md.read_text()

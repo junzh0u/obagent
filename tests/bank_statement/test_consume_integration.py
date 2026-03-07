@@ -121,7 +121,9 @@ def test_title_md_created_via_cli(
     assert fields["account_name"] == "Checking"
     assert fields["account_number"] == "1234"
     # Rendered markdown at vault/stmts/ level
-    assert "Title: 2024-01-01 to 2024-01-31 - Chase - Checking - 1234" in result.output
+    assert (
+        "Created: 2024-01-01 to 2024-01-31 - Chase - Checking - 1234" in result.output
+    )
     md_file = vault / "stmts" / "2024-01-01 to 2024-01-31 - Chase - Checking - 1234.md"
     assert md_file.exists()
     content = md_file.read_text()

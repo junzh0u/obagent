@@ -181,7 +181,7 @@ def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
 
     assert result.exit_code == 0
     assert "Extracted:" in result.output
-    assert "Title:" in result.output
+    assert "Created:" in result.output
     md_files = list((vault / "statements").glob("*.md"))
     assert len(md_files) == 1
 
@@ -202,7 +202,7 @@ def test_no_continue_skips_render(mock_openai_cls, runner, vault):
 
     assert result.exit_code == 0
     assert "Extracted:" in result.output
-    assert "Title:" not in result.output
+    assert "Created:" not in result.output
     md_files = list((vault / "statements").glob("*.md"))
     assert len(md_files) == 0
 

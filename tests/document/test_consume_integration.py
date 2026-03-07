@@ -51,7 +51,7 @@ def test_full_consume_via_cli(
     assert fields["date"] == "2024-04-15"
     assert fields["summary"] == "Annual federal tax return filing."
 
-    assert "Title: 2024-04-15 - Tax Return 2024" in result.output
+    assert "Created: 2024-04-15 - Tax Return 2024" in result.output
     md_file = vault / "docs" / "2024-04-15 - Tax Return 2024.md"
     assert md_file.exists()
     content = md_file.read_text()

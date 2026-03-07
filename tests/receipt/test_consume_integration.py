@@ -511,7 +511,7 @@ def test_title_md_created_via_cli(
     assert fields["date"] == "2024-09-20"
     assert fields["total"] == "$29.99"
     # Rendered markdown at vault/papers/ level
-    assert "Title: 2024-09-20 - Bookstore - $29.99" in result.output
+    assert "Created: 2024-09-20 - Bookstore - $29.99" in result.output
     md_file = vault / "papers" / "2024-09-20 - Bookstore - $29.99.md"
     assert md_file.exists()
     content = md_file.read_text()

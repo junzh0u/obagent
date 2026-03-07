@@ -137,6 +137,43 @@ def test_frontmatter_people_as_yaml_list():
     assert "people:\n  - John Doe\n  - Jane Smith\n" in fm
 
 
+def test_manual_people_edit_preserved(runner, vault):
+    """Manually added people in frontmatter are preserved on re-render."""
+    _setup_entry_with_llm(
+        vault,
+        sha="sha_ppl",
+        title="Vaccination Record",
+        date="2024-01-01",
+        tags="medical",
+        people="Alice",
+        summary="COVID vaccination.",
+    )
+    # First render
+    runner.invoke(
+        document_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+    # Manually add a person to the frontmatter
+    md_file = vault / "docs" / "2024-01-01 - Vaccination Record.md"
+    assert md_file.exists()
+    content = md_file.read_text()
+    content = content.replace("  - Alice\n", "  - Alice\n  - Bob\n")
+    md_file.write_text(content)
+
+    # Re-render
+    result = runner.invoke(
+        document_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+
+    assert result.exit_code == 0
+    final_content = md_file.read_text()
+    assert "  - Alice" in final_content
+    assert "  - Bob" in final_content
+
+
 def test_frontmatter_empty_people():
     """Empty people produce an empty YAML key."""
     fields = DocumentFields({"title": "Doc", "date": "", "people": ""})

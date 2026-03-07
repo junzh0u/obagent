@@ -56,7 +56,7 @@ def test_md_created_with_frontmatter(runner, vault):
     assert "consumed_at: 2024-06-01T12:00:00+00:00" in content
     assert "![[_assets_/sha1/src/original.pdf#height]]" in content
     assert "![[_assets_/sha1/src/metadata.json]]" in content
-    assert "Title: 2024-06-01 - Coffee Shop - $5.75" in result.output
+    assert "Created: 2024-06-01 - Coffee Shop - $5.75" in result.output
 
 
 def test_prompt_in_json_excluded_from_frontmatter(runner, vault):
@@ -187,11 +187,67 @@ def test_render_replaces_old_notes(runner, vault):
 
     assert result.exit_code == 0
     assert not (papers_dir / "old title.md").exists()
-    assert "Removed 1 notes" in result.output
+    assert "Removed: old title.md" in result.output
     new_md = papers_dir / "2025-01-01 - New Shop - $99.00.md"
     assert new_md.exists()
     content = new_md.read_text()
     assert "merchant: New Shop" in content
+
+
+def test_rerender_unchanged_logs_unchanged(runner, vault):
+    """Re-rendering an entry with no changes logs 'Unchanged'."""
+    _setup_entry_with_llm(
+        vault, sha="sha_unch", merchant="Shop", date="2024-01-01", total="$5.00"
+    )
+    # First render
+    runner.invoke(
+        receipt_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+    # Second render — nothing changed
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert "Unchanged" in result.output
+
+
+def test_rerender_changed_field_logs_updated(runner, vault):
+    """Re-rendering after LLM JSON changes logs 'Updated'."""
+    _setup_entry_with_llm(
+        vault, sha="sha_upd", merchant="Old Shop", date="2024-01-01", total="$5.00"
+    )
+    # First render
+    runner.invoke(
+        receipt_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+    # Change the LLM JSON
+    import json
+
+    llm_json = vault / "papers" / "_assets_" / "sha_upd" / "llm" / "default.json"
+    llm_json.write_text(
+        json.dumps({"merchant": "New Shop", "date": "2024-01-01", "total": "$5.00"})
+    )
+    # Re-render with --overwrite to use new LLM values
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        ["--overwrite", "sha_upd"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert (
+        "Renamed: 2024-01-01 - Old Shop - $5.00.md -> 2024-01-01 - New Shop - $5.00.md"
+        in result.output
+    )
+    assert (vault / "papers" / "2024-01-01 - New Shop - $5.00.md").exists()
+    assert not (vault / "papers" / "2024-01-01 - Old Shop - $5.00.md").exists()
 
 
 def test_overwrite_single_sha_deletes_old_md(runner, vault):
@@ -238,7 +294,7 @@ def test_no_llm_json_no_entries(runner, vault):
     )
 
     assert result.exit_code == 0
-    assert "Title:" not in result.output
+    assert "Created:" not in result.output
 
 
 def test_render_single_sha256(runner, vault):
@@ -288,7 +344,7 @@ def test_render_picks_newest_llm_json(runner, vault):
     )
 
     assert result.exit_code == 0
-    assert "Title: 2025-06-01 - New Shop - $99.00" in result.output
+    assert "Created: 2025-06-01 - New Shop - $99.00" in result.output
     assert (vault / "papers" / "2025-06-01 - New Shop - $99.00.md").exists()
 
 

@@ -285,7 +285,7 @@ def test_migrate_implies_continue(mock_openai_cls, runner, vault):
 
     assert result.exit_code == 0
     assert "Extracted:" in result.output
-    assert "Title:" in result.output
+    assert "Created:" in result.output
     md_files = list((vault / "papers").glob("*.md"))
     assert len(md_files) == 1
 
