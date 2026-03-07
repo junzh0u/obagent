@@ -1,3 +1,8 @@
+# Set up git hooks
+setup:
+    ln -sf ../../hooks/pre-commit .git/hooks/pre-commit
+    @echo "Git hooks installed."
+
 # Install obagent CLI and zsh completions
 install:
     uv tool install . --compile-bytecode --force --reinstall
