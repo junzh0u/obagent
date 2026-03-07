@@ -1,5 +1,6 @@
 import json
 import re
+from collections import defaultdict
 from pathlib import Path
 
 import click
@@ -79,12 +80,22 @@ def index_existing_notes(
     return index
 
 
-def _remove_orphans(path_dir: Path, rendered: set[Path]) -> None:
+def _remove_orphans(path_dir: Path, rendered: set[Path]) -> int:
     """Delete .md files in path_dir that were not rendered (orphans)."""
+    count = 0
     for md in path_dir.glob("*.md"):
         if md not in rendered:
             click.secho(f"  Removed: {md.name}", fg="green")
             md.unlink()
+            count += 1
+    return count
+
+
+def _print_stats(stats: dict[str, int]) -> None:
+    """Print render summary stats."""
+    parts = [f"{v} {k}" for k, v in stats.items() if v]
+    if parts:
+        click.secho(", ".join(parts), bold=True)
 
 
 def render_note(
@@ -93,19 +104,24 @@ def render_note(
     overwrite: bool = False,
     note_index: dict[str, tuple[dict[str, str] | None, list[Path]]] | None = None,
     pipeline: Pipeline,
-) -> Path | None:
+) -> tuple[Path | None, str]:
     """Read LLM JSON and create an Obsidian markdown note.
 
     Writes .md to target_dir's grandparent (vault/path/) for a flat, browsable layout.
     When note_index is provided, preserves manually-edited frontmatter (unless
     overwrite=True).  Compares new content against existing note and only writes
     when something actually changed.
-    Returns the md_path on success, None if skipped.
+    Returns (md_path, status) where status is one of: "created", "updated",
+    "renamed", "appended", "unchanged", "skipped".
     """
+    def _log_target() -> None:
+        click.secho(f"Render: {target_dir}", bold=True)
+
     json_path = newest_file(target_dir / "llm", "*.json")
     if json_path is None:
+        _log_target()
         click.secho("  No LLM result found, skipping render", fg="yellow")
-        return None
+        return None, "skipped"
 
     path_dir = target_dir.parent.parent
 
@@ -154,37 +170,38 @@ def render_note(
         if old_md == md_path:
             # Same path — check if content changed
             if old_md.read_text() == content:
-                click.secho("  Unchanged", fg="yellow")
-                return md_path
+                return md_path, "unchanged"
             # Shared note (has other embeds): only check frontmatter portion
             old_text = old_md.read_text()
             if embed in old_text and old_text.startswith(frontmatter + body):
-                click.secho("  Unchanged", fg="yellow")
-                return md_path
+                return md_path, "unchanged"
             md_path.write_text(content)
+            _log_target()
             click.secho(f"  Updated: {safe_title}", fg="green")
-            return md_path
+            return md_path, "updated"
         # Title changed — delete old, create at new path
         old_md.unlink()
+        _log_target()
         click.secho(f"  Renamed: {old_md.name} -> {md_path.name}", fg="green")
         md_path.write_text(content)
-        return md_path
+        return md_path, "renamed"
 
     # No existing note for this sha
     if md_path.exists():
         # Another sha already has a note at this path — append
         if target_dir.name in md_path.read_text():
-            click.secho("  Unchanged", fg="yellow")
-            return md_path
+            return md_path, "unchanged"
         with md_path.open("a") as f:
             f.write(embed)
             f.write(meta_embed)
+        _log_target()
         click.secho(f"  Appended to: {safe_title}", fg="green")
-        return md_path
+        return md_path, "appended"
 
     md_path.write_text(content)
+    _log_target()
     click.secho(f"  Created: {safe_title}", fg="green")
-    return md_path
+    return md_path, "created"
 
 
 def make_render_command(*, pipeline: Pipeline) -> click.Command:
@@ -208,21 +225,26 @@ def make_render_command(*, pipeline: Pipeline) -> click.Command:
         else:
             entries = iter_entries(vault, path)
         rendered: set[Path] = set()
+        stats: defaultdict[str, int] = defaultdict(int)
         for target_dir in interruptible(entries):
-            click.secho(f"Render: {target_dir}", bold=True)
             try:
-                md_path = render_note(
+                md_path, status = render_note(
                     target_dir,
                     overwrite=overwrite,
                     note_index=note_index,
                     pipeline=pipeline,
                 )
+                stats[status] += 1
                 if md_path:
                     rendered.add(md_path)
             except Exception as e:
-                click.secho(f"  Warning: note rendering failed: {e}", fg="red")
+                click.secho(f"Render: {target_dir}", bold=True)
+                click.secho(f"  Warning: rendering failed: {e}", fg="red")
         if not sha256:
-            _remove_orphans(path_dir, rendered)
+            removed = _remove_orphans(path_dir, rendered)
+            if removed:
+                stats["removed"] = removed
+        _print_stats(stats)
 
     render.__doc__ = pipeline.help_render
     return render
@@ -244,17 +266,22 @@ def render_all(ctx, overwrite):
         click.secho(f"\n=== {pipeline.name.title()} ({path}) ===", bold=True)
         note_index = index_existing_notes(path_dir)
         rendered: set[Path] = set()
+        stats: defaultdict[str, int] = defaultdict(int)
         for target_dir in interruptible(iter_entries(vault, path)):
-            click.secho(f"Render: {target_dir}", bold=True)
             try:
-                md_path = render_note(
+                md_path, status = render_note(
                     target_dir,
                     overwrite=overwrite,
                     note_index=note_index,
                     pipeline=pipeline,
                 )
+                stats[status] += 1
                 if md_path:
                     rendered.add(md_path)
             except Exception as e:
-                click.secho(f"  Warning: note rendering failed: {e}", fg="red")
-        _remove_orphans(path_dir, rendered)
+                click.secho(f"Render: {target_dir}", bold=True)
+                click.secho(f"  Warning: rendering failed: {e}", fg="red")
+        removed = _remove_orphans(path_dir, rendered)
+        if removed:
+            stats["removed"] = removed
+        _print_stats(stats)

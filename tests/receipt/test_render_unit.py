@@ -194,8 +194,8 @@ def test_render_replaces_old_notes(runner, vault):
     assert "merchant: New Shop" in content
 
 
-def test_rerender_unchanged_logs_unchanged(runner, vault):
-    """Re-rendering an entry with no changes logs 'Unchanged'."""
+def test_rerender_unchanged_shows_stats(runner, vault):
+    """Re-rendering an entry with no changes shows unchanged count in stats."""
     _setup_entry_with_llm(
         vault, sha="sha_unch", merchant="Shop", date="2024-01-01", total="$5.00"
     )
@@ -213,7 +213,7 @@ def test_rerender_unchanged_logs_unchanged(runner, vault):
     )
 
     assert result.exit_code == 0
-    assert "Unchanged" in result.output
+    assert "1 unchanged" in result.output
 
 
 def test_rerender_changed_field_logs_updated(runner, vault):
