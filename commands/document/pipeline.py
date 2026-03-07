@@ -93,6 +93,8 @@ class DocumentPipeline(Pipeline):
             '(e.g. "John Smith", not "SMITH, JOHN" or "john smith"); '
             "empty string if no specific people are mentioned\n"
             "- summary: a 1-2 sentence summary of the document\n"
+            "Use the same language as the document text for title, summary, "
+            "and people names.\n"
             "Respond ONLY with a JSON object containing these five fields, "
             "no additional text!\n\n{ocr_text}"
         )
