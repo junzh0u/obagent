@@ -104,7 +104,7 @@ def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
 
     assert result.exit_code == 0
     assert "Extracted:" in result.output
-    assert "Title:" in result.output
+    assert "Created:" in result.output
     md_files = list((vault / "docs").glob("*.md"))
     assert len(md_files) == 1
 

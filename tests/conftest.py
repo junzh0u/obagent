@@ -118,7 +118,13 @@ def mock_chat_response_doc(
 ):
     """Create a mock OpenAI chat completion response for document extraction."""
     content = json.dumps(
-        {"title": title, "date": date, "tags": tags, "people": people, "summary": summary}
+        {
+            "title": title,
+            "date": date,
+            "tags": tags,
+            "people": people,
+            "summary": summary,
+        }
     )
     message = SimpleNamespace(content=content)
     choice = SimpleNamespace(message=message)
