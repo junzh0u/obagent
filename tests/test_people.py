@@ -94,3 +94,66 @@ def test_rename_multiple_files(runner, vault):
     assert "  - Dave\n" in md2.read_text()
     # Untouched
     assert md3.read_text() == _make_fm("Carol")
+
+
+def test_list_people(runner, vault):
+    """Lists all unique people names sorted alphabetically."""
+    _write_md(vault, "docs/a.md", _make_fm("Alice", "Bob"))
+    _write_md(vault, "docs/b.md", _make_fm("Bob", "Carol"))
+    _write_md(vault, "docs/c.md", "No frontmatter\n")
+
+    result = runner.invoke(people, ["list"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert result.output.strip() == "Alice\nBob\nCarol"
+
+
+def test_remove_person(runner, vault):
+    """Removing a single name from the people list."""
+    md = _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
+
+    result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "1 file(s) updated" in result.output
+    content = md.read_text()
+    assert "  - Bob\n" in content
+    assert "Alice" not in content
+
+
+def test_remove_multiple(runner, vault):
+    """Removing multiple names at once."""
+    md = _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob", "Carol"))
+
+    result = runner.invoke(
+        people, ["remove", "Alice", "Carol"], obj={"vault": str(vault)}
+    )
+
+    assert result.exit_code == 0
+    content = md.read_text()
+    assert "  - Bob\n" in content
+    assert "Alice" not in content
+    assert "Carol" not in content
+
+
+def test_remove_all_people(runner, vault):
+    """Removing all people leaves an empty people key."""
+    md = _write_md(vault, "docs/test.md", _make_fm("Alice"))
+
+    result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    content = md.read_text()
+    assert "people:\n" in content
+    assert "  - " not in content.split("people:\n")[1].split("consumed_at")[0]
+
+
+def test_remove_skips_unrelated(runner, vault):
+    """Files without matching names are not modified."""
+    md = _write_md(vault, "docs/test.md", _make_fm("Bob", "Carol"))
+
+    result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "0 file(s) updated" in result.output
+    assert md.read_text() == _make_fm("Bob", "Carol")
