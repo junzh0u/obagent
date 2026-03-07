@@ -120,6 +120,7 @@ def render_note(
     Returns (md_path, status) where status is one of: "created", "updated",
     "renamed", "appended", "unchanged", "skipped".
     """
+
     def _log_target() -> None:
         click.secho(f"Render: {target_dir}", bold=True)
 
