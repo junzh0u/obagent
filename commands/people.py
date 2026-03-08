@@ -14,6 +14,17 @@ _PEOPLE_BLOCK_RE = re.compile(
 )
 
 
+def _apply_mapping(names: list[str], mapping: dict[str, str]) -> list[str]:
+    """Apply a name mapping: rename, remove (empty value), deduplicate."""
+    result: list[str] = []
+    for n in names:
+        replacement = mapping.get(n, n)  # unmapped names pass through
+        if replacement and replacement not in result:
+            result.append(replacement)
+    result.sort()
+    return result
+
+
 def _remap_in_file(md_path: Path, mapping: dict[str, str]) -> bool:
     """Apply a name mapping to the people frontmatter list.
 
@@ -29,19 +40,21 @@ def _remap_in_file(md_path: Path, mapping: dict[str, str]) -> bool:
     if not any(n in mapping for n in names):
         return False
 
-    updated: list[str] = []
-    for n in names:
-        replacement = mapping.get(n, n)  # unmapped names pass through
-        if replacement and replacement not in updated:
-            updated.append(replacement)
-
-    updated.sort()
+    updated = _apply_mapping(names, mapping)
     people_lines = "".join(f"  - {n}\n" for n in updated)
     new_text = _PEOPLE_BLOCK_RE.sub(rf"\1\n{people_lines}", text, count=1)
     if new_text == text:
         return False
     md_path.write_text(new_text)
     return True
+
+
+def _load_aliases(vault: Path) -> dict[str, str]:
+    """Load the people aliases mapping from the vault, or return {}."""
+    path = vault / REMAP_FILE
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text())
 
 
 def _save_to_aliases(vault: Path, mapping: dict[str, str]) -> None:
@@ -95,13 +108,15 @@ def rename(ctx, old_name, new_name):
 def remap(ctx, mapping_file):
     """Batch rename people from a JSON mapping file."""
     vault = Path(ctx.obj["vault"])
-    if mapping_file is None:
-        mapping_path = vault / REMAP_FILE
-    else:
+    if mapping_file is not None:
         mapping_path = Path(mapping_file)
-    if not mapping_path.exists():
-        raise click.ClickException(f"Mapping file not found: {mapping_path}")
-    mapping = json.loads(mapping_path.read_text())
+        if not mapping_path.exists():
+            raise click.ClickException(f"Mapping file not found: {mapping_path}")
+        mapping = json.loads(mapping_path.read_text())
+    else:
+        mapping = _load_aliases(vault)
+        if not mapping:
+            raise click.ClickException(f"Mapping file not found: {vault / REMAP_FILE}")
     if not isinstance(mapping, dict):
         raise click.ClickException("Mapping file must contain a JSON object")
     total = 0

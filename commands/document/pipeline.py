@@ -10,6 +10,8 @@ TAG_CHARS = re.compile(r"[^a-zA-Z0-9_/\-]")
 
 
 class DocumentFields(Fields[Literal["title", "date", "tags", "people", "summary"]]):
+    _aliases: dict[str, str] = {}
+
     @override
     def postprocess(self) -> None:
         tags = self.get("tags", "")
@@ -21,6 +23,10 @@ class DocumentFields(Fields[Literal["title", "date", "tags", "people", "summary"
 
         people = self.get("people", "")
         names = [p.strip() for p in people.split(",") if p.strip()] if people else []
+        if self._aliases:
+            from commands.people import _apply_mapping
+
+            names = _apply_mapping(names, self._aliases)
         self["people"] = ",".join(names)
 
     @override
@@ -69,9 +75,10 @@ class DocumentPipeline(Pipeline):
 
     @override
     def prepare_context(self, vault: Path) -> None:
-        from commands.people import _collect_names
+        from commands.people import _collect_names, _load_aliases
 
         self._known_names = _collect_names(vault)
+        DocumentFields._aliases = _load_aliases(vault)
 
     @override
     def prompt(self, path: str, ocr_text: str, filename: str = "") -> str:

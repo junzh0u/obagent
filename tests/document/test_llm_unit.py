@@ -203,6 +203,26 @@ def test_overwrite_all_replaces_everything(mock_openai_cls, runner, vault):
     assert fields["summary"] == "New summary."
 
 
+def test_postprocess_applies_aliases():
+    """People aliases are applied during postprocess."""
+    DocumentFields._aliases = {"Zhou Jun": "Jun Zhou", "Bob": ""}
+    try:
+        fields = DocumentFields({"people": "Zhou Jun, Alice, Bob"})
+        assert fields["people"] == "Alice,Jun Zhou"
+    finally:
+        DocumentFields._aliases = {}
+
+
+def test_postprocess_aliases_deduplicates():
+    """Alias that maps to an already-present name doesn't create duplicates."""
+    DocumentFields._aliases = {"J Zhou": "Jun Zhou"}
+    try:
+        fields = DocumentFields({"people": "Jun Zhou, J Zhou"})
+        assert fields["people"] == "Jun Zhou"
+    finally:
+        DocumentFields._aliases = {}
+
+
 def test_postprocess_drops_pure_numeric_tags():
     """Pure-numeric tags are dropped (invalid in Obsidian)."""
     fields = DocumentFields({"tags": "finance, 2024, tax"})
