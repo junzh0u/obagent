@@ -174,6 +174,47 @@ def test_manual_people_edit_preserved(runner, vault):
     assert "  - Bob" in final_content
 
 
+def test_overwrite_fields_selective(runner, vault):
+    """--overwrite-fields overwrites only named fields, preserving others."""
+    _setup_entry_with_llm(
+        vault,
+        sha="sha_owf",
+        title="Tax Return 2024",
+        date="2024-04-15",
+        tags="finance",
+        people="Alice",
+        summary="Original summary.",
+    )
+    # First render
+    runner.invoke(
+        document_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+    # Manually edit people and tags
+    md_file = vault / "docs" / "2024-04-15 - Tax Return 2024.md"
+    content = md_file.read_text()
+    content = content.replace("  - Alice\n", "  - Alice\n  - Bob\n")
+    content = content.replace("  - finance\n", "  - finance\n  - manual-tag\n")
+    md_file.write_text(content)
+
+    # Re-render with --overwrite-fields tags (only tags should use LLM data)
+    result = runner.invoke(
+        document_pipeline.render_command,
+        ["--overwrite-fields", "tags"],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+
+    assert result.exit_code == 0
+    final_content = md_file.read_text()
+    # tags overwritten by LLM (manual-tag gone)
+    assert "  - finance\n" in final_content
+    assert "manual-tag" not in final_content
+    # people preserved from manual edit
+    assert "  - Alice" in final_content
+    assert "  - Bob" in final_content
+
+
 def test_frontmatter_empty_people():
     """Empty people produce an empty YAML key."""
     fields = DocumentFields({"title": "Doc", "date": "", "people": ""})

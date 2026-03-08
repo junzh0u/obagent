@@ -187,7 +187,8 @@ def make_llm_command(*, pipeline: Pipeline) -> click.Command:
                     try:
                         render_note(
                             target_dir,
-                            overwrite=overwrite or bool(overwrite_fields),
+                            overwrite=overwrite,
+                            overwrite_fields=overwrite_fields,
                             note_index=note_index,
                             pipeline=pipeline,
                         )

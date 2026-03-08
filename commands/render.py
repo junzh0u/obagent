@@ -108,6 +108,7 @@ def render_note(
     target_dir: Path,
     *,
     overwrite: bool = False,
+    overwrite_fields: str | None = None,
     note_index: dict[str, tuple[dict[str, str] | None, list[Path]]] | None = None,
     pipeline: Pipeline,
 ) -> tuple[Path | None, str]:
@@ -115,8 +116,8 @@ def render_note(
 
     Writes .md to target_dir's grandparent (vault/path/) for a flat, browsable layout.
     When note_index is provided, preserves manually-edited frontmatter (unless
-    overwrite=True).  Compares new content against existing note and only writes
-    when something actually changed.
+    overwrite or overwrite_fields is set).  When overwrite_fields is set, only
+    the named fields use LLM data; the rest keep their frontmatter values.
     Returns (md_path, status) where status is one of: "created", "updated",
     "renamed", "appended", "unchanged", "skipped".
     """
@@ -142,6 +143,11 @@ def render_note(
             if existing_fm:
                 if overwrite:
                     fields.fill_gaps(existing_fm)
+                elif overwrite_fields:
+                    ow_keys = {k.strip() for k in overwrite_fields.split(",")}
+                    for k in fields:
+                        if k not in ow_keys and k in existing_fm and existing_fm[k]:
+                            fields[k] = existing_fm[k]
                 else:
                     fields.apply_frontmatter(existing_fm)
 
@@ -236,9 +242,18 @@ def make_render_command(*, pipeline: Pipeline) -> click.Command:
         is_flag=True,
         help="Discard manually-edited frontmatter values and use LLM data.",
     )
+    @click.option(
+        "--overwrite-fields",
+        default=None,
+        help="Overwrite specific fields only (e.g. tags,people).",
+    )
     @click.argument("sha256", nargs=-1)
     @click.pass_context
-    def render(ctx, overwrite, sha256):
+    def render(ctx, overwrite, overwrite_fields, sha256):
+        if overwrite and overwrite_fields:
+            raise click.UsageError(
+                "--overwrite and --overwrite-fields are mutually exclusive."
+            )
         vault = Path(ctx.obj["vault"])
         path = ctx.obj["path"]
         path_dir = vault / path
@@ -254,6 +269,7 @@ def make_render_command(*, pipeline: Pipeline) -> click.Command:
                 md_path, status = render_note(
                     target_dir,
                     overwrite=overwrite,
+                    overwrite_fields=overwrite_fields,
                     note_index=note_index,
                     pipeline=pipeline,
                 )
