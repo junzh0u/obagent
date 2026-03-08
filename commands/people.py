@@ -6,6 +6,7 @@ import click
 import questionary
 
 from commands.render import _parse_frontmatter
+from utils import pinyin_sort_key
 
 REMAP_FILE = ".obagent/people-aliases.json"
 
@@ -21,7 +22,7 @@ def _apply_mapping(names: list[str], mapping: dict[str, str]) -> list[str]:
         replacement = mapping.get(n, n)  # unmapped names pass through
         if replacement and replacement not in result:
             result.append(replacement)
-    result.sort()
+    result.sort(key=pinyin_sort_key)
     return result
 
 
@@ -137,7 +138,7 @@ def _collect_names(vault: Path) -> list[str]:
                 n = n.strip()
                 if n:
                     names.add(n)
-    return sorted(names)
+    return sorted(names, key=pinyin_sort_key)
 
 
 @people.command("list")

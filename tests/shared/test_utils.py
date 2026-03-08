@@ -1,6 +1,6 @@
 import os
 
-from utils import newest_file, source_file
+from utils import newest_file, pinyin_sort_key, source_file
 
 
 def test_nonexistent_dir(tmp_path):
@@ -68,3 +68,15 @@ def test_source_file_returns_none(tmp_path):
     src_dir = target_dir / "src"
     src_dir.mkdir(parents=True)
     assert source_file(target_dir) is None
+
+
+def test_pinyin_sort_key_chinese_names():
+    """Chinese names sort by pinyin, not Unicode code point."""
+    names = ["周俊", "张伟", "李明"]
+    assert sorted(names, key=pinyin_sort_key) == ["李明", "张伟", "周俊"]
+
+
+def test_pinyin_sort_key_ascii_before_cjk():
+    """ASCII names always sort before CJK names, even with overlapping pinyin."""
+    names = ["周俊", "Alice", "艾伟", "Bob"]
+    assert sorted(names, key=pinyin_sort_key) == ["Alice", "Bob", "艾伟", "周俊"]

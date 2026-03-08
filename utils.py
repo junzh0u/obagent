@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import TypeVar
 
 import click
+from pypinyin import lazy_pinyin
 
 from constants import ASSETS_DIR
 
@@ -55,6 +56,15 @@ def newest_file(directory: Path, glob_pattern: str) -> Path | None:
         if newest is None or p.stat().st_mtime > newest.stat().st_mtime:
             newest = p
     return newest
+
+
+def _has_cjk(s: str) -> bool:
+    return any("\u4e00" <= c <= "\u9fff" for c in s)
+
+
+def pinyin_sort_key(s: str) -> tuple[int, list[str]]:
+    """Sort key: ASCII names first, then CJK names by pinyin."""
+    return (1 if _has_cjk(s) else 0, [part.lower() for part in lazy_pinyin(s)])
 
 
 def source_file(target_dir: Path) -> Path | None:

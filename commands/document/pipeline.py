@@ -5,6 +5,7 @@ from typing import Literal, override
 from commands.fields import Fields
 from commands.pipeline import Pipeline
 from constants import TITLE_UNSAFE_CHARS
+from utils import pinyin_sort_key
 
 TAG_CHARS = re.compile(r"[^a-zA-Z0-9_/\-]")
 
@@ -44,7 +45,7 @@ class DocumentFields(Fields[Literal["title", "date", "tags", "people", "summary"
         tag_list = sorted(tags.split(",")) if tags else []
         tag_lines = "".join(f"\n  - {t}" for t in tag_list)
         people = self.get("people", "")
-        people_list = sorted(people.split(",")) if people else []
+        people_list = sorted(people.split(","), key=pinyin_sort_key) if people else []
         people_lines = "".join(f"\n  - {p}" for p in people_list)
         return (
             f"---\ntitle: {title}\ndate: {date}\ntags:{tag_lines}\n"
