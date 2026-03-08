@@ -116,6 +116,7 @@ class DocumentPipeline(Pipeline):
             "document-specific words; include organization, company, or "
             "agency names as tags when relevant "
             '(e.g. "facebook", "uscis", "chase", "irs"); '
+            "do not duplicate names already listed in people as tags; "
             'omit generic tags like "document" '
             'and year-only tags like "2024" or "y2024"\n'
             "{known_names}"
