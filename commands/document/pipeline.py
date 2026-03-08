@@ -108,12 +108,15 @@ class DocumentPipeline(Pipeline):
             "someone identify this document at a glance; use only plain text "
             "with no special characters like #, [, ], ^, |, /, or :)\n"
             "- date: the document date in YYYY-MM-DD format\n"
-            "- tags: a comma-separated list of 2-5 short lowercase tags for "
+            "- tags: a comma-separated list of 3-10 short lowercase tags for "
             "an Obsidian PKM vault (only letters, numbers, hyphens, "
             "underscores, and / are allowed; each tag must contain at least "
             'one non-numeric character; e.g. "finance, tax" or '
             '"medical, insurance, claim"); use broad category tags, not '
-            'document-specific words; omit generic tags like "document" '
+            "document-specific words; include organization, company, or "
+            "agency names as tags when relevant "
+            '(e.g. "facebook", "uscis", "chase", "irs"); '
+            'omit generic tags like "document" '
             'and year-only tags like "2024" or "y2024"\n'
             "{known_names}"
             "- people: a comma-separated list of people names relevant to the "
