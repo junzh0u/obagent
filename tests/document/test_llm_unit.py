@@ -127,6 +127,82 @@ def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
     assert len(md_files) == 1
 
 
+@patch("commands.llm.OpenAI")
+def test_overwrite_selective_fields(mock_openai_cls, runner, vault):
+    """--overwrite=tags only overwrites tags, preserving other fields."""
+    setup_mock_openai_doc(
+        mock_openai_cls,
+        title="New Title",
+        date="2025-01-01",
+        tags="new-tag",
+        people="New Person",
+        summary="New summary.",
+    )
+    target_dir = _setup_entry_with_ocr(vault, sha="sha_sel")
+    llm_dir = target_dir / "llm"
+    llm_dir.mkdir(parents=True)
+    old_data = {
+        "title": "Old Title",
+        "date": "2024-01-01",
+        "tags": "old-tag",
+        "people": "Old Person",
+        "summary": "Old summary.",
+    }
+    (llm_dir / f"{LLM_MODEL}.json").write_text(json.dumps(old_data))
+
+    result = runner.invoke(
+        document_pipeline.llm_command,
+        ["--openai-api-key", "test-key", "--overwrite-fields", "tags"],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+
+    assert result.exit_code == 0
+    fields = json.loads((llm_dir / f"{LLM_MODEL}.json").read_text())
+    assert fields["tags"] == "new-tag"
+    assert fields["title"] == "Old Title"
+    assert fields["date"] == "2024-01-01"
+    assert fields["people"] == "Old Person"
+    assert fields["summary"] == "Old summary."
+
+
+@patch("commands.llm.OpenAI")
+def test_overwrite_all_replaces_everything(mock_openai_cls, runner, vault):
+    """Bare --overwrite replaces all fields."""
+    setup_mock_openai_doc(
+        mock_openai_cls,
+        title="New Title",
+        date="2025-01-01",
+        tags="new-tag",
+        people="New Person",
+        summary="New summary.",
+    )
+    target_dir = _setup_entry_with_ocr(vault, sha="sha_all")
+    llm_dir = target_dir / "llm"
+    llm_dir.mkdir(parents=True)
+    old_data = {
+        "title": "Old Title",
+        "date": "2024-01-01",
+        "tags": "old-tag",
+        "people": "Old Person",
+        "summary": "Old summary.",
+    }
+    (llm_dir / f"{LLM_MODEL}.json").write_text(json.dumps(old_data))
+
+    result = runner.invoke(
+        document_pipeline.llm_command,
+        ["--openai-api-key", "test-key", "--overwrite"],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+
+    assert result.exit_code == 0
+    fields = json.loads((llm_dir / f"{LLM_MODEL}.json").read_text())
+    assert fields["title"] == "New Title"
+    assert fields["date"] == "2025-01-01"
+    assert fields["tags"] == "new-tag"
+    assert fields["people"] == "New Person"
+    assert fields["summary"] == "New summary."
+
+
 def test_postprocess_drops_pure_numeric_tags():
     """Pure-numeric tags are dropped (invalid in Obsidian)."""
     fields = DocumentFields({"tags": "finance, 2024, tax"})

@@ -22,6 +22,7 @@ def extract_fields(
     *,
     model: str = LLM_MODEL,
     overwrite: bool = False,
+    overwrite_fields: str | None = None,
     migrate: bool = False,
     pipeline: Pipeline,
     save_prompt: bool = False,
@@ -29,14 +30,16 @@ def extract_fields(
     """Use OpenAI to extract metadata from OCR text and save as JSON.
 
     Discovers the newest OCR .txt file under target_dir/ocr/.
-    If llm/<model>.json exists and not overwrite, skips and returns None.
+    If llm/<model>.json exists and neither overwrite nor overwrite_fields
+    is set, skips and returns None.  When overwrite_fields is set, only the
+    named fields are replaced; the rest are kept from the existing JSON.
     Returns the parsed fields dict on success, None if skipped.
 
     pipeline: Pipeline providing prompt() and postprocess() methods.
     """
     llm_dir = target_dir / "llm"
     json_path = llm_dir / f"{model}.json"
-    if json_path.exists() and not overwrite:
+    if json_path.exists() and not overwrite and not overwrite_fields:
         if migrate and _needs_migrate(json_path, pipeline):
             click.secho("  Missing fields, re-extracting", fg="cyan")
         else:
@@ -73,6 +76,12 @@ def extract_fields(
         return None
     raw = content.strip()
     fields = pipeline.fields_class(json.loads(raw))
+    if overwrite_fields and json_path.exists():
+        old = json.loads(json_path.read_text())
+        overwrite_keys = {k.strip() for k in overwrite_fields.split(",")}
+        for k in fields:
+            if k not in overwrite_keys and k in old:
+                fields[k] = old[k]
     llm_dir.mkdir(parents=True, exist_ok=True)
     saved_prompt = prompt_text if save_prompt else pipeline.prompt_template
     json_path.write_text(
@@ -98,8 +107,11 @@ def make_llm_command(*, pipeline: Pipeline) -> click.Command:
         show_default=True,
         help="OpenAI model name for field extraction.",
     )
+    @click.option("--overwrite", is_flag=True, help="Overwrite existing LLM results.")
     @click.option(
-        "--overwrite", is_flag=True, help="Overwrite existing markdown files."
+        "--overwrite-fields",
+        default=None,
+        help="Overwrite specific fields only (e.g. tags,people).",
     )
     @click.option(
         "--continue",
@@ -124,11 +136,16 @@ def make_llm_command(*, pipeline: Pipeline) -> click.Command:
         openai_api_key,
         llm_model,
         overwrite,
+        overwrite_fields,
         continue_,
         migrate,
         save_prompt,
         sha256,
     ):
+        if overwrite and overwrite_fields:
+            raise click.UsageError(
+                "--overwrite and --overwrite-fields are mutually exclusive."
+            )
         vault = Path(ctx.obj["vault"])
         path = ctx.obj["path"]
         if sha256:
@@ -155,6 +172,7 @@ def make_llm_command(*, pipeline: Pipeline) -> click.Command:
                         path,
                         model=llm_model,
                         overwrite=overwrite,
+                        overwrite_fields=overwrite_fields,
                         migrate=migrate,
                         pipeline=pipeline,
                         save_prompt=save_prompt,
@@ -169,7 +187,7 @@ def make_llm_command(*, pipeline: Pipeline) -> click.Command:
                     try:
                         render_note(
                             target_dir,
-                            overwrite=overwrite,
+                            overwrite=overwrite or bool(overwrite_fields),
                             note_index=note_index,
                             pipeline=pipeline,
                         )
