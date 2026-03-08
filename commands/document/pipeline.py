@@ -19,6 +19,10 @@ class DocumentFields(Fields[Literal["title", "date", "tags", "people", "summary"
         ]
         self["tags"] = ",".join(clean)
 
+        people = self.get("people", "")
+        names = [p.strip() for p in people.split(",") if p.strip()] if people else []
+        self["people"] = ",".join(names)
+
     @override
     def make_title(self) -> str:
         parts = [p for p in (self.get("date"), self.get("title")) if p]
@@ -34,9 +38,7 @@ class DocumentFields(Fields[Literal["title", "date", "tags", "people", "summary"
         tag_list = sorted(tags.split(",")) if tags else []
         tag_lines = "".join(f"\n  - {t}" for t in tag_list)
         people = self.get("people", "")
-        people_list = (
-            sorted(p.strip() for p in people.split(",") if p.strip()) if people else []
-        )
+        people_list = sorted(people.split(",")) if people else []
         people_lines = "".join(f"\n  - {p}" for p in people_list)
         return (
             f"---\ntitle: {title}\ndate: {date}\ntags:{tag_lines}\n"
