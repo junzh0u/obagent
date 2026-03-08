@@ -257,6 +257,7 @@ def make_render_command(*, pipeline: Pipeline) -> click.Command:
         vault = Path(ctx.obj["vault"])
         path = ctx.obj["path"]
         path_dir = vault / path
+        pipeline.prepare_context(vault)
         note_index = index_existing_notes(path_dir)
         if sha256:
             entries = [path_dir / ASSETS_DIR / s for s in sha256]
@@ -303,6 +304,7 @@ def render_all(ctx, overwrite):
         path = pipeline.default_path
         path_dir = vault / path
         click.secho(f"\n=== {pipeline.name.title()} ({path}) ===", bold=True)
+        pipeline.prepare_context(vault)
         note_index = index_existing_notes(path_dir)
         rendered: set[Path] = set()
         stats: defaultdict[str, int] = defaultdict(int)

@@ -61,6 +61,7 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
     ):
         vault = Path(ctx.obj["vault"])
         path = ctx.obj["path"]
+        pipeline.prepare_context(vault)
         note_index = index_existing_notes(vault / path) if overwrite else None
         consumed = 0
         skipped = 0
