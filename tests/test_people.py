@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 from commands.people import people
 
@@ -22,13 +23,22 @@ def _make_fm(*names):
     return FM_TEMPLATE.format(people_lines=lines)
 
 
+def _mock_confirm(answer):
+    """Return a patch that makes questionary.confirm().ask() return *answer*."""
+    return patch(
+        "commands.people.questionary.confirm",
+        return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
+    )
+
+
 def test_rename_person(runner, vault):
     """Basic rename updates the people list."""
     md = _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
 
-    result = runner.invoke(
-        people, ["rename", "Alice", "Carol"], obj={"vault": str(vault)}
-    )
+    with _mock_confirm(None):
+        result = runner.invoke(
+            people, ["rename", "Alice", "Carol"], obj={"vault": str(vault)}
+        )
 
     assert result.exit_code == 0
     assert "1 file(s) updated" in result.output
@@ -42,9 +52,10 @@ def test_rename_deduplicates(runner, vault):
     """Renaming to an existing name removes the duplicate."""
     md = _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
 
-    result = runner.invoke(
-        people, ["rename", "Alice", "Bob"], obj={"vault": str(vault)}
-    )
+    with _mock_confirm(None):
+        result = runner.invoke(
+            people, ["rename", "Alice", "Bob"], obj={"vault": str(vault)}
+        )
 
     assert result.exit_code == 0
     content = md.read_text()
@@ -96,9 +107,10 @@ def test_rename_multiple_files(runner, vault):
     md2 = _write_md(vault, "stmts/b.md", _make_fm("Alice"))
     md3 = _write_md(vault, "other/c.md", _make_fm("Carol"))
 
-    result = runner.invoke(
-        people, ["rename", "Alice", "Dave"], obj={"vault": str(vault)}
-    )
+    with _mock_confirm(None):
+        result = runner.invoke(
+            people, ["rename", "Alice", "Dave"], obj={"vault": str(vault)}
+        )
 
     assert result.exit_code == 0
     assert "2 file(s) updated" in result.output
@@ -126,7 +138,8 @@ def test_remove_person(runner, vault):
     """Removing a single name from the people list."""
     md = _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
 
-    result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
+    with _mock_confirm(None):
+        result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
 
     assert result.exit_code == 0
     assert "1 file(s) updated" in result.output
@@ -139,9 +152,10 @@ def test_remove_multiple(runner, vault):
     """Removing multiple names at once."""
     md = _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob", "Carol"))
 
-    result = runner.invoke(
-        people, ["remove", "Alice", "Carol"], obj={"vault": str(vault)}
-    )
+    with _mock_confirm(None):
+        result = runner.invoke(
+            people, ["remove", "Alice", "Carol"], obj={"vault": str(vault)}
+        )
 
     assert result.exit_code == 0
     content = md.read_text()
@@ -154,7 +168,8 @@ def test_remove_all_people(runner, vault):
     """Removing all people leaves an empty people key."""
     md = _write_md(vault, "docs/test.md", _make_fm("Alice"))
 
-    result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
+    with _mock_confirm(None):
+        result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
 
     assert result.exit_code == 0
     content = md.read_text()
@@ -252,12 +267,12 @@ def test_rename_saves_to_aliases(runner, vault):
     """Accepting the save prompt writes sorted JSON to the aliases file."""
     _write_md(vault, "docs/test.md", _make_fm("Bob", "Alice"))
 
-    result = runner.invoke(
-        people,
-        ["rename", "Alice", "Carol"],
-        obj={"vault": str(vault)},
-        input="y\n",
-    )
+    with _mock_confirm(True):
+        result = runner.invoke(
+            people,
+            ["rename", "Alice", "Carol"],
+            obj={"vault": str(vault)},
+        )
 
     assert result.exit_code == 0
     aliases = vault / ".obagent" / "people-aliases.json"
@@ -270,12 +285,12 @@ def test_rename_declines_save(runner, vault):
     """Declining the save prompt does not create the aliases file."""
     _write_md(vault, "docs/test.md", _make_fm("Alice"))
 
-    result = runner.invoke(
-        people,
-        ["rename", "Alice", "Bob"],
-        obj={"vault": str(vault)},
-        input="n\n",
-    )
+    with _mock_confirm(False):
+        result = runner.invoke(
+            people,
+            ["rename", "Alice", "Bob"],
+            obj={"vault": str(vault)},
+        )
 
     assert result.exit_code == 0
     assert not (vault / ".obagent" / "people-aliases.json").exists()
@@ -285,26 +300,27 @@ def test_rename_no_save_when_zero_updates(runner, vault):
     """No save prompt when nothing was renamed."""
     _write_md(vault, "docs/test.md", _make_fm("Bob"))
 
-    result = runner.invoke(
-        people,
-        ["rename", "Alice", "Carol"],
-        obj={"vault": str(vault)},
-    )
+    with _mock_confirm(None) as mock:
+        result = runner.invoke(
+            people,
+            ["rename", "Alice", "Carol"],
+            obj={"vault": str(vault)},
+        )
 
     assert result.exit_code == 0
-    assert "Save to" not in result.output
+    mock.assert_not_called()
 
 
 def test_remove_saves_to_aliases(runner, vault):
     """Remove saves empty-string mapping when user confirms."""
     _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
 
-    result = runner.invoke(
-        people,
-        ["remove", "Alice"],
-        obj={"vault": str(vault)},
-        input="y\n",
-    )
+    with _mock_confirm(True):
+        result = runner.invoke(
+            people,
+            ["remove", "Alice"],
+            obj={"vault": str(vault)},
+        )
 
     assert result.exit_code == 0
     data = json.loads((vault / ".obagent" / "people-aliases.json").read_text())
@@ -318,12 +334,12 @@ def test_save_merges_with_existing(runner, vault):
     (aliases_dir / "people-aliases.json").write_text(json.dumps({"Zara": "Zara Z"}))
     _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
 
-    result = runner.invoke(
-        people,
-        ["rename", "Alice", "Carol"],
-        obj={"vault": str(vault)},
-        input="y\n",
-    )
+    with _mock_confirm(True):
+        result = runner.invoke(
+            people,
+            ["rename", "Alice", "Carol"],
+            obj={"vault": str(vault)},
+        )
 
     assert result.exit_code == 0
     data = json.loads((vault / ".obagent" / "people-aliases.json").read_text())

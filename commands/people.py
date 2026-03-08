@@ -82,12 +82,11 @@ def rename(ctx, old_name, new_name):
             click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
             count += 1
     click.secho(f"{count} file(s) updated", bold=True)
-    if count > 0:
-        try:
-            if click.confirm("Save to people-aliases.json?", default=False):
-                _save_to_aliases(vault, {old_name: new_name})
-        except click.Abort, EOFError:
-            pass
+    if (
+        count > 0
+        and questionary.confirm("Save to people-aliases.json?", default=False).ask()
+    ):
+        _save_to_aliases(vault, {old_name: new_name})
 
 
 @people.command()
@@ -162,9 +161,8 @@ def remove(ctx, names):
             click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
             count += 1
     click.secho(f"{count} file(s) updated", bold=True)
-    if count > 0:
-        try:
-            if click.confirm("Save to people-aliases.json?", default=False):
-                _save_to_aliases(vault, mapping)
-        except click.Abort, EOFError:
-            pass
+    if (
+        count > 0
+        and questionary.confirm("Save to people-aliases.json?", default=False).ask()
+    ):
+        _save_to_aliases(vault, mapping)
