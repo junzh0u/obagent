@@ -38,6 +38,14 @@ vault/{path}/
     src/   ocr/   llm/          ← per-entry data dirs
 ```
 
+## People Aliases
+
+- `commands/people.py` — people management commands and helpers
+- Aliases file: `{vault}/.obagent/people-aliases.json` — maps old names to new (empty string = remove)
+- `_load_aliases(vault)` loads the JSON, `_apply_mapping(names, mapping)` applies rename/remove/dedup/sort
+- `DocumentPipeline.prepare_context()` loads aliases into `DocumentFields._aliases`, which `postprocess()` auto-applies on render
+- `remap` command also uses `_load_aliases` for its default-path case
+
 ## Commands
 
 ```bash

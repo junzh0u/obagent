@@ -86,6 +86,13 @@ obagent receipt render
 obagent receipt render <sha256> <sha256> ...
 obagent receipt remove <sha256>
 
+# People management (documents only)
+obagent people list                       # list all unique names
+obagent people rename "Old Name" "New"    # rename across all notes
+obagent people remove "Name"              # remove from all notes
+obagent people remap                      # batch rename from aliases file
+# Aliases in .obagent/people-aliases.json are auto-applied on render
+
 # Re-process everything from scratch
 obagent receipt consume --overwrite ./inbox
 
