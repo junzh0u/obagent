@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -6,16 +7,18 @@ import questionary
 
 from commands.render import _parse_frontmatter
 
+REMAP_FILE = ".obagent/people-aliases.json"
+
 _PEOPLE_BLOCK_RE = re.compile(
     r"(people:)\n((?:  - [^\n]*\n)*)",
 )
 
 
-def _rename_in_file(md_path: Path, old_name: str, new_name: str) -> bool:
-    """Replace old_name with new_name in the people frontmatter list.
+def _remap_in_file(md_path: Path, mapping: dict[str, str]) -> bool:
+    """Apply a name mapping to the people frontmatter list.
 
-    Deduplicates if new_name already exists.  Returns True if the file was
-    modified.
+    mapping values: non-empty = rename, empty = remove.
+    Deduplicates. Returns True if the file was modified.
     """
     text = md_path.read_text()
     fm = _parse_frontmatter(text)
@@ -23,15 +26,16 @@ def _rename_in_file(md_path: Path, old_name: str, new_name: str) -> bool:
         return False
 
     names = [n.strip() for n in fm["people"].split(",")]
-    if old_name not in names:
+    if not any(n in mapping for n in names):
         return False
 
     updated: list[str] = []
     for n in names:
-        replacement = new_name if n == old_name else n
-        if replacement not in updated:
+        replacement = mapping.get(n, n)  # unmapped names pass through
+        if replacement and replacement not in updated:
             updated.append(replacement)
 
+    updated.sort()
     people_lines = "".join(f"  - {n}\n" for n in updated)
     new_text = _PEOPLE_BLOCK_RE.sub(rf"\1\n{people_lines}", text, count=1)
     if new_text == text:
@@ -40,27 +44,17 @@ def _rename_in_file(md_path: Path, old_name: str, new_name: str) -> bool:
     return True
 
 
-def _remove_in_file(md_path: Path, names_to_remove: set[str]) -> bool:
-    """Remove names from the people frontmatter list.
-
-    Returns True if the file was modified.
-    """
-    text = md_path.read_text()
-    fm = _parse_frontmatter(text)
-    if not fm or "people" not in fm or not fm["people"]:
-        return False
-
-    names = [n.strip() for n in fm["people"].split(",")]
-    if not any(n in names_to_remove for n in names):
-        return False
-
-    updated = [n for n in names if n not in names_to_remove]
-    people_lines = "".join(f"  - {n}\n" for n in updated)
-    new_text = _PEOPLE_BLOCK_RE.sub(rf"\1\n{people_lines}", text, count=1)
-    if new_text == text:
-        return False
-    md_path.write_text(new_text)
-    return True
+def _save_to_aliases(vault: Path, mapping: dict[str, str]) -> None:
+    """Merge mapping into the aliases JSON file, keeping keys sorted."""
+    path = vault / REMAP_FILE
+    if path.exists():
+        existing = json.loads(path.read_text())
+    else:
+        existing = {}
+    existing.update(mapping)
+    sorted_mapping = dict(sorted(existing.items()))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(sorted_mapping, indent=2, ensure_ascii=False) + "\n")
 
 
 def _iter_notes(vault: Path):
@@ -84,10 +78,39 @@ def rename(ctx, old_name, new_name):
     vault = Path(ctx.obj["vault"])
     count = 0
     for md in _iter_notes(vault):
-        if _rename_in_file(md, old_name, new_name):
+        if _remap_in_file(md, {old_name: new_name}):
             click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
             count += 1
     click.secho(f"{count} file(s) updated", bold=True)
+    if count > 0:
+        try:
+            if click.confirm("Save to people-aliases.json?", default=False):
+                _save_to_aliases(vault, {old_name: new_name})
+        except click.Abort, EOFError:
+            pass
+
+
+@people.command()
+@click.argument("mapping_file", required=False, default=None, type=click.Path())
+@click.pass_context
+def remap(ctx, mapping_file):
+    """Batch rename people from a JSON mapping file."""
+    vault = Path(ctx.obj["vault"])
+    if mapping_file is None:
+        mapping_path = vault / REMAP_FILE
+    else:
+        mapping_path = Path(mapping_file)
+    if not mapping_path.exists():
+        raise click.ClickException(f"Mapping file not found: {mapping_path}")
+    mapping = json.loads(mapping_path.read_text())
+    if not isinstance(mapping, dict):
+        raise click.ClickException("Mapping file must contain a JSON object")
+    total = 0
+    for md in _iter_notes(vault):
+        if _remap_in_file(md, mapping):
+            click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
+            total += 1
+    click.secho(f"{total} file(s) updated", bold=True)
 
 
 def _collect_names(vault: Path) -> list[str]:
@@ -133,8 +156,15 @@ def remove(ctx, names):
     else:
         to_remove = set(names)
     count = 0
+    mapping = {n: "" for n in to_remove}
     for md in _iter_notes(vault):
-        if _remove_in_file(md, to_remove):
+        if _remap_in_file(md, mapping):
             click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
             count += 1
     click.secho(f"{count} file(s) updated", bold=True)
+    if count > 0:
+        try:
+            if click.confirm("Save to people-aliases.json?", default=False):
+                _save_to_aliases(vault, mapping)
+        except click.Abort, EOFError:
+            pass
