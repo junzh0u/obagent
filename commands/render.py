@@ -150,6 +150,7 @@ def render_note(
                             fields[k] = existing_fm[k]
                 else:
                     fields.apply_frontmatter(existing_fm)
+            fields.postprocess()
 
     # Preserve existing consumed_at from frontmatter for idempotency;
     # only read from metadata.json for new notes.

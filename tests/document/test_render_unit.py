@@ -294,6 +294,49 @@ def test_overwrite_restores_llm_summary(runner, vault):
     assert "Edited summary" not in final_content
 
 
+def _write_aliases(vault, mapping):
+    """Write a people-aliases.json file into the vault."""
+    aliases_path = vault / ".obagent" / "people-aliases.json"
+    aliases_path.parent.mkdir(parents=True, exist_ok=True)
+    aliases_path.write_text(json.dumps(mapping))
+
+
+def test_render_applies_aliases_to_existing_frontmatter(runner, vault):
+    """Aliases are applied even when people come from existing frontmatter."""
+    _write_aliases(vault, {"Zhou Jun": "Jun Zhou"})
+    _setup_entry_with_llm(
+        vault,
+        sha="sha_alias",
+        title="DMV Registration",
+        date="2024-01-01",
+        tags="dmv",
+        people="Zhou Jun",
+        summary="Vehicle registration.",
+    )
+    # First render — alias applied to LLM data
+    runner.invoke(
+        document_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+    md_file = vault / "docs" / "2024-01-01 - DMV Registration.md"
+    assert md_file.exists()
+    content = md_file.read_text()
+    assert "  - Jun Zhou" in content
+    assert "Zhou Jun" not in content
+
+    # Re-render — alias still applied via frontmatter postprocess
+    result = runner.invoke(
+        document_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "docs"},
+    )
+    assert result.exit_code == 0
+    final_content = md_file.read_text()
+    assert "  - Jun Zhou" in final_content
+    assert "Zhou Jun" not in final_content
+
+
 def test_format_body_summary_callout():
     """format_body renders summary as an Obsidian callout."""
     fields = DocumentFields({"summary": "A short summary."})
