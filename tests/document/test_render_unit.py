@@ -129,12 +129,12 @@ def test_frontmatter_empty_tags():
 
 
 def test_frontmatter_people_as_yaml_list():
-    """Comma-separated people are rendered as a YAML list."""
+    """Comma-separated people are rendered as a sorted YAML list."""
     fields = DocumentFields(
         {"title": "Doc", "date": "", "people": "John Doe, Jane Smith"}
     )
     fm = fields.format_frontmatter()
-    assert "people:\n  - John Doe\n  - Jane Smith\n" in fm
+    assert "people:\n  - Jane Smith\n  - John Doe\n" in fm
 
 
 def test_manual_people_edit_preserved(runner, vault):
