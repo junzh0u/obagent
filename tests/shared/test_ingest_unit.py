@@ -2,6 +2,8 @@ import hashlib
 import json
 from datetime import datetime
 
+import pytest
+
 from commands.ingest import ingest
 
 
@@ -203,6 +205,28 @@ def test_unsupported_files_are_ignored(runner, vault, source_dir):
     assert (source_dir / "image.png").exists()
     assert not pdf.exists()
     assert len(list((vault / "mixed").iterdir())) == 1
+
+
+@pytest.mark.parametrize("filename", ["SCAN.PDF", "ScAn.PdF"])
+def test_mixed_case_extension_ingest(runner, vault, source_dir, filename):
+    """Files with non-lowercase extensions are ingested from directories."""
+    content = f"content for {filename}".encode()
+    pdf = source_dir / filename
+    pdf.write_bytes(content)
+    sha = hashlib.sha256(content).hexdigest()
+
+    result = runner.invoke(
+        ingest,
+        [str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert "Ingested" in result.output
+    assert not pdf.exists()
+    target_dir = vault / "papers" / "_assets_" / sha
+    assert (target_dir / "src" / "original.pdf").exists()
+    assert (target_dir / "src" / "original.pdf").read_bytes() == content
 
 
 def test_jpeg_ingest(runner, vault, source_dir):

@@ -50,8 +50,13 @@ def resolve_sources(paths: tuple[str, ...]) -> list[Path]:
     for p in paths:
         p = Path(p)
         if p.is_dir():
-            for ext in sorted(SUPPORTED_EXTENSIONS):
-                sources.extend(sorted(p.rglob(f"*{ext}")))
+            sources.extend(
+                sorted(
+                    f
+                    for f in p.rglob("*")
+                    if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
+                )
+            )
         elif p.suffix.lower() in SUPPORTED_EXTENSIONS:
             sources.append(p)
         else:
