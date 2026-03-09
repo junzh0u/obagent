@@ -76,9 +76,9 @@ class DocumentPipeline(Pipeline):
 
     @override
     def prepare_context(self, vault: Path) -> None:
-        from commands.people import _collect_names, _load_aliases
+        from commands.people import _load_aliases, _load_pinned
 
-        self._known_names = _collect_names(vault)
+        self._known_names = _load_pinned(vault)
         DocumentFields._aliases = _load_aliases(vault)
 
     @override

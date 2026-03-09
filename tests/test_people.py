@@ -138,7 +138,7 @@ def test_remove_person(runner, vault):
     """Removing a single name from the people list."""
     md = _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
 
-    with _mock_confirm(None):
+    with _mock_confirm(False):
         result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
 
     assert result.exit_code == 0
@@ -152,7 +152,7 @@ def test_remove_multiple(runner, vault):
     """Removing multiple names at once."""
     md = _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob", "Carol"))
 
-    with _mock_confirm(None):
+    with _mock_confirm(False):
         result = runner.invoke(
             people, ["remove", "Alice", "Carol"], obj={"vault": str(vault)}
         )
@@ -168,7 +168,7 @@ def test_remove_all_people(runner, vault):
     """Removing all people leaves an empty people key."""
     md = _write_md(vault, "docs/test.md", _make_fm("Alice"))
 
-    with _mock_confirm(None):
+    with _mock_confirm(False):
         result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
 
     assert result.exit_code == 0
@@ -181,7 +181,8 @@ def test_remove_skips_unrelated(runner, vault):
     """Files without matching names are not modified."""
     md = _write_md(vault, "docs/test.md", _make_fm("Bob", "Carol"))
 
-    result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
+    with _mock_confirm(False):
+        result = runner.invoke(people, ["remove", "Alice"], obj={"vault": str(vault)})
 
     assert result.exit_code == 0
     assert "0 file(s) updated" in result.output
@@ -327,6 +328,30 @@ def test_remove_saves_to_aliases(runner, vault):
     assert data == {"Alice": ""}
 
 
+def test_remove_offers_to_pin_remaining(runner, vault):
+    """After interactive remove, user can pin remaining unpinned names."""
+    _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob", "Carol"))
+
+    # Select Alice to remove, decline alias save, confirm pin
+    confirm_answers = iter([False, True])
+    with (
+        _mock_checkbox(["Alice"]),
+        patch(
+            "commands.people.questionary.confirm",
+            side_effect=lambda *a, **kw: type(
+                "Q", (), {"ask": staticmethod(lambda: next(confirm_answers))}
+            )(),
+        ),
+    ):
+        result = runner.invoke(people, ["remove"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "Remaining unpinned names: Bob, Carol" in result.output
+    assert "Pinned:" in result.output
+    data = json.loads((vault / ".obagent" / "people-pinned.json").read_text())
+    assert data == ["Bob", "Carol"]
+
+
 def test_save_merges_with_existing(runner, vault):
     """Saving merges with existing aliases and keeps keys sorted."""
     aliases_dir = vault / ".obagent"
@@ -345,3 +370,131 @@ def test_save_merges_with_existing(runner, vault):
     data = json.loads((vault / ".obagent" / "people-aliases.json").read_text())
     assert data == {"Alice": "Carol", "Zara": "Zara Z"}
     assert list(data.keys()) == ["Alice", "Zara"]  # sorted
+
+
+def _mock_checkbox(choices):
+    """Return a patch that makes questionary.checkbox().ask() return *choices*."""
+    return patch(
+        "commands.people.questionary.checkbox",
+        return_value=type("Q", (), {"ask": staticmethod(lambda: choices)})(),
+    )
+
+
+def test_pin_adds_names(runner, vault):
+    """Pin via args creates the pinned JSON file."""
+    result = runner.invoke(people, ["pin", "Alice", "Bob"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "Pinned:" in result.output
+    path = vault / ".obagent" / "people-pinned.json"
+    assert path.exists()
+    data = json.loads(path.read_text())
+    assert data == ["Alice", "Bob"]
+
+
+def test_pin_interactive(runner, vault):
+    """Pin with no args shows interactive checkbox."""
+    _write_md(vault, "docs/a.md", _make_fm("Alice", "Bob", "Carol"))
+
+    with _mock_checkbox(["Bob"]), _mock_confirm(False):
+        result = runner.invoke(people, ["pin"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    data = json.loads((vault / ".obagent" / "people-pinned.json").read_text())
+    assert data == ["Bob"]
+
+
+def test_pin_merges_with_existing(runner, vault):
+    """Pinning new names preserves existing pinned names."""
+    pinned_dir = vault / ".obagent"
+    pinned_dir.mkdir(parents=True)
+    (pinned_dir / "people-pinned.json").write_text(json.dumps(["Alice"]))
+
+    result = runner.invoke(people, ["pin", "Bob"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    data = json.loads((vault / ".obagent" / "people-pinned.json").read_text())
+    assert data == ["Alice", "Bob"]
+
+
+def test_pin_offers_to_remove_unpinned(runner, vault):
+    """After interactive pin, user can remove non-pinned names from vault notes."""
+    md = _write_md(vault, "docs/a.md", _make_fm("Alice", "Bob", "Carol"))
+
+    # Interactive select Alice, then confirm remove all, decline alias save
+    confirm_answers = iter([True, False])
+    with (
+        _mock_checkbox(["Alice"]),
+        patch(
+            "commands.people.questionary.confirm",
+            side_effect=lambda *a, **kw: type(
+                "Q", (), {"ask": staticmethod(lambda: next(confirm_answers))}
+            )(),
+        ),
+    ):
+        result = runner.invoke(people, ["pin"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "Non-pinned names: Bob, Carol" in result.output
+    assert "1 file(s) updated" in result.output
+    content = md.read_text()
+    assert "  - Alice\n" in content
+    assert "Bob" not in content
+    assert "Carol" not in content
+
+
+def test_unpin_removes_names(runner, vault):
+    """Unpin via args removes names from the pinned list."""
+    pinned_dir = vault / ".obagent"
+    pinned_dir.mkdir(parents=True)
+    (pinned_dir / "people-pinned.json").write_text(
+        json.dumps(["Alice", "Bob", "Carol"])
+    )
+
+    result = runner.invoke(people, ["unpin", "Bob"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "Unpinned:" in result.output
+    data = json.loads((vault / ".obagent" / "people-pinned.json").read_text())
+    assert data == ["Alice", "Carol"]
+
+
+def test_unpin_interactive(runner, vault):
+    """Unpin with no args shows interactive checkbox."""
+    pinned_dir = vault / ".obagent"
+    pinned_dir.mkdir(parents=True)
+    (pinned_dir / "people-pinned.json").write_text(json.dumps(["Alice", "Bob"]))
+
+    with _mock_checkbox(["Alice"]), _mock_confirm(False):
+        result = runner.invoke(people, ["unpin"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    data = json.loads((vault / ".obagent" / "people-pinned.json").read_text())
+    assert data == ["Bob"]
+
+
+def test_unpin_removes_from_notes(runner, vault):
+    """Interactive unpin with confirm also removes names from vault notes."""
+    md = _write_md(vault, "docs/a.md", _make_fm("Alice", "Bob"))
+    pinned_dir = vault / ".obagent"
+    pinned_dir.mkdir(parents=True)
+    (pinned_dir / "people-pinned.json").write_text(json.dumps(["Alice", "Bob"]))
+
+    # Select Bob to unpin, confirm remove from notes, decline alias save
+    confirm_answers = iter([True, False])
+    with (
+        _mock_checkbox(["Bob"]),
+        patch(
+            "commands.people.questionary.confirm",
+            side_effect=lambda *a, **kw: type(
+                "Q", (), {"ask": staticmethod(lambda: next(confirm_answers))}
+            )(),
+        ),
+    ):
+        result = runner.invoke(people, ["unpin"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "1 file(s) updated" in result.output
+    content = md.read_text()
+    assert "  - Alice\n" in content
+    assert "Bob" not in content

@@ -9,6 +9,7 @@ from commands.render import _parse_frontmatter
 from utils import pinyin_sort_key
 
 REMAP_FILE = ".obagent/people-aliases.json"
+PINNED_FILE = ".obagent/people-pinned.json"
 
 _PEOPLE_BLOCK_RE = re.compile(
     r"(people:)\n((?:  - [^\n]*\n)*)",
@@ -56,6 +57,22 @@ def _load_aliases(vault: Path) -> dict[str, str]:
     if not path.exists():
         return {}
     return json.loads(path.read_text())
+
+
+def _load_pinned(vault: Path) -> list[str]:
+    """Load the pinned people names from the vault, or return []."""
+    path = vault / PINNED_FILE
+    if not path.exists():
+        return []
+    return json.loads(path.read_text())
+
+
+def _save_pinned(vault: Path, names: list[str]) -> None:
+    """Save a deduplicated, sorted list of pinned names."""
+    path = vault / PINNED_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sorted_names = sorted(set(names), key=pinyin_sort_key)
+    path.write_text(json.dumps(sorted_names, indent=2, ensure_ascii=False) + "\n")
 
 
 def _save_to_aliases(vault: Path, mapping: dict[str, str]) -> None:
@@ -150,14 +167,32 @@ def list_people(ctx):
         click.echo(name)
 
 
+def _remove_names(vault: Path, names: set[str]) -> None:
+    """Remove names from all vault notes, with optional alias save."""
+    mapping = {n: "" for n in names}
+    count = 0
+    for md in _iter_notes(vault):
+        if _remap_in_file(md, mapping):
+            click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
+            count += 1
+    click.secho(f"{count} file(s) updated", bold=True)
+    if (
+        count > 0
+        and questionary.confirm("Save to people-aliases.json?", default=False).ask()
+    ):
+        _save_to_aliases(vault, mapping)
+
+
 @people.command()
 @click.argument("names", nargs=-1)
 @click.pass_context
 def remove(ctx, names):
     """Remove one or more people from all notes in the vault."""
     vault = Path(ctx.obj["vault"])
-    if not names:
-        all_names = _collect_names(vault)
+    interactive = not names
+    if interactive:
+        pinned = set(_load_pinned(vault))
+        all_names = [n for n in _collect_names(vault) if n not in pinned]
         if not all_names:
             click.echo("No people found in vault.")
             return
@@ -170,15 +205,78 @@ def remove(ctx, names):
         to_remove = set(selected)
     else:
         to_remove = set(names)
-    count = 0
-    mapping = {n: "" for n in to_remove}
-    for md in _iter_notes(vault):
-        if _remap_in_file(md, mapping):
-            click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
-            count += 1
-    click.secho(f"{count} file(s) updated", bold=True)
-    if (
-        count > 0
-        and questionary.confirm("Save to people-aliases.json?", default=False).ask()
-    ):
-        _save_to_aliases(vault, mapping)
+    _remove_names(vault, to_remove)
+    if not interactive:
+        return
+    # Offer to pin the remaining (non-removed) names
+    remaining = [n for n in _collect_names(vault) if n not in set(_load_pinned(vault))]
+    if remaining:
+        click.echo("Remaining unpinned names: " + ", ".join(remaining))
+        if questionary.confirm("Pin all?", default=False).ask():
+            existing = _load_pinned(vault)
+            _save_pinned(vault, list(existing) + remaining)
+            click.secho(f"Pinned: {', '.join(remaining)}", fg="green")
+
+
+@people.command()
+@click.argument("names", nargs=-1)
+@click.pass_context
+def pin(ctx, names):
+    """Pin people names so the LLM prefers them."""
+    vault = Path(ctx.obj["vault"])
+    interactive = not names
+    if interactive:
+        existing = set(_load_pinned(vault))
+        candidates = [n for n in _collect_names(vault) if n not in existing]
+        if not candidates:
+            click.echo("No new names to pin.")
+            return
+        selected = questionary.checkbox(
+            "Select people to pin:", choices=candidates
+        ).ask()
+        if not selected:
+            click.echo("No names selected.")
+            return
+        names = tuple(selected)
+    existing = _load_pinned(vault)
+    merged = list(existing) + list(names)
+    _save_pinned(vault, merged)
+    click.secho(f"Pinned: {', '.join(names)}", fg="green")
+    if not interactive:
+        return
+    # Offer to remove non-pinned names from vault notes
+    pinned = set(_load_pinned(vault))
+    unpinned = [n for n in _collect_names(vault) if n not in pinned]
+    if unpinned:
+        click.echo("Non-pinned names: " + ", ".join(unpinned))
+        if questionary.confirm("Remove all from vault notes?", default=False).ask():
+            _remove_names(vault, set(unpinned))
+
+
+@people.command()
+@click.argument("names", nargs=-1)
+@click.pass_context
+def unpin(ctx, names):
+    """Unpin people names."""
+    vault = Path(ctx.obj["vault"])
+    existing = _load_pinned(vault)
+    if not existing:
+        click.echo("No pinned names.")
+        return
+    interactive = not names
+    if interactive:
+        selected = questionary.checkbox(
+            "Select people to unpin:", choices=existing
+        ).ask()
+        if not selected:
+            click.echo("No names selected.")
+            return
+        names = tuple(selected)
+    to_remove = set(names)
+    remaining = [n for n in existing if n not in to_remove]
+    _save_pinned(vault, remaining)
+    click.secho(f"Unpinned: {', '.join(names)}", fg="green")
+    if not interactive:
+        return
+    if questionary.confirm("Also remove from vault notes?", default=False).ask():
+        _remove_names(vault, to_remove)

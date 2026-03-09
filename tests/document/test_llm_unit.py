@@ -83,12 +83,34 @@ def test_prompt_function():
     assert '"Documents"' in prompt
 
 
-def test_prompt_includes_known_names(tmp_path):
+def test_prompt_includes_known_names():
     """Known names are included in the prompt after prepare_context."""
     from commands.document.pipeline import DocumentPipeline
 
     p = DocumentPipeline.__new__(DocumentPipeline)
     p._known_names = ["Alice Smith", "Bob Jones"]
+    prompt = p.prompt("Documents", "OCR text")
+    assert "Alice Smith" in prompt
+    assert "Bob Jones" in prompt
+    assert "MUST use the exact full name" in prompt
+
+
+def test_prompt_uses_pinned_names(tmp_path):
+    """prepare_context loads pinned names into the prompt."""
+    import json
+
+    from commands.document.pipeline import DocumentPipeline
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    pinned_dir = vault / ".obagent"
+    pinned_dir.mkdir()
+    (pinned_dir / "people-pinned.json").write_text(
+        json.dumps(["Alice Smith", "Bob Jones"])
+    )
+
+    p = DocumentPipeline()
+    p.prepare_context(vault)
     prompt = p.prompt("Documents", "OCR text")
     assert "Alice Smith" in prompt
     assert "Bob Jones" in prompt
