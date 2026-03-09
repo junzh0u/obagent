@@ -101,12 +101,30 @@ def people():
 
 
 @people.command()
-@click.argument("old_name")
-@click.argument("new_name")
+@click.argument("old_name", required=False, default=None)
+@click.argument("new_name", required=False, default=None)
 @click.pass_context
 def rename(ctx, old_name, new_name):
     """Rename a person across all notes in the vault."""
     vault = Path(ctx.obj["vault"])
+    if old_name is None:
+        all_names = _collect_names(vault)
+        if not all_names:
+            click.echo("No people found in vault.")
+            return
+        pinned = set(_load_pinned(vault))
+        candidates = [n for n in all_names if n not in pinned]
+        if not candidates:
+            click.echo("All people are pinned.")
+            return
+        old_name = questionary.select(
+            "Select person to rename:", choices=candidates
+        ).ask()
+        if not old_name:
+            return
+        new_name = questionary.text("New name:").ask()
+        if not new_name:
+            return
     count = 0
     for md in _iter_notes(vault):
         if _remap_in_file(md, {old_name: new_name}):

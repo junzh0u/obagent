@@ -372,6 +372,22 @@ def test_save_merges_with_existing(runner, vault):
     assert list(data.keys()) == ["Alice", "Zara"]  # sorted
 
 
+def _mock_select(choice):
+    """Return a patch that makes questionary.select().ask() return *choice*."""
+    return patch(
+        "commands.people.questionary.select",
+        return_value=type("Q", (), {"ask": staticmethod(lambda: choice)})(),
+    )
+
+
+def _mock_text(value):
+    """Return a patch that makes questionary.text().ask() return *value*."""
+    return patch(
+        "commands.people.questionary.text",
+        return_value=type("Q", (), {"ask": staticmethod(lambda: value)})(),
+    )
+
+
 def _mock_checkbox(choices):
     """Return a patch that makes questionary.checkbox().ask() return *choices*."""
     return patch(
@@ -498,3 +514,28 @@ def test_unpin_removes_from_notes(runner, vault):
     content = md.read_text()
     assert "  - Alice\n" in content
     assert "Bob" not in content
+
+
+def test_rename_interactive(runner, vault):
+    """Interactive rename selects old name and prompts for new name."""
+    _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
+
+    with _mock_select("Alice"), _mock_text("Carol"), _mock_confirm(None):
+        result = runner.invoke(people, ["rename"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "1 file(s) updated" in result.output
+
+
+def test_rename_interactive_excludes_pinned(runner, vault):
+    """Interactive rename excludes pinned names from candidates."""
+    _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
+    pinned_dir = vault / ".obagent"
+    pinned_dir.mkdir(parents=True)
+    (pinned_dir / "people-pinned.json").write_text(json.dumps(["Alice"]))
+
+    with _mock_select("Bob"), _mock_text("Dave"), _mock_confirm(None):
+        result = runner.invoke(people, ["rename"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "1 file(s) updated" in result.output
