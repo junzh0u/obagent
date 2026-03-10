@@ -2,7 +2,6 @@ import click
 
 from commands.document.pipeline import document_pipeline
 from commands.ingest import ingest
-from commands.ocr import ocr
 from commands.remove import remove
 from commands.scan import scan
 
@@ -24,6 +23,6 @@ document.add_command(document_pipeline.consume_command, "consume")
 document.add_command(document_pipeline.llm_command, "llm")
 document.add_command(document_pipeline.render_command, "render")
 document.add_command(ingest)
-document.add_command(ocr)
+document.add_command(document_pipeline.ocr_command, "ocr")
 document.add_command(remove)
 document.add_command(scan)

@@ -6,10 +6,12 @@ import httpx
 from mistralai.models import SDKError
 from mistralai.models.ocrrequest import DocumentURLChunk, ImageURLChunk
 
-from commands.ocr import _build_ocr_document, _ocr_with_retry, ocr
+from commands.ocr import _build_ocr_document, _ocr_with_retry
+from commands.receipt.pipeline import receipt_pipeline
 from constants import OCR_MODEL
-
 from tests.conftest import setup_mock_mistral
+
+ocr = receipt_pipeline.ocr_command
 
 
 def _make_sdk_error(status_code):

@@ -67,6 +67,12 @@ class Pipeline(ABC):
         return make_consume_command(pipeline=self)
 
     @cached_property
+    def ocr_command(self) -> click.Command:
+        from commands.ocr import make_ocr_command
+
+        return make_ocr_command(pipeline=self)
+
+    @cached_property
     def llm_command(self) -> click.Command:
         from commands.llm import make_llm_command
 
