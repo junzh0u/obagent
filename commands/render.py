@@ -2,6 +2,7 @@ import json
 import re
 from collections import defaultdict
 from pathlib import Path
+from typing import Literal
 
 import click
 
@@ -104,6 +105,11 @@ def _print_stats(stats: dict[str, int]) -> None:
         click.secho(", ".join(parts), bold=True)
 
 
+RenderStatus = Literal[
+    "created", "updated", "renamed", "appended", "unchanged", "skipped"
+]
+
+
 def render_note(
     target_dir: Path,
     *,
@@ -111,7 +117,8 @@ def render_note(
     overwrite_fields: str | None = None,
     note_index: dict[str, tuple[dict[str, str] | None, list[Path]]] | None = None,
     pipeline: Pipeline,
-) -> tuple[Path | None, str]:
+    log_header: bool = False,
+) -> tuple[Path | None, RenderStatus]:
     """Read LLM JSON and create an Obsidian markdown note.
 
     Writes .md to target_dir's grandparent (vault/path/) for a flat, browsable layout.
@@ -120,15 +127,23 @@ def render_note(
     the named fields use LLM data; the rest keep their frontmatter values.
     Returns (md_path, status) where status is one of: "created", "updated",
     "renamed", "appended", "unchanged", "skipped".
+    Logs status messages inline.  When log_header=True, also prints a
+    ``Render: <target_dir>`` header before the first message.
     """
 
-    def _log_target() -> None:
-        click.secho(f"Render: {target_dir}", bold=True)
+    _header_printed = False
+
+    def _emit(msg: str, *, fg: str) -> None:
+        nonlocal _header_printed
+        if msg:
+            if log_header and not _header_printed:
+                click.secho(f"Render: {target_dir}", bold=True)
+                _header_printed = True
+            click.secho(f"  {msg}", fg=fg)
 
     json_path = newest_file(target_dir / "llm", "*.json")
     if json_path is None:
-        _log_target()
-        click.secho("  No LLM result found, skipping render", fg="yellow")
+        _emit("No LLM result found, skipping render", fg="yellow")
         return None, "skipped"
 
     path_dir = target_dir.parent.parent
@@ -206,14 +221,12 @@ def render_note(
             if old_text == new_content:
                 return md_path, "unchanged"
             md_path.write_text(new_content)
-            _log_target()
-            click.secho(f"  Updated: {safe_title}", fg="green")
+            _emit(f"Updated: {safe_title}", fg="green")
             return md_path, "updated"
         # Title changed — delete old, create at new path
         old_md.unlink()
-        _log_target()
-        click.secho(f"  Renamed: {old_md.name} -> {md_path.name}", fg="green")
         md_path.write_text(content)
+        _emit(f"Renamed: {old_md.name} -> {md_path.name}", fg="green")
         return md_path, "renamed"
 
     # No existing note for this sha
@@ -224,13 +237,11 @@ def render_note(
         with md_path.open("a") as f:
             f.write(embed)
             f.write(meta_embed)
-        _log_target()
-        click.secho(f"  Appended to: {safe_title}", fg="green")
+        _emit(f"Appended to: {safe_title}", fg="green")
         return md_path, "appended"
 
     md_path.write_text(content)
-    _log_target()
-    click.secho(f"  Created: {safe_title}", fg="green")
+    _emit(f"Created: {safe_title}", fg="green")
     return md_path, "created"
 
 
@@ -274,6 +285,7 @@ def make_render_command(*, pipeline: Pipeline) -> click.Command:
                     overwrite_fields=overwrite_fields,
                     note_index=note_index,
                     pipeline=pipeline,
+                    log_header=True,
                 )
                 stats[status] += 1
                 if md_path:
@@ -316,6 +328,7 @@ def render_all(ctx, overwrite):
                     overwrite=overwrite,
                     note_index=note_index,
                     pipeline=pipeline,
+                    log_header=True,
                 )
                 stats[status] += 1
                 if md_path:
