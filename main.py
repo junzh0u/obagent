@@ -1,5 +1,6 @@
 import click
 
+from commands.bank import bank
 from commands.bank_statement import bank_statement
 from commands.document import document
 from commands.people import people
@@ -24,6 +25,7 @@ def cli(ctx, vault):
 cli.add_command(receipt)
 cli.add_command(bank_statement)
 cli.add_command(document)
+cli.add_command(bank)
 cli.add_command(people)
 cli.add_command(render_all, "render")
 

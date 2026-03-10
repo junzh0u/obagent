@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from typing import Literal, override
 
 from commands.fields import Fields
@@ -9,8 +10,14 @@ from constants import TITLE_UNSAFE_CHARS
 class BankStatementFields(
     Fields[Literal["bank_name", "date", "end_date", "account_name", "account_number"]],
 ):
+    _aliases: dict[str, str] = {}
+
     @override
     def postprocess(self) -> None:
+        bank = self.get("bank_name", "")
+        if bank and self._aliases:
+            self["bank_name"] = self._aliases.get(bank, bank)
+
         bank = self.get("bank_name", "")
         acct = self.get("account_name", "")
         if bank and acct:
@@ -68,6 +75,12 @@ class BankStatementPipeline(Pipeline):
     @override
     def default_path(self) -> str:
         return "Bank Statements"
+
+    @override
+    def prepare_context(self, vault: Path) -> None:
+        from commands.bank import _load_bank_aliases
+
+        BankStatementFields._aliases = _load_bank_aliases(vault)
 
     @property
     @override
