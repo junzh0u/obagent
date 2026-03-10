@@ -5,9 +5,11 @@ from contextlib import ExitStack
 from pathlib import Path
 
 import click
-from mistralai import Mistral
-from mistralai.models import OCRResponse, SDKError
-from mistralai.models.ocrrequest import DocumentURLChunk, ImageURLChunk
+from mistralai.client import Mistral
+from mistralai.client.models import OCRResponse
+from mistralai.client.models.ocrrequest import DocumentURLChunk, ImageURLChunk
+
+from mistralai.client.errors import SDKError
 
 from constants import ASSETS_DIR, OCR_MODEL
 from utils import interruptible, iter_entries, source_file

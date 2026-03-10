@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "click",
-    "mistralai>=1.12.4",
+    "mistralai>=2",
     "openai>=2.21.0",
     "pypinyin>=0.55.0",
     "questionary",

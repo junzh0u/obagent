@@ -3,8 +3,8 @@ import json
 from unittest.mock import MagicMock, patch
 
 import httpx
-from mistralai.models import SDKError
-from mistralai.models.ocrrequest import DocumentURLChunk, ImageURLChunk
+from mistralai.client.errors import SDKError
+from mistralai.client.models.ocrrequest import DocumentURLChunk, ImageURLChunk
 
 from commands.ocr import _build_ocr_document, _ocr_with_retry
 from commands.receipt.pipeline import receipt_pipeline

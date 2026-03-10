@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import click
-from mistralai import Mistral
+from mistralai.client import Mistral
 from openai import OpenAI
 
 from commands.ingest import ingest_source, resolve_sources
