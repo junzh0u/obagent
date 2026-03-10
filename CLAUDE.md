@@ -40,13 +40,19 @@ vault/{path}/
     src/   ocr/   llm/          ← per-entry data dirs
 ```
 
-## People Aliases
+## Name Management (People & Banks)
 
-- `commands/people.py` — people management commands and helpers
+Both `commands/people.py` and `commands/bank.py` share the same pattern via `lib/name_store.py` (shared JSON store helpers and command factories: `make_rename_command`, `make_list_command`, `make_remap_command`, `make_pin_command`, `make_unpin_command`).
+
+### People (documents)
 - Aliases file: `{vault}/.obagent/people-aliases.json` — maps old names to new (empty string = remove)
-- `_load_aliases(vault)` loads the JSON, `_apply_mapping(names, mapping)` applies rename/remove/dedup/sort
+- Pinned file: `{vault}/.obagent/people-pinned.json` — names always included in LLM context
 - `DocumentPipeline.prepare_context()` loads aliases into `DocumentFields._aliases`, which `postprocess()` auto-applies on render
-- `remap` command also uses `_load_aliases` for its default-path case
+
+### Banks (bank statements)
+- Aliases file: `{vault}/.obagent/bank-aliases.json` — maps old bank names to new
+- Pinned file: `{vault}/.obagent/bank-pinned.json` — pinned bank names
+- `BankStatementPipeline.prepare_context()` loads aliases into `BankStatementFields._aliases`, which `postprocess()` auto-applies on render
 
 ## Commands
 

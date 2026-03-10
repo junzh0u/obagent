@@ -91,7 +91,17 @@ obagent people list                       # list all unique names
 obagent people rename "Old Name" "New"    # rename across all notes
 obagent people remove "Name"              # remove from all notes
 obagent people remap                      # batch rename from aliases file
+obagent people pin "Name"                 # pin names to the known-names list
+obagent people unpin "Name"               # unpin names
 # Aliases in .obagent/people-aliases.json are auto-applied on render
+
+# Bank management (bank statements only)
+obagent bank list                         # list all unique bank names
+obagent bank rename "Old Bank" "New"      # rename across all notes
+obagent bank remap                        # batch rename from aliases file
+obagent bank pin "Name"                   # pin bank names
+obagent bank unpin "Name"                 # unpin bank names
+# Aliases in .obagent/bank-aliases.json are auto-applied on render
 
 # Re-process everything from scratch
 obagent receipt consume --overwrite ./inbox
