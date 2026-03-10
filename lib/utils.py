@@ -6,7 +6,7 @@ from typing import TypeVar
 import click
 from pypinyin import lazy_pinyin
 
-from constants import ASSETS_DIR
+from lib.constants import ASSETS_DIR
 
 T = TypeVar("T")
 

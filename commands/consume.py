@@ -7,10 +7,10 @@ from openai import OpenAI
 from commands.ingest import ingest_source, resolve_sources
 from commands.llm import extract_fields
 from commands.ocr import run_ocr
-from commands.pipeline import Pipeline
+from lib.pipeline import Pipeline
 from commands.render import index_existing_notes, render_note
-from constants import LLM_MODEL, OCR_MODEL
-from utils import interruptible
+from lib.constants import LLM_MODEL, OCR_MODEL
+from lib.utils import interruptible
 
 
 def make_consume_command(*, pipeline: Pipeline) -> click.Command:

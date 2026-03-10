@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from commands.document.pipeline import document_pipeline
-from constants import LLM_MODEL, OCR_MODEL
+from lib.constants import LLM_MODEL, OCR_MODEL
 
 from tests.conftest import BOTH_KEYS
 

@@ -5,7 +5,7 @@ from commands.bank_statement.pipeline import (
     BankStatementFields,
     bank_statement_pipeline,
 )
-from constants import LLM_MODEL
+from lib.constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai_bs
 

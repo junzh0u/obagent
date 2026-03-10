@@ -2,7 +2,7 @@ import json
 from unittest.mock import patch
 
 from commands.document.pipeline import DocumentFields, document_pipeline
-from constants import LLM_MODEL
+from lib.constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai_doc
 

@@ -1,7 +1,7 @@
 import os
 import signal
 
-from utils import interruptible
+from lib.utils import interruptible
 
 
 def test_normal_iteration():

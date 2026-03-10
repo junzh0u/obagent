@@ -3,7 +3,7 @@ from pathlib import Path
 
 import click
 
-from commands.name_store import (
+from lib.name_store import (
     iter_notes,
     load_json_dict,
     load_json_list,

@@ -10,12 +10,14 @@
 ## Project Structure
 
 - `main.py` — CLI entry point, click group with subgroups per document type
-- `commands/fields.py` — `Fields[K]` ABC: dict-based field container with postprocess, defaults, title, and formatting
-- `commands/pipeline.py` — `Pipeline` ABC: orchestration (prompt, CLI command factories)
+- `lib/` — shared infrastructure (not CLI commands)
+  - `lib/fields.py` — `Fields[K]` ABC: dict-based field container with postprocess, defaults, title, and formatting
+  - `lib/pipeline.py` — `Pipeline` ABC: orchestration (prompt, CLI command factories)
+  - `lib/name_store.py` — shared JSON store helpers for aliases and pinned names
+  - `lib/constants.py` — shared constants (OCR_MODEL, LLM_MODEL, ASSETS_DIR)
+  - `lib/utils.py` — shared utilities (iter_entries, newest_file)
 - `commands/{receipt,bank_statement,document}/pipeline.py` — concrete `Fields` + `Pipeline` per type
-- `commands/` — shared command modules (consume, ingest, ocr, llm, render, scan)
-- `constants.py` — shared constants (OCR_MODEL, LLM_MODEL, ASSETS_DIR)
-- `utils.py` — shared utilities (iter_entries, newest_file)
+- `commands/` — CLI command modules (consume, ingest, ocr, llm, render, scan)
 - `tests/` — unit and integration tests with shared fixtures in `conftest.py`
 
 ## Architecture

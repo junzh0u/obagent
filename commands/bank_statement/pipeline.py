@@ -2,9 +2,9 @@ import re
 from pathlib import Path
 from typing import Literal, override
 
-from commands.fields import Fields
-from commands.pipeline import Pipeline
-from constants import TITLE_UNSAFE_CHARS
+from lib.fields import Fields
+from lib.pipeline import Pipeline
+from lib.constants import TITLE_UNSAFE_CHARS
 
 
 class BankStatementFields(
@@ -79,7 +79,7 @@ class BankStatementPipeline(Pipeline):
     @override
     def prepare_context(self, vault: Path) -> None:
         from commands.bank import ALIASES_FILE
-        from commands.name_store import load_json_dict
+        from lib.name_store import load_json_dict
 
         BankStatementFields._aliases = load_json_dict(vault, ALIASES_FILE)
 

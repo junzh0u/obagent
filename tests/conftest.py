@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
-from constants import OCR_MODEL
+from lib.constants import OCR_MODEL
 
 BOTH_KEYS = ["--mistral-api-key", "test-key", "--openai-api-key", "test-oai-key"]
 

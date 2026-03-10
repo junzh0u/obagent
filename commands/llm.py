@@ -4,9 +4,9 @@ from pathlib import Path
 import click
 from openai import OpenAI
 
-from commands.pipeline import Pipeline
-from constants import ASSETS_DIR, LLM_MODEL
-from utils import interruptible, iter_entries, newest_file
+from lib.pipeline import Pipeline
+from lib.constants import ASSETS_DIR, LLM_MODEL
+from lib.utils import interruptible, iter_entries, newest_file
 
 
 def _needs_migrate(json_path: Path, pipeline: Pipeline) -> bool:

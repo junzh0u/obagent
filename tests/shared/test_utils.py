@@ -1,6 +1,6 @@
 import os
 
-from utils import newest_file, pinyin_sort_key, source_file
+from lib.utils import newest_file, pinyin_sort_key, source_file
 
 
 def test_nonexistent_dir(tmp_path):

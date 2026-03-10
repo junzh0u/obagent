@@ -6,8 +6,8 @@ from pathlib import Path
 
 import click
 
-from constants import ASSETS_DIR, SUPPORTED_EXTENSIONS
-from utils import interruptible
+from lib.constants import ASSETS_DIR, SUPPORTED_EXTENSIONS
+from lib.utils import interruptible
 
 
 def ingest_source(

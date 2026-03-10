@@ -5,7 +5,7 @@ from typing import ClassVar
 
 import click
 
-from commands.fields import Fields
+from lib.fields import Fields
 
 
 class Pipeline(ABC):

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import click
 
-from constants import ASSETS_DIR
+from lib.constants import ASSETS_DIR
 
 
 def _remove_entry(path_dir: Path, sha256: str, ctx: click.Context) -> None:

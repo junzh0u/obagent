@@ -1,9 +1,9 @@
 import re
 from typing import Literal, override
 
-from commands.fields import Fields
-from commands.pipeline import Pipeline
-from constants import TITLE_UNSAFE_CHARS
+from lib.fields import Fields
+from lib.pipeline import Pipeline
+from lib.constants import TITLE_UNSAFE_CHARS
 
 _CURRENCY_SYMBOLS = {
     "$",

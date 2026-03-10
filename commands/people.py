@@ -4,7 +4,7 @@ from pathlib import Path
 import click
 import questionary
 
-from commands.name_store import (
+from lib.name_store import (
     iter_notes,
     load_json_dict,
     load_json_list,
@@ -17,7 +17,7 @@ from commands.name_store import (
     save_json_list,
 )
 from commands.render import _parse_frontmatter
-from utils import pinyin_sort_key
+from lib.utils import pinyin_sort_key
 
 REMAP_FILE = ".obagent/people-aliases.json"
 PINNED_FILE = ".obagent/people-pinned.json"

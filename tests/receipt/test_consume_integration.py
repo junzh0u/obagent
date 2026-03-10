@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from main import cli
 
-from constants import LLM_MODEL, OCR_MODEL
+from lib.constants import LLM_MODEL, OCR_MODEL
 
 from tests.conftest import BOTH_KEYS, setup_mock_mistral, setup_mock_openai
 

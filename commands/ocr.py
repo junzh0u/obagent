@@ -11,8 +11,8 @@ from mistralai.client.models.ocrrequest import DocumentURLChunk, ImageURLChunk
 
 from mistralai.client.errors import SDKError
 
-from constants import ASSETS_DIR, OCR_MODEL
-from utils import interruptible, iter_entries, source_file
+from lib.constants import ASSETS_DIR, OCR_MODEL
+from lib.utils import interruptible, iter_entries, source_file
 
 MAX_RETRIES = 5
 INITIAL_BACKOFF = 2
@@ -150,7 +150,7 @@ def make_ocr_command(*, pipeline):
         if continue_:
             from commands.llm import extract_fields
             from commands.render import index_existing_notes, render_note
-            from constants import LLM_MODEL
+            from lib.constants import LLM_MODEL
             from openai import OpenAI
 
             if llm_model is None:

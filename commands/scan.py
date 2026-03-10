@@ -4,7 +4,7 @@ from pathlib import Path
 import click
 
 from commands.ingest import resolve_sources
-from constants import ASSETS_DIR
+from lib.constants import ASSETS_DIR
 
 
 @click.command()

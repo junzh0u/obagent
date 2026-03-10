@@ -2,10 +2,10 @@ import re
 from pathlib import Path
 from typing import Literal, override
 
-from commands.fields import Fields
-from commands.pipeline import Pipeline
-from constants import TITLE_UNSAFE_CHARS
-from utils import pinyin_sort_key
+from lib.fields import Fields
+from lib.pipeline import Pipeline
+from lib.constants import TITLE_UNSAFE_CHARS
+from lib.utils import pinyin_sort_key
 
 TAG_CHARS = re.compile(r"[^a-zA-Z0-9_/\-]")
 
@@ -76,7 +76,7 @@ class DocumentPipeline(Pipeline):
 
     @override
     def prepare_context(self, vault: Path) -> None:
-        from commands.name_store import load_json_dict, load_json_list
+        from lib.name_store import load_json_dict, load_json_list
         from commands.people import PINNED_FILE, REMAP_FILE
 
         self._known_names = load_json_list(vault, PINNED_FILE)

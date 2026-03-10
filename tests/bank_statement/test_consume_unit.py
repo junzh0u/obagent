@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from commands.bank_statement.pipeline import bank_statement_pipeline
-from constants import LLM_MODEL, OCR_MODEL
+from lib.constants import LLM_MODEL, OCR_MODEL
 
 from tests.conftest import BOTH_KEYS
 
