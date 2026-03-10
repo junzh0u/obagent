@@ -26,28 +26,28 @@ def _make_fm(bank_name):
 
 def _mock_confirm(answer):
     return patch(
-        "commands.bank.questionary.confirm",
+        "commands.name_store.questionary.confirm",
         return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
     )
 
 
 def _mock_select(answer):
     return patch(
-        "commands.bank.questionary.select",
+        "commands.name_store.questionary.select",
         return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
     )
 
 
 def _mock_text(answer):
     return patch(
-        "commands.bank.questionary.text",
+        "commands.name_store.questionary.text",
         return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
     )
 
 
 def _mock_checkbox(answer):
     return patch(
-        "commands.bank.questionary.checkbox",
+        "commands.name_store.questionary.checkbox",
         return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
     )
 

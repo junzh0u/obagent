@@ -78,9 +78,10 @@ class BankStatementPipeline(Pipeline):
 
     @override
     def prepare_context(self, vault: Path) -> None:
-        from commands.bank import _load_bank_aliases
+        from commands.bank import ALIASES_FILE
+        from commands.name_store import load_json_dict
 
-        BankStatementFields._aliases = _load_bank_aliases(vault)
+        BankStatementFields._aliases = load_json_dict(vault, ALIASES_FILE)
 
     @property
     @override
