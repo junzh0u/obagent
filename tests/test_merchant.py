@@ -368,6 +368,29 @@ def test_rename_interactive_excludes_pinned(runner, vault):
     assert "Target" in choices
 
 
+def test_rename_interactive_excludes_alias_destinations(runner, vault):
+    """Alias destination names are implicitly pinned and excluded from rename."""
+    _write_md(vault, "receipts/a.md", _make_fm("Starbucks"))
+    _write_md(vault, "receipts/b.md", _make_fm("Target"))
+    aliases_dir = vault / ".obagent"
+    aliases_dir.mkdir(parents=True)
+    (aliases_dir / "merchant-aliases.json").write_text(
+        json.dumps({"SBUX": "Starbucks"})
+    )
+
+    with (
+        _mock_select("Target") as mock_sel,
+        _mock_text("Target Corp"),
+        _mock_confirm(None),
+    ):
+        result = runner.invoke(merchant, ["rename"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    choices = mock_sel.call_args.kwargs["choices"]
+    assert "Starbucks" not in choices
+    assert "Target" in choices
+
+
 # --- auto-rename tests ---
 
 AUTO_RENAME_OPTS = ["auto-rename", "--openai-api-key", "test-key"]

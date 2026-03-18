@@ -527,6 +527,14 @@ def test_rename_interactive(runner, vault):
     assert "1 file(s) updated" in result.output
 
 
+def _mock_name_store_select(choice):
+    """Patch the select in lib.name_store (where make_rename_command calls it)."""
+    return patch(
+        "lib.name_store.questionary.select",
+        return_value=type("Q", (), {"ask": staticmethod(lambda: choice)})(),
+    )
+
+
 def test_rename_interactive_excludes_pinned(runner, vault):
     """Interactive rename excludes pinned names from candidates."""
     _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
@@ -534,8 +542,35 @@ def test_rename_interactive_excludes_pinned(runner, vault):
     pinned_dir.mkdir(parents=True)
     (pinned_dir / "people-pinned.json").write_text(json.dumps(["Alice"]))
 
-    with _mock_select("Bob"), _mock_text("Dave"), _mock_confirm(None):
+    with (
+        _mock_name_store_select("Bob") as mock_sel,
+        _mock_text("Dave"),
+        _mock_confirm(None),
+    ):
         result = runner.invoke(people, ["rename"], obj={"vault": str(vault)})
 
     assert result.exit_code == 0
     assert "1 file(s) updated" in result.output
+    choices = mock_sel.call_args.kwargs["choices"]
+    assert "Alice" not in choices
+    assert "Bob" in choices
+
+
+def test_rename_interactive_excludes_alias_destinations(runner, vault):
+    """Alias destination names are implicitly pinned and excluded from rename."""
+    _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
+    aliases_dir = vault / ".obagent"
+    aliases_dir.mkdir(parents=True)
+    (aliases_dir / "people-aliases.json").write_text(json.dumps({"Old Alice": "Alice"}))
+
+    with (
+        _mock_name_store_select("Bob") as mock_sel,
+        _mock_text("Dave"),
+        _mock_confirm(None),
+    ):
+        result = runner.invoke(people, ["rename"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    choices = mock_sel.call_args.kwargs["choices"]
+    assert "Alice" not in choices
+    assert "Bob" in choices

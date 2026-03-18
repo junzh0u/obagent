@@ -374,3 +374,20 @@ def test_rename_interactive_excludes_pinned(runner, vault):
     choices = mock_sel.call_args.kwargs["choices"]
     assert "Chase" not in choices
     assert "Citi" in choices
+
+
+def test_rename_interactive_excludes_alias_destinations(runner, vault):
+    """Alias destination names are implicitly pinned and excluded from rename."""
+    _write_md(vault, "stmts/a.md", _make_fm("Chase"))
+    _write_md(vault, "stmts/b.md", _make_fm("Citi"))
+    aliases_dir = vault / ".obagent"
+    aliases_dir.mkdir(parents=True)
+    (aliases_dir / "bank-aliases.json").write_text(json.dumps({"JPM": "Chase"}))
+
+    with _mock_select("Citi") as mock_sel, _mock_text("Citibank"), _mock_confirm(None):
+        result = runner.invoke(bank, ["rename"], obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    choices = mock_sel.call_args.kwargs["choices"]
+    assert "Chase" not in choices
+    assert "Citi" in choices

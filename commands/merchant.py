@@ -64,7 +64,9 @@ def _collect_merchant_names(vault: Path) -> list[str]:
 
 
 def _load_pinned(vault):
-    return load_json_list(vault, PINNED_FILE)
+    pinned = load_json_list(vault, PINNED_FILE)
+    aliases = load_json_dict(vault, ALIASES_FILE)
+    return list(set(pinned) | set(aliases.values()))
 
 
 def _save_pinned(vault, names):
