@@ -19,7 +19,7 @@ from lib.name_store import (
 from commands.render import _parse_frontmatter
 from lib.utils import pinyin_sort_key
 
-REMAP_FILE = ".obagent/people-aliases.json"
+ALIASES_FILE = ".obagent/people-aliases.json"
 PINNED_FILE = ".obagent/people-pinned.json"
 
 _PEOPLE_BLOCK_RE = re.compile(
@@ -76,7 +76,9 @@ def _collect_names(vault: Path) -> list[str]:
 
 
 def _load_pinned(vault):
-    return load_json_list(vault, PINNED_FILE)
+    pinned = load_json_list(vault, PINNED_FILE)
+    aliases = load_json_dict(vault, ALIASES_FILE)
+    return list(set(pinned) | set(aliases.values()))
 
 
 def _save_pinned(vault, names):
@@ -84,11 +86,11 @@ def _save_pinned(vault, names):
 
 
 def _load_aliases(vault):
-    return load_json_dict(vault, REMAP_FILE)
+    return load_json_dict(vault, ALIASES_FILE)
 
 
 def _save_aliases(vault, mapping):
-    return save_json_dict(vault, REMAP_FILE, mapping)
+    return save_json_dict(vault, ALIASES_FILE, mapping)
 
 
 @click.group()
@@ -177,7 +179,7 @@ make_rename_command(
 )
 make_remap_command(
     people,
-    aliases_file=REMAP_FILE,
+    aliases_file=ALIASES_FILE,
     load_aliases=_load_aliases,
     remap_in_file=_remap_in_file,
     label="person",

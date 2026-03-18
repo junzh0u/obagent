@@ -77,10 +77,10 @@ class DocumentPipeline(Pipeline):
     @override
     def prepare_context(self, vault: Path) -> None:
         from lib.name_store import load_json_dict, load_json_list
-        from commands.people import PINNED_FILE, REMAP_FILE
+        from commands.people import PINNED_FILE, ALIASES_FILE
 
         self._known_names = load_json_list(vault, PINNED_FILE)
-        DocumentFields._aliases = load_json_dict(vault, REMAP_FILE)
+        DocumentFields._aliases = load_json_dict(vault, ALIASES_FILE)
 
     @override
     def prompt(self, path: str, ocr_text: str, filename: str = "") -> str:
