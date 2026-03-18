@@ -1,5 +1,6 @@
 import json
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from commands.merchant import merchant
 from commands.receipt.pipeline import ReceiptFields
@@ -365,3 +366,146 @@ def test_rename_interactive_excludes_pinned(runner, vault):
     choices = mock_sel.call_args.kwargs["choices"]
     assert "Starbucks" not in choices
     assert "Target" in choices
+
+
+# --- auto-rename tests ---
+
+AUTO_RENAME_OPTS = ["auto-rename", "--openai-api-key", "test-key"]
+
+
+def _mock_llm_response(mapping: dict):
+    """Return a mock OpenAI client that returns the given JSON mapping."""
+    content = json.dumps(mapping)
+    message = SimpleNamespace(content=content)
+    choice = SimpleNamespace(message=message)
+    response = MagicMock()
+    response.choices = [choice]
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = response
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    return mock_client
+
+
+def _patch_openai(mock_client):
+    return patch("openai.OpenAI", return_value=mock_client)
+
+
+def test_auto_rename_accepts_all(runner, vault):
+    """Auto-rename applies all accepted suggestions."""
+    md1 = _write_md(vault, "receipts/a.md", _make_fm("STARBUCKS #1234"))
+    md2 = _write_md(vault, "receipts/b.md", _make_fm("Starbucks"))
+
+    llm = _mock_llm_response({"STARBUCKS #1234": "Starbucks"})
+    with (
+        _patch_openai(llm),
+        _mock_checkbox(["STARBUCKS #1234 → Starbucks"]),
+        _mock_confirm(True),
+    ):
+        result = runner.invoke(merchant, AUTO_RENAME_OPTS, obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "1 file(s) updated" in result.output
+    assert "merchant: Starbucks" in md1.read_text()
+    assert "merchant: Starbucks" in md2.read_text()
+    aliases = json.loads((vault / ".obagent/merchant-aliases.json").read_text())
+    assert aliases == {"STARBUCKS #1234": "Starbucks"}
+
+
+def test_auto_rename_accepts_none(runner, vault):
+    """Selecting nothing does not modify files."""
+    _write_md(vault, "receipts/a.md", _make_fm("STARBUCKS #1234"))
+    _write_md(vault, "receipts/b.md", _make_fm("Starbucks"))
+
+    llm = _mock_llm_response({"STARBUCKS #1234": "Starbucks"})
+    with _patch_openai(llm), _mock_checkbox([]):
+        result = runner.invoke(merchant, AUTO_RENAME_OPTS, obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "No renames selected" in result.output
+
+
+def test_auto_rename_no_duplicates(runner, vault):
+    """When LLM returns empty mapping, report no duplicates."""
+    _write_md(vault, "receipts/a.md", _make_fm("Starbucks"))
+
+    llm = _mock_llm_response({})
+    with _patch_openai(llm):
+        result = runner.invoke(merchant, AUTO_RENAME_OPTS, obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "No duplicates found" in result.output
+
+
+def test_auto_rename_filters_pinned_from_rename(runner, vault):
+    """Pinned names are not in the 'from' side of the mapping."""
+    _write_md(vault, "receipts/a.md", _make_fm("Starbucks"))
+    _write_md(vault, "receipts/b.md", _make_fm("SBUX"))
+    pinned_dir = vault / ".obagent"
+    pinned_dir.mkdir(parents=True)
+    (pinned_dir / "merchant-pinned.json").write_text(json.dumps(["Starbucks"]))
+
+    # LLM suggests renaming both ways but pinned should be filtered
+    llm = _mock_llm_response({"Starbucks": "SBUX", "SBUX": "Starbucks"})
+    with (
+        _patch_openai(llm),
+        _mock_checkbox(["SBUX → Starbucks"]),
+        _mock_confirm(False),
+    ):
+        result = runner.invoke(merchant, AUTO_RENAME_OPTS, obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "1 file(s) updated" in result.output
+
+
+def test_auto_rename_decline_save(runner, vault):
+    """Declining save does not create the aliases file."""
+    _write_md(vault, "receipts/a.md", _make_fm("STARBUCKS #1234"))
+    _write_md(vault, "receipts/b.md", _make_fm("Starbucks"))
+
+    llm = _mock_llm_response({"STARBUCKS #1234": "Starbucks"})
+    with (
+        _patch_openai(llm),
+        _mock_checkbox(["STARBUCKS #1234 → Starbucks"]),
+        _mock_confirm(False),
+    ):
+        result = runner.invoke(merchant, AUTO_RENAME_OPTS, obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert not (vault / ".obagent/merchant-aliases.json").exists()
+
+
+def test_auto_rename_no_names(runner, vault):
+    """When vault has no merchant names, report early."""
+    result = runner.invoke(merchant, AUTO_RENAME_OPTS, obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "No merchant names found" in result.output
+
+
+def test_auto_rename_strips_markdown_fences(runner, vault):
+    """LLM response wrapped in ```json fences is handled."""
+    md = _write_md(vault, "receipts/a.md", _make_fm("STARBUCKS #1234"))
+    _write_md(vault, "receipts/b.md", _make_fm("Starbucks"))
+
+    # Simulate LLM wrapping response in markdown fences
+    content = '```json\n{"STARBUCKS #1234": "Starbucks"}\n```'
+    message = SimpleNamespace(content=content)
+    choice = SimpleNamespace(message=message)
+    response = MagicMock()
+    response.choices = [choice]
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = response
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    with (
+        _patch_openai(mock_client),
+        _mock_checkbox(["STARBUCKS #1234 → Starbucks"]),
+        _mock_confirm(False),
+    ):
+        result = runner.invoke(merchant, AUTO_RENAME_OPTS, obj={"vault": str(vault)})
+
+    assert result.exit_code == 0
+    assert "1 file(s) updated" in result.output
+    assert "merchant: Starbucks" in md.read_text()

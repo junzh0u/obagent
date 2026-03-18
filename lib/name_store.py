@@ -1,11 +1,14 @@
 """Shared helpers and command factories for name management (bank, people)."""
 
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 
 import click
 import questionary
+
+from lib.constants import AUTO_RENAME_MODEL
 
 
 def iter_notes(vault: Path):
@@ -260,3 +263,128 @@ def make_unpin_command(
             on_unpin(vault, to_remove)
 
     return unpin
+
+
+_AUTO_RENAME_PROMPT = """\
+I have the following list of {label} names from my documents:
+{names}
+
+{pinned_block}\
+Find names that are likely duplicates or variants of the same entity \
+(e.g. different casing, abbreviations, store numbers, extra whitespace).
+Return ONLY a JSON object mapping each variant to its canonical form.
+Only include names that should be renamed — omit names that are already canonical.
+{pinned_rule}\
+Example: {{"STARBUCKS #1234": "Starbucks", "starbucks coffee": "Starbucks"}}"""
+
+
+def make_auto_rename_command(
+    group: click.Group,
+    *,
+    collect_names: Callable[[Path], list[str]],
+    load_pinned: Callable[[Path], list[str]],
+    remap_in_file: Callable[[Path, dict[str, str]], bool],
+    save_aliases: Callable[[Path, dict[str, str]], None],
+    aliases_label: str,
+    label: str,
+):
+    """Create an auto-rename command that uses an LLM to find duplicates."""
+
+    @group.command("auto-rename")
+    @click.option(
+        "--openai-api-key",
+        envvar="OPENAI_API_KEY",
+        required=True,
+        help="OpenAI API key.",
+    )
+    @click.option(
+        "--llm-model",
+        default=AUTO_RENAME_MODEL,
+        show_default=True,
+        help="OpenAI model name.",
+    )
+    @click.pass_context
+    def auto_rename(ctx, openai_api_key, llm_model):
+        f"""Use LLM to find duplicate {label} names and batch rename."""
+        from openai import OpenAI
+
+        vault = Path(ctx.obj["vault"])
+        all_names = collect_names(vault)
+        if not all_names:
+            click.echo(f"No {label} names found in vault.")
+            return
+
+        pinned = load_pinned(vault)
+        pinned_block = ""
+        pinned_rule = ""
+        if pinned:
+            pinned_block = (
+                "Pinned names (canonical — do not rename these, "
+                "but others can map to them):\n"
+                f"{json.dumps(pinned, ensure_ascii=False)}\n\n"
+            )
+            pinned_rule = "Do not rename pinned names.\n"
+
+        prompt_text = _AUTO_RENAME_PROMPT.format(
+            label=label,
+            names=json.dumps(all_names, ensure_ascii=False),
+            pinned_block=pinned_block,
+            pinned_rule=pinned_rule,
+        )
+
+        click.echo("Asking LLM to find duplicates...")
+        with OpenAI(api_key=openai_api_key) as client:
+            response = client.chat.completions.create(
+                model=llm_model,
+                messages=[{"role": "user", "content": prompt_text}],
+            )
+        raw = (response.choices[0].message.content or "").strip()
+        # Strip markdown fences if present
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+        try:
+            mapping = json.loads(raw)
+        except json.JSONDecodeError:
+            raise click.ClickException(f"LLM returned invalid JSON:\n{raw}")
+        if not isinstance(mapping, dict):
+            raise click.ClickException("LLM returned non-object JSON.")
+
+        # Filter out pinned names from the "from" side
+        pinned_set = set(pinned)
+        mapping = {k: v for k, v in mapping.items() if k not in pinned_set and k != v}
+
+        if not mapping:
+            click.echo("No duplicates found.")
+            return
+
+        choices = [f"{old} → {new}" for old, new in mapping.items()]
+        selected = questionary.checkbox(
+            "Select renames to apply:",
+            choices=choices,
+            use_search_filter=True,
+            use_jk_keys=False,
+        ).ask()
+        if not selected:
+            click.echo("No renames selected.")
+            return
+
+        # Parse selected choices back to mapping
+        accepted = {}
+        for choice in selected:
+            old, new = choice.split(" → ", 1)
+            accepted[old] = new
+
+        total = 0
+        for md in iter_notes(vault):
+            if remap_in_file(md, accepted):
+                click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
+                total += 1
+        click.secho(f"{total} file(s) updated", bold=True)
+
+        if (
+            total > 0
+            and questionary.confirm(f"Save to {aliases_label}?", default=False).ask()
+        ):
+            save_aliases(vault, accepted)
+
+    return auto_rename

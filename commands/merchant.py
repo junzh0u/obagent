@@ -7,6 +7,7 @@ from lib.name_store import (
     iter_notes,
     load_json_dict,
     load_json_list,
+    make_auto_rename_command,
     make_list_command,
     make_pin_command,
     make_rename_command,
@@ -111,5 +112,14 @@ make_unpin_command(
     merchant,
     load_pinned=_load_pinned,
     save_pinned=_save_pinned,
+    label="merchant",
+)
+make_auto_rename_command(
+    merchant,
+    collect_names=_collect_merchant_names,
+    load_pinned=_load_pinned,
+    remap_in_file=_remap_merchant_in_file,
+    save_aliases=_save_aliases,
+    aliases_label="merchant-aliases.json",
     label="merchant",
 )
