@@ -21,6 +21,10 @@ fix:
     uv run ruff format .
     uv run ruff check --fix .
 
+# List all TODO/FIXME/HACK comments in the codebase
+todo:
+    @rg 'TODO|FIXME|HACK' --glob '*.py' -n --color always
+
 # Uninstall obagent CLI and zsh completions
 uninstall:
     uv tool uninstall obagent
