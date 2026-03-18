@@ -383,7 +383,7 @@ def _mock_select(choice):
 def _mock_text(value):
     """Return a patch that makes questionary.text().ask() return *value*."""
     return patch(
-        "commands.people.questionary.text",
+        "lib.name_store.questionary.autocomplete",
         return_value=type("Q", (), {"ask": staticmethod(lambda: value)})(),
     )
 

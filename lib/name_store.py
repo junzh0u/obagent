@@ -100,7 +100,7 @@ def make_rename_command(
             ).ask()
             if not old_name:
                 return
-            new_name = questionary.text("New name:").ask()
+            new_name = questionary.autocomplete("New name:", choices=all_names).ask()
             if not new_name:
                 return
         count = 0

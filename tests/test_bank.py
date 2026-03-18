@@ -40,7 +40,7 @@ def _mock_select(answer):
 
 def _mock_text(answer):
     return patch(
-        "lib.name_store.questionary.text",
+        "lib.name_store.questionary.autocomplete",
         return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
     )
 
