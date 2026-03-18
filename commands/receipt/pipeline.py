@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from typing import Literal, override
 
 from lib.fields import Fields
@@ -75,8 +76,14 @@ def _clean_total(total: str) -> str:
 
 
 class ReceiptFields(Fields[Literal["merchant", "date", "total"]]):
+    _aliases: dict[str, str] = {}
+
     @override
     def postprocess(self) -> None:
+        merchant = self.get("merchant", "")
+        if merchant and self._aliases:
+            self["merchant"] = self._aliases.get(merchant, merchant)
+
         if "total" in self and self["total"]:
             self["total"] = _clean_total(self["total"])
 
@@ -97,6 +104,13 @@ class ReceiptFields(Fields[Literal["merchant", "date", "total"]]):
 
 class ReceiptPipeline(Pipeline):
     fields_class = ReceiptFields
+
+    @override
+    def prepare_context(self, vault: Path) -> None:
+        from commands.merchant import ALIASES_FILE
+        from lib.name_store import load_json_dict
+
+        ReceiptFields._aliases = load_json_dict(vault, ALIASES_FILE)
 
     @property
     @override

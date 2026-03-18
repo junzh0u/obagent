@@ -54,6 +54,11 @@ Both `commands/people.py` and `commands/bank.py` share the same pattern via `lib
 - Pinned file: `{vault}/.obagent/bank-pinned.json` — pinned bank names
 - `BankStatementPipeline.prepare_context()` loads aliases into `BankStatementFields._aliases`, which `postprocess()` auto-applies on render
 
+### Merchants (receipts)
+- Aliases file: `{vault}/.obagent/merchant-aliases.json` — maps old merchant names to new
+- Pinned file: `{vault}/.obagent/merchant-pinned.json` — pinned merchant names
+- `ReceiptPipeline.prepare_context()` loads aliases into `ReceiptFields._aliases`, which `postprocess()` auto-applies on render
+
 ## Commands
 
 ```bash
