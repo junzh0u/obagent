@@ -1,6 +1,7 @@
 import json
 import re
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Literal
 
@@ -245,6 +246,66 @@ def render_note(
     return md_path, "created"
 
 
+def _render_entries(
+    entries: Iterable[Path],
+    *,
+    path_dir: Path,
+    pipeline: Pipeline,
+    overwrite: bool = False,
+    overwrite_fields: str | None = None,
+    log_header: bool = False,
+    remove_orphans: bool = False,
+) -> None:
+    """Shared render loop used by commands and post-rename hooks."""
+    note_index = index_existing_notes(path_dir)
+    rendered: set[Path] = set()
+    stats: defaultdict[str, int] = defaultdict(int)
+    for target_dir in entries:
+        try:
+            md_path, status = render_note(
+                target_dir,
+                overwrite=overwrite,
+                overwrite_fields=overwrite_fields,
+                note_index=note_index,
+                pipeline=pipeline,
+                log_header=log_header,
+            )
+            stats[status] += 1
+            if md_path:
+                rendered.add(md_path)
+        except Exception as e:
+            if log_header:
+                click.secho(f"Render: {target_dir}", bold=True)
+            click.secho(f"  Warning: rendering failed: {e}", fg="red")
+    if remove_orphans:
+        removed = _remove_orphans(path_dir, rendered)
+        if removed:
+            stats["removed"] = removed
+    _print_stats(stats)
+
+
+def rerender_notes(vault: Path, pipeline: Pipeline, modified: list[Path]) -> None:
+    """Re-render notes whose source files were modified (e.g. after a rename).
+
+    Extracts sha256 identifiers from the modified .md files and re-renders
+    only those entries, rather than the entire vault.
+    """
+    path_dir = vault / pipeline.default_path
+    shas: set[str] = set()
+    for md in modified:
+        if md.exists():
+            shas.update(_SHA_RE.findall(md.read_text()))
+    if not shas:
+        return
+    pipeline.prepare_context(vault)
+    entries = [path_dir / ASSETS_DIR / s for s in sorted(shas)]
+    _render_entries(
+        entries,
+        path_dir=path_dir,
+        pipeline=pipeline,
+    )
+
+
 def make_render_command(*, pipeline: Pipeline) -> click.Command:
     """Factory: create a click render command with type-specific config."""
 
@@ -270,34 +331,19 @@ def make_render_command(*, pipeline: Pipeline) -> click.Command:
         path = ctx.obj["path"]
         path_dir = vault / path
         pipeline.prepare_context(vault)
-        note_index = index_existing_notes(path_dir)
         if sha256:
             entries = [path_dir / ASSETS_DIR / s for s in sha256]
         else:
             entries = iter_entries(vault, path)
-        rendered: set[Path] = set()
-        stats: defaultdict[str, int] = defaultdict(int)
-        for target_dir in interruptible(entries):
-            try:
-                md_path, status = render_note(
-                    target_dir,
-                    overwrite=overwrite,
-                    overwrite_fields=overwrite_fields,
-                    note_index=note_index,
-                    pipeline=pipeline,
-                    log_header=True,
-                )
-                stats[status] += 1
-                if md_path:
-                    rendered.add(md_path)
-            except Exception as e:
-                click.secho(f"Render: {target_dir}", bold=True)
-                click.secho(f"  Warning: rendering failed: {e}", fg="red")
-        if not sha256:
-            removed = _remove_orphans(path_dir, rendered)
-            if removed:
-                stats["removed"] = removed
-        _print_stats(stats)
+        _render_entries(
+            interruptible(entries),
+            path_dir=path_dir,
+            pipeline=pipeline,
+            overwrite=overwrite,
+            overwrite_fields=overwrite_fields,
+            log_header=True,
+            remove_orphans=not sha256,
+        )
 
     render.__doc__ = pipeline.help_render
     return render
@@ -318,25 +364,11 @@ def render_all(ctx, overwrite):
         path_dir = vault / path
         click.secho(f"\n=== {pipeline.name.title()} ({path}) ===", bold=True)
         pipeline.prepare_context(vault)
-        note_index = index_existing_notes(path_dir)
-        rendered: set[Path] = set()
-        stats: defaultdict[str, int] = defaultdict(int)
-        for target_dir in interruptible(iter_entries(vault, path)):
-            try:
-                md_path, status = render_note(
-                    target_dir,
-                    overwrite=overwrite,
-                    note_index=note_index,
-                    pipeline=pipeline,
-                    log_header=True,
-                )
-                stats[status] += 1
-                if md_path:
-                    rendered.add(md_path)
-            except Exception as e:
-                click.secho(f"Render: {target_dir}", bold=True)
-                click.secho(f"  Warning: rendering failed: {e}", fg="red")
-        removed = _remove_orphans(path_dir, rendered)
-        if removed:
-            stats["removed"] = removed
-        _print_stats(stats)
+        _render_entries(
+            interruptible(iter_entries(vault, path)),
+            path_dir=path_dir,
+            pipeline=pipeline,
+            overwrite=overwrite,
+            log_header=True,
+            remove_orphans=True,
+        )

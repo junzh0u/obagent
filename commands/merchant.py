@@ -81,6 +81,13 @@ def _save_aliases(vault, mapping):
     return save_json_dict(vault, ALIASES_FILE, mapping)
 
 
+def _on_rename(vault, modified):
+    from commands.receipt.pipeline import receipt_pipeline
+    from commands.render import rerender_notes
+
+    rerender_notes(vault, receipt_pipeline, modified)
+
+
 @click.group()
 def merchant():
     """Manage merchant names across vault notes."""
@@ -94,6 +101,7 @@ make_rename_command(
     save_aliases=_save_aliases,
     aliases_label="merchant-aliases.json",
     label="merchant",
+    on_rename=_on_rename,
 )
 make_remap_command(
     merchant,
@@ -101,6 +109,7 @@ make_remap_command(
     load_aliases=_load_aliases,
     remap_in_file=_remap_merchant_in_file,
     label="merchant",
+    on_rename=_on_rename,
 )
 make_list_command(merchant, collect_names=_collect_merchant_names, label="merchant")
 make_pin_command(
@@ -124,4 +133,5 @@ make_auto_rename_command(
     save_aliases=_save_aliases,
     aliases_label="merchant-aliases.json",
     label="merchant",
+    on_rename=_on_rename,
 )

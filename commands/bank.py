@@ -80,6 +80,13 @@ def _save_aliases(vault, mapping):
     return save_json_dict(vault, ALIASES_FILE, mapping)
 
 
+def _on_rename(vault, modified):
+    from commands.bank_statement.pipeline import bank_statement_pipeline
+    from commands.render import rerender_notes
+
+    rerender_notes(vault, bank_statement_pipeline, modified)
+
+
 @click.group()
 def bank():
     """Manage bank names across vault notes."""
@@ -93,6 +100,7 @@ make_rename_command(
     save_aliases=_save_aliases,
     aliases_label="bank-aliases.json",
     label="bank",
+    on_rename=_on_rename,
 )
 make_remap_command(
     bank,
@@ -100,6 +108,7 @@ make_remap_command(
     load_aliases=_load_aliases,
     remap_in_file=_remap_bank_in_file,
     label="bank",
+    on_rename=_on_rename,
 )
 make_list_command(bank, collect_names=_collect_bank_names, label="bank")
 make_pin_command(

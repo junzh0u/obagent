@@ -84,6 +84,7 @@ def make_rename_command(
     save_aliases: Callable[[Path, dict[str, str]], None],
     aliases_label: str,
     label: str,
+    on_rename: Callable[[Path, list[Path]], None] | None = None,
 ):
     """Create a rename command on *group*."""
 
@@ -115,14 +116,16 @@ def make_rename_command(
             new_name = questionary.autocomplete("New name:", choices=all_names).ask()
             if not new_name:
                 return
-        count = 0
+        modified: list[Path] = []
         for md in iter_notes(vault):
             if remap_in_file(md, {old_name: new_name}):
                 click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
-                count += 1
-        click.secho(f"{count} file(s) updated", bold=True)
+                modified.append(md)
+        click.secho(f"{len(modified)} file(s) updated", bold=True)
+        if modified and on_rename:
+            on_rename(vault, modified)
         if (
-            count > 0
+            modified
             and questionary.confirm(f"Save to {aliases_label}?", default=False).ask()
         ):
             save_aliases(vault, {old_name: new_name})
@@ -137,6 +140,7 @@ def make_remap_command(
     load_aliases: Callable[[Path], dict[str, str]],
     remap_in_file: Callable[[Path, dict[str, str]], bool],
     label: str,
+    on_rename: Callable[[Path, list[Path]], None] | None = None,
 ):
     """Create a remap (batch rename) command on *group*."""
 
@@ -159,12 +163,14 @@ def make_remap_command(
                 )
         if not isinstance(mapping, dict):
             raise click.ClickException("Mapping file must contain a JSON object")
-        total = 0
+        modified: list[Path] = []
         for md in iter_notes(vault):
             if remap_in_file(md, mapping):
                 click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
-                total += 1
-        click.secho(f"{total} file(s) updated", bold=True)
+                modified.append(md)
+        click.secho(f"{len(modified)} file(s) updated", bold=True)
+        if modified and on_rename:
+            on_rename(vault, modified)
 
     return remap
 
@@ -298,6 +304,7 @@ def make_auto_rename_command(
     save_aliases: Callable[[Path, dict[str, str]], None],
     aliases_label: str,
     label: str,
+    on_rename: Callable[[Path, list[Path]], None] | None = None,
 ):
     """Create an auto-rename command that uses an LLM to find duplicates."""
 
@@ -386,15 +393,17 @@ def make_auto_rename_command(
             old, new = choice.split(" → ", 1)
             accepted[old] = new
 
-        total = 0
+        modified: list[Path] = []
         for md in iter_notes(vault):
             if remap_in_file(md, accepted):
                 click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
-                total += 1
-        click.secho(f"{total} file(s) updated", bold=True)
+                modified.append(md)
+        click.secho(f"{len(modified)} file(s) updated", bold=True)
+        if modified and on_rename:
+            on_rename(vault, modified)
 
         if (
-            total > 0
+            modified
             and questionary.confirm(f"Save to {aliases_label}?", default=False).ask()
         ):
             save_aliases(vault, accepted)
