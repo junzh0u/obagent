@@ -126,7 +126,10 @@ def remove(ctx, names):
             click.echo("No people found in vault.")
             return
         selected = questionary.checkbox(
-            "Select people to remove:", choices=all_names
+            "Select people to remove:",
+            choices=all_names,
+            use_search_filter=True,
+            use_jk_keys=False,
         ).ask()
         if not selected:
             click.echo("No names selected.")

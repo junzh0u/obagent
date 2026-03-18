@@ -93,7 +93,10 @@ def make_rename_command(
                 click.echo(f"All {label} names are pinned.")
                 return
             old_name = questionary.select(
-                f"Select {label} to rename:", choices=candidates
+                f"Select {label} to rename:",
+                choices=candidates,
+                use_search_filter=True,
+                use_jk_keys=False,
             ).ask()
             if not old_name:
                 return
@@ -198,7 +201,10 @@ def make_pin_command(
                 click.echo(f"No new {label} names to pin.")
                 return
             selected = questionary.checkbox(
-                f"Select {label}s to pin:", choices=candidates
+                f"Select {label}s to pin:",
+                choices=candidates,
+                use_search_filter=True,
+                use_jk_keys=False,
             ).ask()
             if not selected:
                 click.echo("No names selected.")
@@ -237,7 +243,10 @@ def make_unpin_command(
         interactive = not names
         if interactive:
             selected = questionary.checkbox(
-                f"Select {label}s to unpin:", choices=existing
+                f"Select {label}s to unpin:",
+                choices=existing,
+                use_search_filter=True,
+                use_jk_keys=False,
             ).ask()
             if not selected:
                 click.echo("No names selected.")
