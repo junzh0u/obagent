@@ -5,6 +5,7 @@ import click
 import questionary
 
 from lib.name_store import (
+    _CHECKBOX_INSTRUCTION,
     iter_notes,
     load_json_dict,
     load_json_list,
@@ -130,6 +131,7 @@ def remove(ctx, names):
         selected = questionary.checkbox(
             "Select people to remove:",
             choices=all_names,
+            instruction=_CHECKBOX_INSTRUCTION,
             use_search_filter=True,
             use_jk_keys=False,
         ).ask()

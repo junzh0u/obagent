@@ -10,6 +10,15 @@ import questionary
 
 from lib.constants import AUTO_RENAME_MODEL
 
+# TODO: Remove after questionary fixes the checkbox instruction text upstream.
+# Workaround for questionary bug: instruction text shows <ctrl-a> for both
+# "toggle" and "invert" when use_search_filter=True. Invert is actually <ctrl-i>.
+# See https://github.com/tmbo/questionary/blob/master/questionary/prompts/checkbox.py
+_CHECKBOX_INSTRUCTION = (
+    "(Use arrow keys to move, <space> to select, "
+    "<ctrl-a> to toggle, <ctrl-i> to invert, type to filter)"
+)
+
 
 def iter_notes(vault: Path):
     """Yield .md files in the vault, skipping _assets_ directories."""
@@ -206,6 +215,7 @@ def make_pin_command(
             selected = questionary.checkbox(
                 f"Select {label}s to pin:",
                 choices=candidates,
+                instruction=_CHECKBOX_INSTRUCTION,
                 use_search_filter=True,
                 use_jk_keys=False,
             ).ask()
@@ -248,6 +258,7 @@ def make_unpin_command(
             selected = questionary.checkbox(
                 f"Select {label}s to unpin:",
                 choices=existing,
+                instruction=_CHECKBOX_INSTRUCTION,
                 use_search_filter=True,
                 use_jk_keys=False,
             ).ask()
@@ -361,6 +372,7 @@ def make_auto_rename_command(
         selected = questionary.checkbox(
             "Select renames to apply:",
             choices=choices,
+            instruction=_CHECKBOX_INSTRUCTION,
             use_search_filter=True,
             use_jk_keys=False,
         ).ask()
