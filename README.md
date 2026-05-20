@@ -20,7 +20,7 @@ Each step can be run individually or all at once with `consume`:
 | `llm`     | Extract structured fields via LLM                      |
 | `render`  | Generate Obsidian markdown notes from extracted fields  |
 | `consume` | Run the full pipeline (ingest → ocr → llm → render)   |
-| `export`  | Copy source PDFs out of the vault under their note names (documents only) |
+| `export`  | Copy source files out of the vault under their note names (documents + receipts) |
 
 ## Vault structure
 
@@ -64,7 +64,7 @@ Set API keys as environment variables or pass them as CLI flags:
 export MISTRAL_API_KEY=...
 export OPENAI_API_KEY=...
 export OBAGENT_VAULT=/path/to/your/vault
-export OBAGENT_DOCUMENT_EXPORT=/path/to/export/dir   # default for `document export`
+export OBAGENT_EXPORT=/path/to/export/dir            # default for `document export` and `receipt export`
 ```
 
 ## Usage
@@ -114,10 +114,13 @@ obagent receipt consume --keep-original ./inbox
 # Use a custom vault subdirectory
 obagent receipt --path Invoices consume ./inbox
 
-# Export source PDFs out of the vault, grouped by year/month under their note names
-obagent document export --output-dir /tmp/exported-pdfs
-# YYYY/YYYY-MM/{note}.pdf — notes without a YYYY-MM filename prefix land in undated/.
-# Also reads OBAGENT_DOCUMENT_EXPORT as the default for --output-dir.
+# Export source files out of the vault, grouped by year/month under their note names.
+# The type subdir (Documents/, Receipts/, or your --path override) is appended automatically.
+obagent document export --output-dir /tmp/exported
+obagent receipt export --output-dir /tmp/exported
+# Layout: /tmp/exported/{Documents,Receipts}/YYYY/YYYY-MM/{note}.{pdf,jpg,jpeg}
+# Notes without a YYYY-MM filename prefix land in {type}/undated/.
+# Also reads OBAGENT_EXPORT as the default for --output-dir.
 ```
 
 ## Development

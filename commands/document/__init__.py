@@ -1,7 +1,7 @@
 import click
 
-from commands.document.export import export
 from commands.document.pipeline import document_pipeline
+from commands.export import export
 from commands.ingest import ingest
 from commands.remove import remove
 from commands.scan import scan

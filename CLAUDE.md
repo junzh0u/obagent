@@ -18,7 +18,7 @@
   - `lib/utils.py` — shared utilities (iter_entries, newest_file, source_file, `SHA_RE`)
 - `commands/{receipt,bank_statement,document}/pipeline.py` — concrete `Fields` + `Pipeline` per type
 - `commands/` — CLI command modules (consume, ingest, ocr, llm, render, scan)
-- `commands/document/export.py` — `document export` command (documents only)
+- `commands/export.py` — shared `export` subcommand (registered on `document` and `receipt`)
 - `tests/` — unit and integration tests with shared fixtures in `conftest.py`
 
 ## Architecture
@@ -41,20 +41,26 @@ vault/{path}/
     src/   ocr/   llm/          ← per-entry data dirs
 ```
 
-## Document Export
+## Export
 
-`obagent document export --output-dir DIR` (env var: `OBAGENT_DOCUMENT_EXPORT`) copies every source file under `Documents/_assets_/{sha}/src/` into `DIR`, named after the corresponding `.md` note and grouped by date:
+`obagent {document,receipt} export --output-dir DIR` (env var: `OBAGENT_EXPORT`) copies source files out of the vault, named after their `.md` notes and grouped by date. The per-type subdir is appended automatically — pointing both subcommands at the same `DIR` is safe and expected:
 
 ```
 DIR/
-  YYYY/YYYY-MM/{note-stem}{.pdf|.jpg|.jpeg}
-  undated/{note-stem}{.pdf|.jpeg|.jpg}        ← notes whose filename has no YYYY-MM prefix
+  Documents/
+    YYYY/YYYY-MM/{note-stem}{.pdf|.jpg|.jpeg}
+    undated/{note-stem}{.pdf|.jpg|.jpeg}      ← notes whose filename has no YYYY-MM prefix
+  Receipts/
+    YYYY/YYYY-MM/...
+    undated/...
 ```
+
+If the group is invoked with a non-default `--path` (e.g. `obagent receipt --path Invoices export`), `Invoices/` is the appended subdir instead.
 
 Behavior:
 - Overwrites destination files on every run.
 - Multi-embed notes: first source uses the bare note stem, extras get a `-{sha12}` suffix.
-- Dangling cleanup: after copying, removes any file under top-level / `YYYY/YYYY-MM/` / `undated/` that wasn't written this run, then prunes empty managed dirs. Unrelated subdirs in `DIR` are untouched.
+- Dangling cleanup: scoped to the type subdir (`DIR/{path}/`). Removes any file under top-level / `YYYY/YYYY-MM/` / `undated/` of that subdir that wasn't written this run, then prunes empty managed dirs. Other type subdirs and unrelated folders inside `DIR` are untouched.
 
 ## Name Management (People & Banks)
 

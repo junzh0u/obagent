@@ -1,5 +1,6 @@
 import click
 
+from commands.export import export
 from commands.ingest import ingest
 from commands.receipt.pipeline import receipt_pipeline
 from commands.remove import remove
@@ -20,6 +21,7 @@ def receipt(ctx, path):
 
 
 receipt.add_command(receipt_pipeline.consume_command, "consume")
+receipt.add_command(export)
 receipt.add_command(receipt_pipeline.llm_command, "llm")
 receipt.add_command(receipt_pipeline.render_command, "render")
 receipt.add_command(remove)

@@ -70,19 +70,20 @@ def _prune_empty_managed_dirs(output_dir: Path) -> None:
 @click.command()
 @click.option(
     "--output-dir",
-    envvar="OBAGENT_DOCUMENT_EXPORT",
+    envvar="OBAGENT_EXPORT",
     required=True,
     type=click.Path(file_okay=False, path_type=Path),
-    help="Directory to export source files into.",
+    help="Export root; the per-type subdir (e.g. Documents/, Receipts/) is appended.",
 )
 @click.pass_context
 def export(ctx, output_dir: Path):
-    """Export source files to --output-dir, grouped by year/month."""
+    """Export source files under --output-dir/{path}, grouped by year/month."""
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
     path_dir = vault / path
+    export_root = output_dir / path
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+    export_root.mkdir(parents=True, exist_ok=True)
 
     exported = 0
     skipped = 0
@@ -105,7 +106,7 @@ def export(ctx, output_dir: Path):
                 continue
             suffix = src.suffix.lower()
             stem = md.stem if i == 0 else f"{md.stem}-{sha[:12]}"
-            dest_dir = _bucket_dir(output_dir, md.stem)
+            dest_dir = _bucket_dir(export_root, md.stem)
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = dest_dir / f"{stem}{suffix}"
             shutil.copy2(src, dest)
@@ -115,13 +116,13 @@ def export(ctx, output_dir: Path):
             exported += 1
 
     removed = 0
-    for existing in sorted(_iter_managed_files(output_dir)):
+    for existing in sorted(_iter_managed_files(export_root)):
         if existing not in written:
             rel = existing.relative_to(output_dir)
             existing.unlink()
             click.secho(f"  Removed: {rel}", fg="green")
             removed += 1
-    _prune_empty_managed_dirs(output_dir)
+    _prune_empty_managed_dirs(export_root)
 
     parts = []
     if exported:
