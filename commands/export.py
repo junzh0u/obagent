@@ -14,6 +14,20 @@ _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 UNDATED = "undated"
 
 
+def _same_size_and_mtime(src: Path, dest: Path) -> bool:
+    """Cheap idempotency check for previously-exported files.
+
+    `shutil.copy2` preserves mtime, so a prior run leaves the destination with
+    a matching size and (whole-second) mtime. Comparing at second granularity
+    tolerates filesystems with coarser mtime resolution than the source's.
+    """
+    src_stat = src.stat()
+    dest_stat = dest.stat()
+    return src_stat.st_size == dest_stat.st_size and int(src_stat.st_mtime) == int(
+        dest_stat.st_mtime
+    )
+
+
 def _bucket_dir(output_dir: Path, stem: str) -> Path:
     """Return the YYYY/YYYY-MM/ (or undated/) subdir for a note stem."""
     m = _DATE_PREFIX_RE.match(stem)
@@ -86,7 +100,8 @@ def export(ctx, output_dir: Path):
     export_root.mkdir(parents=True, exist_ok=True)
 
     exported = 0
-    skipped = 0
+    unchanged = 0
+    missing = 0
     written: set[Path] = set()
     for md in interruptible(sorted(path_dir.glob("*.md"))):
         text = md.read_text()
@@ -102,13 +117,17 @@ def export(ctx, output_dir: Path):
             src = source_file(path_dir / ASSETS_DIR / sha)
             if src is None:
                 click.secho(f"  Missing source: {md.name} ({sha[:12]}…)", fg="yellow")
-                skipped += 1
+                missing += 1
                 continue
             suffix = src.suffix.lower()
             stem = md.stem if i == 0 else f"{md.stem}-{sha[:12]}"
             dest_dir = _bucket_dir(export_root, md.stem)
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = dest_dir / f"{stem}{suffix}"
+            if dest.exists() and _same_size_and_mtime(src, dest):
+                written.add(dest)
+                unchanged += 1
+                continue
             shutil.copy2(src, dest)
             written.add(dest)
             rel = dest.relative_to(output_dir)
@@ -127,9 +146,11 @@ def export(ctx, output_dir: Path):
     parts = []
     if exported:
         parts.append(f"{exported} exported")
+    if unchanged:
+        parts.append(f"{unchanged} unchanged")
     if removed:
         parts.append(f"{removed} removed")
-    if skipped:
-        parts.append(f"{skipped} skipped")
+    if missing:
+        parts.append(f"{missing} missing")
     if parts:
         click.secho(", ".join(parts), bold=True)

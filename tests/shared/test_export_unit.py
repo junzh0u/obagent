@@ -147,18 +147,18 @@ def test_missing_source_is_skipped_with_warning(runner, vault, tmp_path, path):
 
 @pytest.mark.parametrize("path", TYPES)
 def test_overwrites_existing_destination_file(runner, vault, tmp_path, path):
-    """Stale content at the destination is replaced by the current source."""
-    _setup_entry(vault, path, "sha1", src_bytes=b"fresh")
+    """A destination whose size differs from the source is replaced."""
+    _setup_entry(vault, path, "sha1", src_bytes=b"fresh-content")
     _write_note(vault, path, "2024-04-04 - Note", ["sha1"])
     out = tmp_path / "out"
     bucket = out / path / "2024" / "2024-04"
     bucket.mkdir(parents=True)
-    (bucket / "2024-04-04 - Note.pdf").write_bytes(b"stale")
+    (bucket / "2024-04-04 - Note.pdf").write_bytes(b"stale")  # different size
 
     result = _invoke(runner, vault, path, out)
 
     assert result.exit_code == 0, result.output
-    assert (bucket / "2024-04-04 - Note.pdf").read_bytes() == b"fresh"
+    assert (bucket / "2024-04-04 - Note.pdf").read_bytes() == b"fresh-content"
 
 
 @pytest.mark.parametrize("path", TYPES)
@@ -264,6 +264,25 @@ def test_note_without_embeds_is_ignored(runner, vault, tmp_path, path):
     assert result.exit_code == 0, result.output
     assert (out / path / "2024" / "2024-09" / "2024-09-09 - Has Embed.pdf").exists()
     assert not (out / path / "2024" / "2024-10").exists()
+
+
+@pytest.mark.parametrize("path", TYPES)
+def test_second_run_skips_unchanged_files(runner, vault, tmp_path, path):
+    """A second export of the same vault reports 0 exported / N unchanged."""
+    _setup_entry(vault, path, "sha1", src_bytes=b"data-1")
+    _setup_entry(vault, path, "sha2", src_bytes=b"data-2")
+    _write_note(vault, path, "2024-11-11 - Alpha", ["sha1"])
+    _write_note(vault, path, "2024-11-12 - Beta", ["sha2"])
+    out = tmp_path / "out"
+
+    first = _invoke(runner, vault, path, out)
+    assert first.exit_code == 0, first.output
+    assert "2 exported" in first.output
+
+    second = _invoke(runner, vault, path, out)
+    assert second.exit_code == 0, second.output
+    assert "exported" not in second.output  # no per-file lines, no summary entry
+    assert "2 unchanged" in second.output
 
 
 def test_cross_type_isolation(runner, vault, tmp_path):
