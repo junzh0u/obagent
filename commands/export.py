@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from lib.constants import ASSETS_DIR
+from lib.pipeline import Pipeline
 from lib.utils import SHA_RE, interruptible, source_file
 
 _DATE_PREFIX_RE = re.compile(r"^(\d{4})-(\d{2})")
@@ -81,19 +82,8 @@ def _prune_empty_managed_dirs(output_dir: Path) -> None:
                 entry.rmdir()
 
 
-@click.command()
-@click.option(
-    "--output-dir",
-    envvar="OBAGENT_EXPORT",
-    required=True,
-    type=click.Path(file_okay=False, path_type=Path),
-    help="Export root; the per-type subdir (e.g. Documents/, Receipts/) is appended.",
-)
-@click.pass_context
-def export(ctx, output_dir: Path):
-    """Export source files under --output-dir/{path}, grouped by year/month."""
-    vault = Path(ctx.obj["vault"])
-    path = ctx.obj["path"]
+def _export_path(vault: Path, output_dir: Path, path: str) -> None:
+    """Export sources for one vault subdir into output_dir/{path}/."""
     path_dir = vault / path
     export_root = output_dir / path
 
@@ -154,3 +144,32 @@ def export(ctx, output_dir: Path):
         parts.append(f"{missing} missing")
     if parts:
         click.secho(", ".join(parts), bold=True)
+
+
+_OUTPUT_DIR_OPTION = click.option(
+    "--output-dir",
+    envvar="OBAGENT_EXPORT",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Export root; the per-type subdir (e.g. Documents/, Receipts/) is appended.",
+)
+
+
+@click.command()
+@_OUTPUT_DIR_OPTION
+@click.pass_context
+def export(ctx, output_dir: Path):
+    """Export source files under --output-dir/{path}, grouped by year/month."""
+    _export_path(Path(ctx.obj["vault"]), output_dir, ctx.obj["path"])
+
+
+@click.command("export")
+@_OUTPUT_DIR_OPTION
+@click.pass_context
+def export_all(ctx, output_dir: Path):
+    """Export source files for every document type under --output-dir/{type}/."""
+    vault = Path(ctx.obj["vault"])
+    for pipeline in Pipeline._registry:
+        path = pipeline.default_path
+        click.secho(f"\n=== {pipeline.name.title()} ({path}) ===", bold=True)
+        _export_path(vault, output_dir, path)

@@ -6,7 +6,7 @@ from commands.export import export
 
 # Run every test against both real type subdirs to confirm the same command
 # works whether the parent group sets path="Documents" or path="Receipts".
-TYPES = ["Documents", "Receipts"]
+TYPES = ["Documents", "Receipts", "Bank Statements"]
 
 
 def _setup_entry(

@@ -1,6 +1,7 @@
 import click
 
 from commands.bank_statement.pipeline import bank_statement_pipeline
+from commands.export import export
 from commands.ingest import ingest
 from commands.remove import remove
 from commands.scan import scan
@@ -20,6 +21,7 @@ def bank_statement(ctx, path):
 
 
 bank_statement.add_command(bank_statement_pipeline.consume_command, "consume")
+bank_statement.add_command(export)
 bank_statement.add_command(bank_statement_pipeline.llm_command, "llm")
 bank_statement.add_command(bank_statement_pipeline.render_command, "render")
 bank_statement.add_command(ingest)

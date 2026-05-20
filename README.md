@@ -20,7 +20,7 @@ Each step can be run individually or all at once with `consume`:
 | `llm`     | Extract structured fields via LLM                      |
 | `render`  | Generate Obsidian markdown notes from extracted fields  |
 | `consume` | Run the full pipeline (ingest → ocr → llm → render)   |
-| `export`  | Copy source files out of the vault under their note names (documents + receipts) |
+| `export`  | Copy source files out of the vault under their note names (documents + receipts + bank statements; `obagent export` runs all three) |
 
 ## Vault structure
 
@@ -115,10 +115,14 @@ obagent receipt consume --keep-original ./inbox
 obagent receipt --path Invoices consume ./inbox
 
 # Export source files out of the vault, grouped by year/month under their note names.
-# The type subdir (Documents/, Receipts/, or your --path override) is appended automatically.
+# The type subdir (Documents/, Receipts/, Bank Statements/, or your --path override)
+# is appended automatically.
 obagent document export --output-dir /tmp/exported
 obagent receipt export --output-dir /tmp/exported
-# Layout: /tmp/exported/{Documents,Receipts}/YYYY/YYYY-MM/{note}.{pdf,jpg,jpeg}
+obagent bank-statement export --output-dir /tmp/exported
+# Or export every type in one go:
+obagent export --output-dir /tmp/exported
+# Layout: /tmp/exported/{Documents,Receipts,Bank Statements}/YYYY/YYYY-MM/{note}.{pdf,jpg,jpeg}
 # Notes without a YYYY-MM filename prefix land in {type}/undated/.
 # Also reads OBAGENT_EXPORT as the default for --output-dir.
 ```

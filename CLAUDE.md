@@ -43,7 +43,7 @@ vault/{path}/
 
 ## Export
 
-`obagent {document,receipt} export --output-dir DIR` (env var: `OBAGENT_EXPORT`) copies source files out of the vault, named after their `.md` notes and grouped by date. The per-type subdir is appended automatically — pointing both subcommands at the same `DIR` is safe and expected:
+`obagent {document,receipt,bank-statement} export --output-dir DIR` (env var: `OBAGENT_EXPORT`) copies source files out of the vault, named after their `.md` notes and grouped by date. The per-type subdir is appended automatically — pointing every subcommand at the same `DIR` is safe and expected. Use `obagent export` (top-level, no group) to run all three types in one invocation:
 
 ```
 DIR/
@@ -53,14 +53,18 @@ DIR/
   Receipts/
     YYYY/YYYY-MM/...
     undated/...
+  Bank Statements/
+    YYYY/YYYY-MM/...
+    undated/...
 ```
 
-If the group is invoked with a non-default `--path` (e.g. `obagent receipt --path Invoices export`), `Invoices/` is the appended subdir instead.
+The top-level `obagent export` uses each pipeline's `default_path` (`Documents`, `Receipts`, `Bank Statements`) and does **not** accept a `--path` override — use the per-type subcommand for that (e.g. `obagent receipt --path Invoices export`).
 
 Behavior:
-- Overwrites destination files on every run.
+- Idempotent: a destination file with matching size + integer-second mtime is left alone (counted as `unchanged`), otherwise `shutil.copy2` overwrites it. `shutil.copy2` preserves mtime, so re-runs against an unchanged vault perform no I/O.
 - Multi-embed notes: first source uses the bare note stem, extras get a `-{sha12}` suffix.
 - Dangling cleanup: scoped to the type subdir (`DIR/{path}/`). Removes any file under top-level / `YYYY/YYYY-MM/` / `undated/` of that subdir that wasn't written this run, then prunes empty managed dirs. Other type subdirs and unrelated folders inside `DIR` are untouched.
+- Summary counters: `exported`, `unchanged`, `removed`, `missing` (source file not found on disk).
 
 ## Name Management (People & Banks)
 
