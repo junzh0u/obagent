@@ -188,3 +188,109 @@ def test_missing_input_dir_and_env_var_errors(runner, vault, monkeypatch):
 
     assert result.exit_code != 0
     assert "--input-dir" in result.output
+
+
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
+@patch("commands.consume.run_ocr")
+@patch("commands.consume.ingest_source")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_prehook_runs_before_consume(
+    mock_mistral,
+    mock_openai,
+    mock_ingest,
+    mock_ocr,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    tmp_path,
+):
+    """--prehook fires before the per-type loop and its side effects are visible."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    seed = tmp_path / "scan.pdf"
+    seed.write_bytes(b"data")
+    # Hook populates the Documents/ subdir that doesn't exist yet at invocation time.
+    hook = f'mkdir -p "{inbox}/Documents" && cp "{seed}" "{inbox}/Documents/"'
+    mock_ingest.side_effect = _ingest_returns_target([0], vault)
+
+    result = runner.invoke(
+        consume_all,
+        [*BOTH_KEYS, "--input-dir", str(inbox), "--prehook", hook],
+        obj={"vault": str(vault)},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "=== Prehook ===" in result.output
+    # The hook created Documents/scan.pdf and consume picked it up.
+    # (Documents may appear multiple times in Pipeline._registry due to suite-wide
+    # pollution; we just check the file was consumed at least once from the
+    # right place.)
+    consumed_sources = {Path(c.args[0]) for c in mock_ingest.call_args_list}
+    assert consumed_sources == {inbox / "Documents" / "scan.pdf"}
+
+
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_prehook_failure_aborts_consume(
+    mock_mistral, mock_openai, runner, vault, tmp_path
+):
+    """A non-zero prehook aborts before clients are opened or files consumed."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
+    inbox = tmp_path / "inbox"
+    (inbox / "Documents").mkdir(parents=True)
+    (inbox / "Documents" / "scan.pdf").write_bytes(b"data")
+
+    result = runner.invoke(
+        consume_all,
+        [*BOTH_KEYS, "--input-dir", str(inbox), "--prehook", "false"],
+        obj={"vault": str(vault)},
+    )
+
+    assert result.exit_code != 0
+    assert "Prehook failed" in result.output
+    # Clients should never have been opened.
+    mock_mistral.assert_not_called()
+    mock_openai.assert_not_called()
+
+
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
+@patch("commands.consume.run_ocr")
+@patch("commands.consume.ingest_source")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_prehook_env_var_default(
+    mock_mistral,
+    mock_openai,
+    mock_ingest,
+    mock_ocr,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    tmp_path,
+    monkeypatch,
+):
+    """OBAGENT_CONSUME_PREHOOK supplies the hook when --prehook is omitted."""
+    _setup_ctx_managers(mock_mistral, mock_openai)
+    inbox = tmp_path / "inbox"
+    (inbox / "Documents").mkdir(parents=True)
+    (inbox / "Documents" / "scan.pdf").write_bytes(b"data")
+    mock_ingest.side_effect = _ingest_returns_target([0], vault)
+    monkeypatch.setenv("OBAGENT_CONSUME_PREHOOK", "echo prehook-marker")
+
+    result = runner.invoke(
+        consume_all,
+        [*BOTH_KEYS, "--input-dir", str(inbox)],
+        obj={"vault": str(vault)},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "=== Prehook ===" in result.output
+    assert "prehook-marker" in result.output
+    # The actual consume still ran (>=1 because registry pollution from other tests).
+    assert mock_ingest.call_count >= 1

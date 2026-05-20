@@ -65,6 +65,7 @@ export MISTRAL_API_KEY=...
 export OPENAI_API_KEY=...
 export OBAGENT_VAULT=/path/to/your/vault
 export OBAGENT_CONSUME=/path/to/inbox/dir            # default `--input-dir` for the consume commands
+export OBAGENT_CONSUME_PREHOOK='~/bin/fetch-scans.sh' # default `--prehook` for `obagent consume`
 export OBAGENT_EXPORT=/path/to/export/dir            # default `--output-dir` for the export commands
 ```
 
@@ -135,6 +136,12 @@ Per-type `consume` and `export` resolve their directory the same way:
 | `obagent {type} export [OUTPUT_DIR]` | dest dir, used verbatim | `--output-dir DIR` (`OBAGENT_EXPORT`) | dest = `DIR/{path}/` | error |
 
 Top-level `obagent consume` / `obagent export` drop the positional and require the option/env var; both loop over every type and apply `DIR/{path}/` per pipeline. Missing type subdirs are soft-skipped on consume; export will happily create them.
+
+The top-level `obagent consume` also accepts `--prehook CMD` (env var: `OBAGENT_CONSUME_PREHOOK`), a shell command that runs before the per-type loop. Useful for populating the inbox from an outside source. A non-zero exit aborts before any API clients are opened.
+
+```bash
+OBAGENT_CONSUME_PREHOOK='rclone copy gdrive:scans $OBAGENT_CONSUME' obagent consume
+```
 
 ## Development
 

@@ -1,3 +1,4 @@
+import subprocess
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -197,6 +198,13 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
 @click.command("consume")
 @_api_and_model_options
 @click.option(
+    "--prehook",
+    envvar="OBAGENT_CONSUME_PREHOOK",
+    type=str,
+    metavar="CMD",
+    help="Shell command to run before consume (e.g. fetch new files into the inbox). Aborts on non-zero exit.",
+)
+@click.option(
     "--input-dir",
     envvar="OBAGENT_CONSUME",
     required=True,
@@ -212,9 +220,19 @@ def consume_all(
     llm_model,
     keep_original,
     overwrite,
+    prehook,
     input_dir,
 ):
     """Consume source files for every document type from --input-dir/{type}/."""
+    if prehook:
+        click.secho("\n=== Prehook ===", bold=True)
+        click.secho(f"$ {prehook}", fg="cyan")
+        try:
+            subprocess.run(prehook, shell=True, check=True)
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException(
+                f"Prehook failed with exit code {e.returncode}"
+            ) from e
     vault = Path(ctx.obj["vault"])
     with (
         Mistral(api_key=mistral_api_key) as mistral_client,

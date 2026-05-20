@@ -65,6 +65,7 @@ DIR/
 
 - Missing `DIR/{path}/` is a **soft skip** (warning, exit 0). Per-type consume warns and returns without opening API clients; `obagent consume` warns per missing type and continues.
 - The per-type command keeps its existing positional `PATHS` (variadic — multiple files/dirs OK).
+- **`obagent consume`** (top-level only) accepts `--prehook CMD` (env var: `OBAGENT_CONSUME_PREHOOK`). The shell command runs before the per-type loop and before API clients are opened; a non-zero exit aborts with `Prehook failed`. Useful for populating `$OBAGENT_CONSUME` from an outside source (email sync, scanner upload, etc.).
 
 ### Export specifics
 
