@@ -2,6 +2,7 @@ import click
 
 from commands.bank import bank
 from commands.bank_statement import bank_statement
+from commands.consume import consume_all
 from commands.document import document
 from commands.export import export_all
 from commands.merchant import merchant
@@ -30,6 +31,7 @@ cli.add_command(document)
 cli.add_command(bank)
 cli.add_command(merchant)
 cli.add_command(people)
+cli.add_command(consume_all, "consume")
 cli.add_command(export_all, "export")
 cli.add_command(render_all, "render")
 

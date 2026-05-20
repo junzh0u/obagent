@@ -41,6 +41,28 @@ vault/{path}/
     src/   ocr/   llm/          ← per-entry data dirs
 ```
 
+## Consume
+
+`obagent {document,receipt,bank-statement} consume [PATHS...]` ingests source files into the vault. When `PATHS` are omitted, the command falls back to `--input-dir DIR` (env var: `OBAGENT_CONSUME`) and consumes from `DIR/{path}/`. Use `obagent consume` (top-level, no group) to run every type in one invocation:
+
+```
+$OBAGENT_CONSUME/
+├── Documents/         ← drop .pdf/.jpg/.jpeg here
+├── Receipts/
+└── Bank Statements/
+```
+
+Per-type consume input-source resolution:
+
+| Positional `PATHS` | `--input-dir` / `OBAGENT_CONSUME` | Result |
+|---|---|---|
+| given | ignored | Consume `PATHS` verbatim. |
+| empty | set, `DIR/{path}/` exists | Consume `DIR/{path}/`. |
+| empty | set, `DIR/{path}/` missing | Warn `No inbox at …`, exit 0. |
+| empty | unset | `UsageError` mentioning both `--input-dir` and `OBAGENT_CONSUME`. |
+
+The top-level `obagent consume` is stricter: `--input-dir` (or `OBAGENT_CONSUME`) is **required**, no positional `PATHS` are accepted. Inside the loop, each pipeline's `DIR/{default_path}/` follows the same "missing → soft skip" rule, so a partial inbox (e.g. only `Documents/` present) processes the populated types and warns on the rest.
+
 ## Export
 
 `obagent {document,receipt,bank-statement} export --output-dir DIR` (env var: `OBAGENT_EXPORT`) copies source files out of the vault, named after their `.md` notes and grouped by date. The per-type subdir is appended automatically — pointing every subcommand at the same `DIR` is safe and expected. Use `obagent export` (top-level, no group) to run all three types in one invocation:

@@ -19,7 +19,7 @@ Each step can be run individually or all at once with `consume`:
 | `ocr`     | Run Mistral OCR on ingested PDFs                       |
 | `llm`     | Extract structured fields via LLM                      |
 | `render`  | Generate Obsidian markdown notes from extracted fields  |
-| `consume` | Run the full pipeline (ingest → ocr → llm → render)   |
+| `consume` | Run the full pipeline (ingest → ocr → llm → render); `obagent consume` runs all three types from `$OBAGENT_CONSUME/{type}/` |
 | `export`  | Copy source files out of the vault under their note names (documents + receipts + bank statements; `obagent export` runs all three) |
 
 ## Vault structure
@@ -64,7 +64,8 @@ Set API keys as environment variables or pass them as CLI flags:
 export MISTRAL_API_KEY=...
 export OPENAI_API_KEY=...
 export OBAGENT_VAULT=/path/to/your/vault
-export OBAGENT_EXPORT=/path/to/export/dir            # default for `document export` and `receipt export`
+export OBAGENT_CONSUME=/path/to/inbox/dir            # default `--input-dir` for the consume commands
+export OBAGENT_EXPORT=/path/to/export/dir            # default `--output-dir` for the export commands
 ```
 
 ## Usage
@@ -114,6 +115,26 @@ obagent receipt consume --keep-original ./inbox
 # Use a custom vault subdirectory
 obagent receipt --path Invoices consume ./inbox
 
+# Consume from a shared inbox root — the type subdir is appended automatically.
+# Drop scans into $OBAGENT_CONSUME/{Documents,Receipts,Bank Statements}/ then:
+obagent document consume                  # just docs from $OBAGENT_CONSUME/Documents/
+obagent consume                           # every type in one go
+# Positional paths still work and override the env var:
+obagent receipt consume ./tmp-inbox
+```
+
+Per-type `consume` picks sources in this order:
+
+| Positional `PATHS` | `--input-dir` / `OBAGENT_CONSUME` | Result |
+|---|---|---|
+| given | ignored | Consume `PATHS` verbatim. |
+| empty | set, `DIR/{path}/` exists | Consume `DIR/{path}/`. |
+| empty | set, `DIR/{path}/` missing | Warn `No inbox at …`, exit 0. |
+| empty | unset | Error: must provide `PATHS` or set `--input-dir` / `OBAGENT_CONSUME`. |
+
+Top-level `obagent consume` is stricter — `--input-dir` (or `OBAGENT_CONSUME`) is required and positional paths aren't accepted. Missing type subdirs are still soft-skipped, so a partial inbox is fine.
+
+```bash
 # Export source files out of the vault, grouped by year/month under their note names.
 # The type subdir (Documents/, Receipts/, Bank Statements/, or your --path override)
 # is appended automatically.
