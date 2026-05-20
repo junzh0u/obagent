@@ -15,9 +15,10 @@
   - `lib/pipeline.py` — `Pipeline` ABC: orchestration (prompt, CLI command factories)
   - `lib/name_store.py` — shared JSON store helpers for aliases and pinned names
   - `lib/constants.py` — shared constants (OCR_MODEL, LLM_MODEL, ASSETS_DIR)
-  - `lib/utils.py` — shared utilities (iter_entries, newest_file)
+  - `lib/utils.py` — shared utilities (iter_entries, newest_file, source_file, `SHA_RE`)
 - `commands/{receipt,bank_statement,document}/pipeline.py` — concrete `Fields` + `Pipeline` per type
 - `commands/` — CLI command modules (consume, ingest, ocr, llm, render, scan)
+- `commands/document/export.py` — `document export` command (documents only)
 - `tests/` — unit and integration tests with shared fixtures in `conftest.py`
 
 ## Architecture
@@ -39,6 +40,21 @@ vault/{path}/
   _assets_/{sha256}/
     src/   ocr/   llm/          ← per-entry data dirs
 ```
+
+## Document Export
+
+`obagent document export --output-dir DIR` (env var: `OBAGENT_DOCUMENT_EXPORT`) copies every source file under `Documents/_assets_/{sha}/src/` into `DIR`, named after the corresponding `.md` note and grouped by date:
+
+```
+DIR/
+  YYYY/YYYY-MM/{note-stem}{.pdf|.jpg|.jpeg}
+  undated/{note-stem}{.pdf|.jpeg|.jpg}        ← notes whose filename has no YYYY-MM prefix
+```
+
+Behavior:
+- Overwrites destination files on every run.
+- Multi-embed notes: first source uses the bare note stem, extras get a `-{sha12}` suffix.
+- Dangling cleanup: after copying, removes any file under top-level / `YYYY/YYYY-MM/` / `undated/` that wasn't written this run, then prunes empty managed dirs. Unrelated subdirs in `DIR` are untouched.
 
 ## Name Management (People & Banks)
 

@@ -10,13 +10,12 @@ import click
 from lib.pipeline import Pipeline
 from lib.constants import ASSETS_DIR
 from lib.utils import (
+    SHA_RE,
     interruptible,
     iter_entries,
     newest_file,
     source_file,
 )
-
-_SHA_RE = re.compile(r"_assets_/([^/]+)/src/")
 
 
 def _parse_frontmatter(text: str) -> dict[str, str] | None:
@@ -73,7 +72,7 @@ def index_existing_notes(
     index = {}
     for md in path_dir.glob("*.md"):
         text = md.read_text()
-        shas = set(_SHA_RE.findall(text))
+        shas = set(SHA_RE.findall(text))
         if not shas:
             continue
         fm = _parse_frontmatter(text)
@@ -294,7 +293,7 @@ def rerender_notes(vault: Path, pipeline: Pipeline, modified: list[Path]) -> Non
     shas: set[str] = set()
     for md in modified:
         if md.exists():
-            shas.update(_SHA_RE.findall(md.read_text()))
+            shas.update(SHA_RE.findall(md.read_text()))
     if not shas:
         return
     pipeline.prepare_context(vault)

@@ -1,3 +1,4 @@
+import re
 import signal
 from collections.abc import Iterable, Iterator
 from pathlib import Path
@@ -9,6 +10,8 @@ from pypinyin import lazy_pinyin
 from lib.constants import ASSETS_DIR
 
 T = TypeVar("T")
+
+SHA_RE = re.compile(r"_assets_/([^/]+)/src/")
 
 
 def interruptible(iterable: Iterable[T]) -> Iterator[T]:

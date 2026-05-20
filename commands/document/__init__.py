@@ -1,5 +1,6 @@
 import click
 
+from commands.document.export import export
 from commands.document.pipeline import document_pipeline
 from commands.ingest import ingest
 from commands.remove import remove
@@ -20,6 +21,7 @@ def document(ctx, path):
 
 
 document.add_command(document_pipeline.consume_command, "consume")
+document.add_command(export)
 document.add_command(document_pipeline.llm_command, "llm")
 document.add_command(document_pipeline.render_command, "render")
 document.add_command(ingest)
