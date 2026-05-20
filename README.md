@@ -115,38 +115,26 @@ obagent receipt consume --keep-original ./inbox
 # Use a custom vault subdirectory
 obagent receipt --path Invoices consume ./inbox
 
-# Consume from a shared inbox root — the type subdir is appended automatically.
-# Drop scans into $OBAGENT_CONSUME/{Documents,Receipts,Bank Statements}/ then:
-obagent document consume                  # just docs from $OBAGENT_CONSUME/Documents/
-obagent consume                           # every type in one go
-# Positional paths still work and override the env var:
-obagent receipt consume ./tmp-inbox
+# Round-trip with a shared root layout — drop scans into $OBAGENT_CONSUME/{type}/,
+# files exit at $OBAGENT_EXPORT/{type}/{YYYY}/{YYYY-MM}/{note}.{pdf,jpg,jpeg}.
+obagent document consume                  # consume $OBAGENT_CONSUME/Documents/
+obagent consume                           # consume every type in one go
+obagent document export                   # export to $OBAGENT_EXPORT/Documents/
+obagent export                            # export every type in one go
+
+# Positional dirs override the env var / option for the per-type commands:
+obagent receipt consume ./tmp-inbox       # consume from ./tmp-inbox verbatim
+obagent document export /tmp/just-here    # export to /tmp/just-here verbatim (no subdir)
 ```
 
-Per-type `consume` picks sources in this order:
+Per-type `consume` and `export` resolve their directory the same way:
 
-| Positional `PATHS` | `--input-dir` / `OBAGENT_CONSUME` | Result |
-|---|---|---|
-| given | ignored | Consume `PATHS` verbatim. |
-| empty | set, `DIR/{path}/` exists | Consume `DIR/{path}/`. |
-| empty | set, `DIR/{path}/` missing | Warn `No inbox at …`, exit 0. |
-| empty | unset | Error: must provide `PATHS` or set `--input-dir` / `OBAGENT_CONSUME`. |
+| Per-type command | Positional | Option (env var) | Default (option set) | Both empty |
+|---|---|---|---|---|
+| `obagent {type} consume [PATHS...]` | source files/dirs, used verbatim | `--input-dir DIR` (`OBAGENT_CONSUME`) | sources = `DIR/{path}/` | error |
+| `obagent {type} export [OUTPUT_DIR]` | dest dir, used verbatim | `--output-dir DIR` (`OBAGENT_EXPORT`) | dest = `DIR/{path}/` | error |
 
-Top-level `obagent consume` is stricter — `--input-dir` (or `OBAGENT_CONSUME`) is required and positional paths aren't accepted. Missing type subdirs are still soft-skipped, so a partial inbox is fine.
-
-```bash
-# Export source files out of the vault, grouped by year/month under their note names.
-# The type subdir (Documents/, Receipts/, Bank Statements/, or your --path override)
-# is appended automatically.
-obagent document export --output-dir /tmp/exported
-obagent receipt export --output-dir /tmp/exported
-obagent bank-statement export --output-dir /tmp/exported
-# Or export every type in one go:
-obagent export --output-dir /tmp/exported
-# Layout: /tmp/exported/{Documents,Receipts,Bank Statements}/YYYY/YYYY-MM/{note}.{pdf,jpg,jpeg}
-# Notes without a YYYY-MM filename prefix land in {type}/undated/.
-# Also reads OBAGENT_EXPORT as the default for --output-dir.
-```
+Top-level `obagent consume` / `obagent export` drop the positional and require the option/env var; both loop over every type and apply `DIR/{path}/` per pipeline. Missing type subdirs are soft-skipped on consume; export will happily create them.
 
 ## Development
 

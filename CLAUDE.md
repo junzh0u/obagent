@@ -41,52 +41,37 @@ vault/{path}/
     src/   ocr/   llm/          ← per-entry data dirs
 ```
 
-## Consume
+## Consume and Export
 
-`obagent {document,receipt,bank-statement} consume [PATHS...]` ingests source files into the vault. When `PATHS` are omitted, the command falls back to `--input-dir DIR` (env var: `OBAGENT_CONSUME`) and consumes from `DIR/{path}/`. Use `obagent consume` (top-level, no group) to run every type in one invocation:
+`consume` (inbound) and `export` (outbound) share the same I/O convention: a positional dir is treated verbatim, while the option/env-var form is a *root* with the per-type subdir auto-appended.
+
+| Per-type command | Positional | Option (env var) | Default (option set) | Both empty |
+|---|---|---|---|---|
+| `obagent {type} consume [PATHS...]` | source files/dirs, used verbatim | `--input-dir DIR` (`OBAGENT_CONSUME`) | sources = `DIR/{path}/` | `UsageError` |
+| `obagent {type} export [OUTPUT_DIR]` | dest dir, used verbatim | `--output-dir DIR` (`OBAGENT_EXPORT`) | dest = `DIR/{path}/` | `UsageError` |
+
+Top-level forms (`obagent consume`, `obagent export`) drop the positional argument entirely and require the option/env var. They loop over `Pipeline._registry` and apply the same `DIR/{path}/` convention to each type — `Documents`, `Receipts`, `Bank Statements`.
+
+The natural round-trip layout (export root inverted into a consume root):
 
 ```
-$OBAGENT_CONSUME/
-├── Documents/         ← drop .pdf/.jpg/.jpeg here
+DIR/
+├── Documents/         {YYYY/YYYY-MM,undated}/{note-stem}{.pdf|.jpg|.jpeg}
 ├── Receipts/
 └── Bank Statements/
 ```
 
-Per-type consume input-source resolution:
+### Consume specifics
 
-| Positional `PATHS` | `--input-dir` / `OBAGENT_CONSUME` | Result |
-|---|---|---|
-| given | ignored | Consume `PATHS` verbatim. |
-| empty | set, `DIR/{path}/` exists | Consume `DIR/{path}/`. |
-| empty | set, `DIR/{path}/` missing | Warn `No inbox at …`, exit 0. |
-| empty | unset | `UsageError` mentioning both `--input-dir` and `OBAGENT_CONSUME`. |
+- Missing `DIR/{path}/` is a **soft skip** (warning, exit 0). Per-type consume warns and returns without opening API clients; `obagent consume` warns per missing type and continues.
+- The per-type command keeps its existing positional `PATHS` (variadic — multiple files/dirs OK).
 
-The top-level `obagent consume` is stricter: `--input-dir` (or `OBAGENT_CONSUME`) is **required**, no positional `PATHS` are accepted. Inside the loop, each pipeline's `DIR/{default_path}/` follows the same "missing → soft skip" rule, so a partial inbox (e.g. only `Documents/` present) processes the populated types and warns on the rest.
+### Export specifics
 
-## Export
-
-`obagent {document,receipt,bank-statement} export --output-dir DIR` (env var: `OBAGENT_EXPORT`) copies source files out of the vault, named after their `.md` notes and grouped by date. The per-type subdir is appended automatically — pointing every subcommand at the same `DIR` is safe and expected. Use `obagent export` (top-level, no group) to run all three types in one invocation:
-
-```
-DIR/
-  Documents/
-    YYYY/YYYY-MM/{note-stem}{.pdf|.jpg|.jpeg}
-    undated/{note-stem}{.pdf|.jpg|.jpeg}      ← notes whose filename has no YYYY-MM prefix
-  Receipts/
-    YYYY/YYYY-MM/...
-    undated/...
-  Bank Statements/
-    YYYY/YYYY-MM/...
-    undated/...
-```
-
-The top-level `obagent export` uses each pipeline's `default_path` (`Documents`, `Receipts`, `Bank Statements`) and does **not** accept a `--path` override — use the per-type subcommand for that (e.g. `obagent receipt --path Invoices export`).
-
-Behavior:
-- Idempotent: a destination file with matching size + integer-second mtime is left alone (counted as `unchanged`), otherwise `shutil.copy2` overwrites it. `shutil.copy2` preserves mtime, so re-runs against an unchanged vault perform no I/O.
-- Multi-embed notes: first source uses the bare note stem, extras get a `-{sha12}` suffix.
-- Dangling cleanup: scoped to the type subdir (`DIR/{path}/`). Removes any file under top-level / `YYYY/YYYY-MM/` / `undated/` of that subdir that wasn't written this run, then prunes empty managed dirs. Other type subdirs and unrelated folders inside `DIR` are untouched.
-- Summary counters: `exported`, `unchanged`, `removed`, `missing` (source file not found on disk).
+- **Idempotent**: a destination file with matching size + integer-second mtime is left alone (counted as `unchanged`); otherwise `shutil.copy2` overwrites it. `shutil.copy2` preserves mtime, so re-runs against an unchanged vault perform no I/O.
+- **Multi-embed notes**: first source uses the bare note stem, extras get a `-{sha12}` suffix.
+- **Dangling cleanup**: scoped to the chosen export root. Removes any file under top-level / `YYYY/YYYY-MM/` / `undated/` of that root that wasn't written this run, then prunes empty managed dirs. Other folders inside the parent dir (e.g. sibling type subdirs) are untouched.
+- **Summary counters**: `exported`, `unchanged`, `removed`, `missing` (source file referenced by a note not found on disk).
 
 ## Name Management (People & Banks)
 

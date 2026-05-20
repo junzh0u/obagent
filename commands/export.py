@@ -82,10 +82,9 @@ def _prune_empty_managed_dirs(output_dir: Path) -> None:
                 entry.rmdir()
 
 
-def _export_path(vault: Path, output_dir: Path, path: str) -> None:
-    """Export sources for one vault subdir into output_dir/{path}/."""
-    path_dir = vault / path
-    export_root = output_dir / path
+def _export_path(vault: Path, vault_path: str, export_root: Path) -> None:
+    """Export sources from vault/vault_path/ into export_root/."""
+    path_dir = vault / vault_path
 
     export_root.mkdir(parents=True, exist_ok=True)
 
@@ -120,14 +119,14 @@ def _export_path(vault: Path, output_dir: Path, path: str) -> None:
                 continue
             shutil.copy2(src, dest)
             written.add(dest)
-            rel = dest.relative_to(output_dir)
+            rel = dest.relative_to(export_root)
             click.secho(f"  Exported: {rel}", fg="green")
             exported += 1
 
     removed = 0
     for existing in sorted(_iter_managed_files(export_root)):
         if existing not in written:
-            rel = existing.relative_to(output_dir)
+            rel = existing.relative_to(export_root)
             existing.unlink()
             click.secho(f"  Removed: {rel}", fg="green")
             removed += 1
@@ -146,25 +145,49 @@ def _export_path(vault: Path, output_dir: Path, path: str) -> None:
         click.secho(", ".join(parts), bold=True)
 
 
-_OUTPUT_DIR_OPTION = click.option(
+def _resolve_export_root(
+    output_dir: Path | None, dest: Path | None, type_path: str
+) -> Path:
+    """Pick the export root: positional DEST verbatim, else {output_dir}/{type_path}/."""
+    if dest is not None:
+        return dest
+    if output_dir is not None:
+        return output_dir / type_path
+    raise click.UsageError(
+        "Either provide OUTPUT_DIR or set --output-dir / OBAGENT_EXPORT."
+    )
+
+
+@click.command()
+@click.option(
+    "--output-dir",
+    envvar="OBAGENT_EXPORT",
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Export root; the per-type subdir is appended. Used when no OUTPUT_DIR is given.",
+)
+@click.argument(
+    "dest",
+    required=False,
+    type=click.Path(file_okay=False, path_type=Path),
+    metavar="[OUTPUT_DIR]",
+)
+@click.pass_context
+def export(ctx, output_dir: Path | None, dest: Path | None):
+    """Export source files for this type, grouped by year/month."""
+    vault = Path(ctx.obj["vault"])
+    path = ctx.obj["path"]
+    export_root = _resolve_export_root(output_dir, dest, path)
+    _export_path(vault, path, export_root)
+
+
+@click.command("export")
+@click.option(
     "--output-dir",
     envvar="OBAGENT_EXPORT",
     required=True,
     type=click.Path(file_okay=False, path_type=Path),
-    help="Export root; the per-type subdir (e.g. Documents/, Receipts/) is appended.",
+    help="Export root; per-type subdirs (Documents/, Receipts/, ...) are appended.",
 )
-
-
-@click.command()
-@_OUTPUT_DIR_OPTION
-@click.pass_context
-def export(ctx, output_dir: Path):
-    """Export source files under --output-dir/{path}, grouped by year/month."""
-    _export_path(Path(ctx.obj["vault"]), output_dir, ctx.obj["path"])
-
-
-@click.command("export")
-@_OUTPUT_DIR_OPTION
 @click.pass_context
 def export_all(ctx, output_dir: Path):
     """Export source files for every document type under --output-dir/{type}/."""
@@ -172,4 +195,4 @@ def export_all(ctx, output_dir: Path):
     for pipeline in Pipeline._registry:
         path = pipeline.default_path
         click.secho(f"\n=== {path} ===", bold=True)
-        _export_path(vault, output_dir, path)
+        _export_path(vault, path, output_dir / path)

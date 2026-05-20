@@ -285,6 +285,65 @@ def test_second_run_skips_unchanged_files(runner, vault, tmp_path, path):
     assert "2 unchanged" in second.output
 
 
+@pytest.mark.parametrize("path", TYPES)
+def test_positional_output_dir_writes_verbatim(runner, vault, tmp_path, path):
+    """Positional OUTPUT_DIR exports directly into it; no per-type subdir appended."""
+    _setup_entry(vault, path, "sha1", src_bytes=b"data")
+    _write_note(vault, path, "2024-03-03 - Note", ["sha1"])
+    out = tmp_path / "literal-dest"
+
+    result = runner.invoke(
+        export,
+        [str(out)],
+        obj={"vault": str(vault), "path": path},
+    )
+
+    assert result.exit_code == 0, result.output
+    # File lands at out/YYYY/YYYY-MM/, NOT out/{path}/YYYY/YYYY-MM/.
+    assert (out / "2024" / "2024-03" / "2024-03-03 - Note.pdf").read_bytes() == b"data"
+    assert not (out / path).exists()
+
+
+@pytest.mark.parametrize("path", TYPES)
+def test_positional_wins_over_env_var(runner, vault, tmp_path, monkeypatch, path):
+    """Positional OUTPUT_DIR wins; --output-dir / OBAGENT_EXPORT is ignored."""
+    _setup_entry(vault, path, "sha1", src_bytes=b"data")
+    _write_note(vault, path, "2024-04-04 - Note", ["sha1"])
+    positional = tmp_path / "positional"
+    decoy = tmp_path / "decoy"
+    monkeypatch.setenv("OBAGENT_EXPORT", str(decoy))
+
+    result = runner.invoke(
+        export,
+        [str(positional)],
+        obj={"vault": str(vault), "path": path},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (
+        positional / "2024" / "2024-04" / "2024-04-04 - Note.pdf"
+    ).read_bytes() == b"data"
+    assert not decoy.exists()
+
+
+@pytest.mark.parametrize("path", TYPES)
+def test_no_output_dir_and_no_env_var_raises_usage_error(
+    runner, vault, monkeypatch, path
+):
+    """With neither OUTPUT_DIR nor OBAGENT_EXPORT, the command errors."""
+    monkeypatch.delenv("OBAGENT_EXPORT", raising=False)
+
+    result = runner.invoke(
+        export,
+        [],
+        obj={"vault": str(vault), "path": path},
+    )
+
+    assert result.exit_code != 0
+    assert "OBAGENT_EXPORT" in result.output
+    assert "--output-dir" in result.output
+
+
 def test_cross_type_isolation(runner, vault, tmp_path):
     """Running export for one type does not touch files written by another type."""
     _setup_entry(vault, "Documents", "sha-d", src_bytes=b"doc-data")
