@@ -361,7 +361,7 @@ def render_all(ctx, overwrite):
     for pipeline in Pipeline._registry:
         path = pipeline.default_path
         path_dir = vault / path
-        click.secho(f"\n=== {pipeline.name.title()} ({path}) ===", bold=True)
+        click.secho(f"\n=== {path} ===", bold=True)
         pipeline.prepare_context(vault)
         _render_entries(
             interruptible(iter_entries(vault, path)),

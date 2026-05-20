@@ -62,7 +62,7 @@ def test_exports_every_type_in_one_invocation(runner, vault, tmp_path):
 
 
 def test_prints_section_header_per_type(runner, vault, tmp_path):
-    """Each type produces a `=== <Name> (<Path>) ===` banner in the output."""
+    """Each type produces a `=== <Path> ===` banner in the output."""
     _setup_entry(vault, "Documents", "sha-d")
     _write_note(vault, "Documents", "2024-01-01 - Note", ["sha-d"])
     out = tmp_path / "out"
@@ -70,10 +70,9 @@ def test_prints_section_header_per_type(runner, vault, tmp_path):
     result = _invoke(runner, vault, out)
 
     assert result.exit_code == 0, result.output
-    # Banners use pipeline.name.title() and pipeline.default_path.
-    assert "Document (Documents)" in result.output
-    assert "Receipt (Receipts)" in result.output
-    assert "Bank Statement (Bank Statements)" in result.output
+    assert "=== Documents ===" in result.output
+    assert "=== Receipts ===" in result.output
+    assert "=== Bank Statements ===" in result.output
 
 
 def test_partial_vault_only_creates_populated_type_dirs(runner, vault, tmp_path):
@@ -131,4 +130,4 @@ def test_rerun_is_idempotent_across_all_types(runner, vault, tmp_path):
     assert "exported" not in second.output
     assert "1 unchanged" in second.output
     for type_path in ("Documents", "Receipts", "Bank Statements"):
-        assert f"({type_path}) ===" in second.output
+        assert f"=== {type_path} ===" in second.output

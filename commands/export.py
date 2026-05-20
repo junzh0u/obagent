@@ -171,5 +171,5 @@ def export_all(ctx, output_dir: Path):
     vault = Path(ctx.obj["vault"])
     for pipeline in Pipeline._registry:
         path = pipeline.default_path
-        click.secho(f"\n=== {pipeline.name.title()} ({path}) ===", bold=True)
+        click.secho(f"\n=== {path} ===", bold=True)
         _export_path(vault, output_dir, path)
