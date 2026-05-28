@@ -19,8 +19,15 @@ Each step can be run individually or all at once with `consume`:
 | `ocr`     | Run Mistral OCR on ingested PDFs                       |
 | `llm`     | Extract structured fields via LLM                      |
 | `render`  | Generate Obsidian markdown notes from extracted fields  |
-| `consume` | Run the full pipeline (ingest → ocr → llm → render); `obagent consume` runs all three types from `$OBAGENT_CONSUME/{type}/` |
-| `export`  | Copy source files out of the vault under their note names (documents + receipts + bank statements; `obagent export` runs all three) |
+| `consume` | Run the full pipeline (ingest → ocr → llm → render)    |
+
+Outside the pipeline:
+
+| Command   | What it does                                           |
+|-----------|--------------------------------------------------------|
+| `export`  | Inverse of ingest — copy source files out of the vault under their note names |
+
+Top-level aggregators (`obagent consume`, `obagent export`, `obagent render`) loop over every document type (receipts, bank statements, documents) in one go.
 
 ## Vault structure
 
@@ -107,6 +114,15 @@ obagent bank pin "Name"                   # pin bank names
 obagent bank unpin "Name"                 # unpin bank names
 # Aliases in .obagent/bank-aliases.json are auto-applied on render
 
+# Merchant management (receipts only)
+obagent merchant list                     # list all unique merchant names
+obagent merchant rename "Old" "New"       # rename across all notes
+obagent merchant remap                    # batch rename from aliases file
+obagent merchant pin "Name"               # pin merchant names
+obagent merchant unpin "Name"             # unpin merchant names
+obagent merchant auto-rename              # LLM-assisted duplicate detection
+# Aliases in .obagent/merchant-aliases.json are auto-applied on render
+
 # Re-process everything from scratch
 obagent receipt consume --overwrite ./inbox
 
@@ -122,6 +138,7 @@ obagent document consume                  # consume $OBAGENT_CONSUME/Documents/
 obagent consume                           # consume every type in one go
 obagent document export                   # export to $OBAGENT_EXPORT/Documents/
 obagent export                            # export every type in one go
+obagent render                            # re-render every type's notes in one go
 
 # Positional dirs override the env var / option for the per-type commands:
 obagent receipt consume ./tmp-inbox       # consume from ./tmp-inbox verbatim

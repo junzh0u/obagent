@@ -17,8 +17,9 @@
   - `lib/constants.py` — shared constants (OCR_MODEL, LLM_MODEL, ASSETS_DIR)
   - `lib/utils.py` — shared utilities (iter_entries, newest_file, source_file, `SHA_RE`)
 - `commands/{receipt,bank_statement,document}/pipeline.py` — concrete `Fields` + `Pipeline` per type
-- `commands/` — CLI command modules (consume, ingest, ocr, llm, render, scan)
-- `commands/export.py` — shared `export` subcommand (registered on `document` and `receipt`)
+- `commands/` — CLI command modules (consume, ingest, ocr, llm, render, scan, remove)
+- `commands/export.py` — shared `export` subcommand (registered on `document`, `receipt`, and `bank_statement`); also exposes the top-level `obagent export` aggregator
+- `commands/{bank,merchant,people}.py` — top-level name-management groups built on `lib/name_store.py`
 - `tests/` — unit and integration tests with shared fixtures in `conftest.py`
 
 ## Architecture
@@ -50,7 +51,7 @@ vault/{path}/
 | `obagent {type} consume [PATHS...]` | source files/dirs, used verbatim | `--input-dir DIR` (`OBAGENT_CONSUME`) | sources = `DIR/{path}/` | `UsageError` |
 | `obagent {type} export [OUTPUT_DIR]` | dest dir, used verbatim | `--output-dir DIR` (`OBAGENT_EXPORT`) | dest = `DIR/{path}/` | `UsageError` |
 
-Top-level forms (`obagent consume`, `obagent export`) drop the positional argument entirely and require the option/env var. They loop over `Pipeline._registry` and apply the same `DIR/{path}/` convention to each type — `Documents`, `Receipts`, `Bank Statements`.
+Top-level forms (`obagent consume`, `obagent export`) drop the positional argument entirely and require the option/env var. They loop over `Pipeline._registry` and apply the same `DIR/{path}/` convention to each type — `Documents`, `Receipts`, `Bank Statements`. A matching `obagent render` aggregator (no `--input-dir`/`--output-dir`) re-renders every type's notes in one go.
 
 The natural round-trip layout (export root inverted into a consume root):
 
@@ -74,9 +75,9 @@ DIR/
 - **Dangling cleanup**: scoped to the chosen export root. Removes any file under top-level / `YYYY/YYYY-MM/` / `undated/` of that root that wasn't written this run, then prunes empty managed dirs. Other folders inside the parent dir (e.g. sibling type subdirs) are untouched.
 - **Summary counters**: `exported`, `unchanged`, `removed`, `missing` (source file referenced by a note not found on disk).
 
-## Name Management (People & Banks)
+## Name Management (People, Banks & Merchants)
 
-Both `commands/people.py` and `commands/bank.py` share the same pattern via `lib/name_store.py` (shared JSON store helpers and command factories: `make_rename_command`, `make_list_command`, `make_remap_command`, `make_pin_command`, `make_unpin_command`).
+`commands/people.py`, `commands/bank.py`, and `commands/merchant.py` share the same pattern via `lib/name_store.py` (shared JSON store helpers and command factories: `make_rename_command`, `make_list_command`, `make_remap_command`, `make_pin_command`, `make_unpin_command`, `make_auto_rename_command`). All three are registered as **top-level** groups on the root `cli` (not nested inside their respective document-type groups).
 
 ### People (documents)
 - Aliases file: `{vault}/.obagent/people-aliases.json` — maps old names to new (empty string = remove)
@@ -92,6 +93,7 @@ Both `commands/people.py` and `commands/bank.py` share the same pattern via `lib
 - Aliases file: `{vault}/.obagent/merchant-aliases.json` — maps old merchant names to new
 - Pinned file: `{vault}/.obagent/merchant-pinned.json` — pinned merchant names
 - `ReceiptPipeline.prepare_context()` loads aliases into `ReceiptFields._aliases`, which `postprocess()` auto-applies on render
+- Has an extra `auto-rename` subcommand: asks an LLM (`AUTO_RENAME_MODEL`) to cluster variants of the same merchant, then prompts the user to accept/reject each suggested rename before applying
 
 ## Commands
 
