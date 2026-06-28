@@ -1,4 +1,5 @@
 import subprocess
+import time
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -93,6 +94,34 @@ def _resolve_consume_sources(
     raise click.UsageError("Either provide PATHS or set --input-dir / OBAGENT_CONSUME.")
 
 
+def _filter_stable(sources: list[Path], min_age: int) -> list[Path]:
+    """Drop files modified within the last ``min_age`` seconds (quiescence gate).
+
+    Stateless: a slow upload keeps bumping its mtime, so it stays skipped until
+    it has settled for ``min_age`` seconds. ``min_age=0`` disables the gate.
+    """
+    if not min_age:
+        return sources
+    cutoff = time.time() - min_age
+    stable, settling = [], 0
+    for s in sources:
+        try:
+            settled = s.stat().st_mtime <= cutoff
+        except OSError:
+            settled = False
+        if settled:
+            stable.append(s)
+        else:
+            settling += 1
+    if settling:
+        click.secho(
+            f"  Skipping {settling} file(s) modified in the last {min_age}s "
+            "(still settling).",
+            fg="yellow",
+        )
+    return stable
+
+
 def _print_summary(consumed: int, skipped: int) -> None:
     total = consumed + skipped
     click.secho(
@@ -141,6 +170,13 @@ def _api_and_model_options(f):
         required=True,
         help="Mistral API key for OCR processing.",
     )(f)
+    f = click.option(
+        "--min-age",
+        type=int,
+        default=0,
+        show_default=True,
+        help="Skip files modified within the last N seconds (let slow uploads settle).",
+    )(f)
     return f
 
 
@@ -165,6 +201,7 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
         llm_model,
         keep_original,
         overwrite,
+        min_age,
         input_dir,
         paths,
     ):
@@ -173,6 +210,7 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
         sources = _resolve_consume_sources(paths, input_dir, path)
         if sources is None:
             return
+        sources = _filter_stable(sources, min_age)
         with (
             Mistral(api_key=mistral_api_key) as mistral_client,
             OpenAI(api_key=openai_api_key) as openai_client,
@@ -220,6 +258,7 @@ def consume_all(
     llm_model,
     keep_original,
     overwrite,
+    min_age,
     prehook,
     input_dir,
 ):
@@ -245,7 +284,7 @@ def consume_all(
             if not type_inbox.is_dir():
                 click.secho(f"  No inbox at {type_inbox}, skipping.", fg="yellow")
                 continue
-            sources = resolve_sources((str(type_inbox),))
+            sources = _filter_stable(resolve_sources((str(type_inbox),)), min_age)
             consumed, skipped = _consume_path(
                 vault,
                 path,
