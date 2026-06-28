@@ -51,13 +51,19 @@ class Fields[K: str](dict[K, str], ABC):
     def make_title(self) -> str:
         """Build a filesystem-safe title from metadata fields."""
 
-    def format_frontmatter(self, *, consumed_at: str = "") -> str:
-        """Format fields as YAML frontmatter."""
+    def format_frontmatter(self, *, consumed_at: str = "", notion_id: str = "") -> str:
+        """Format fields as YAML frontmatter.
+
+        ``notion_id`` (the linked Notion page id, assigned by ``obagent notion``)
+        is emitted only when present, so unsynced notes stay clean. It is never
+        derived — render only carries it forward across re-renders.
+        """
         fmt = '{}: "{}"'.format
         body = "\n".join(
             fmt(k, v) if v.isdigit() else f"{k}: {v}" for k, v in self.items()
         )
-        return f"---\n{body}\nconsumed_at: {consumed_at}\n---\n"
+        extra = f"\nnotion_id: {notion_id}" if notion_id else ""
+        return f"---\n{body}\nconsumed_at: {consumed_at}{extra}\n---\n"
 
     def format_body(self) -> str:
         """Format optional body content. Default returns empty string."""

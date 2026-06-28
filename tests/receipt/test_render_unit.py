@@ -610,3 +610,72 @@ def test_missing_metadata_json_empty_consumed_at(runner, vault):
     md_file = vault / "papers" / "2024-01-01 - NoMeta - $1.00.md"
     assert md_file.exists()
     assert "consumed_at: \n" in md_file.read_text()
+
+
+def test_notion_id_absent_when_unsynced(runner, vault):
+    """A freshly rendered note with no notion_id omits the field entirely."""
+    _setup_entry_with_llm(
+        vault, sha="sha_nonid", merchant="Shop", date="2024-01-01", total="$1.00"
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    content = (vault / "papers" / "2024-01-01 - Shop - $1.00.md").read_text()
+    assert "notion_id" not in content
+
+
+def test_notion_id_preserved_from_frontmatter(runner, vault):
+    """notion_id from existing frontmatter is carried forward across re-renders."""
+    _setup_entry_with_llm(
+        vault, sha="sha_nid", merchant="Shop", date="2024-01-01", total="$1.00"
+    )
+    old_md = vault / "papers" / "2024-01-01 - Shop - $1.00.md"
+    old_md.write_text(
+        "---\nmerchant: Shop\ndate: 2024-01-01\ntotal: $1.00\n"
+        "consumed_at: 2024-06-01T12:00:00+00:00\n"
+        "notion_id: abc-123-def\n---\n"
+        "![[_assets_/sha_nid/src/original.pdf#height]]\n"
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        ["sha_nid"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    content = (vault / "papers" / "2024-01-01 - Shop - $1.00.md").read_text()
+    assert "notion_id: abc-123-def" in content
+
+
+def test_notion_id_preserved_across_rename(runner, vault):
+    """notion_id survives when a field edit renames the note file."""
+    _setup_entry_with_llm(
+        vault, sha="sha_nidr", merchant="ignored", date="2024-05-01", total="$25.00"
+    )
+    # Existing note at the OLD title, but frontmatter merchant points to NEW —
+    # re-render (frontmatter wins) renames Old -> New and must carry notion_id.
+    old_md = vault / "papers" / "2024-05-01 - Old Shop - $25.00.md"
+    old_md.write_text(
+        "---\nmerchant: New Shop\ndate: 2024-05-01\ntotal: $25.00\n"
+        "consumed_at: 2024-06-01T12:00:00+00:00\n"
+        "notion_id: page-xyz\n---\n"
+        "![[_assets_/sha_nidr/src/original.pdf#height]]\n"
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        ["sha_nidr"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    new_md = vault / "papers" / "2024-05-01 - New Shop - $25.00.md"
+    assert new_md.exists()
+    assert not old_md.exists()
+    assert "notion_id: page-xyz" in new_md.read_text()

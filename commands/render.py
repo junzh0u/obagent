@@ -180,6 +180,14 @@ def render_note(
             metadata = json.loads(metadata_path.read_text())
             consumed_at = metadata.get("consumed_at", "")
 
+    # Preserve notion_id from existing frontmatter (assigned by `obagent notion`);
+    # never derived — only carried forward across re-renders (incl. renames).
+    notion_id = ""
+    if note_index:
+        entry = note_index.get(target_dir.name)
+        if entry and entry[0]:
+            notion_id = entry[0].get("notion_id", "")
+
     safe_title = fields.make_title()
 
     md_path = path_dir / f"{safe_title}.md"
@@ -191,7 +199,9 @@ def render_note(
     embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/{src_name}{anchor}]]\n"
     meta_embed = f"![[{ASSETS_DIR}/{target_dir.name}/src/metadata.json]]\n"
 
-    frontmatter = fields.format_frontmatter(consumed_at=consumed_at)
+    frontmatter = fields.format_frontmatter(
+        consumed_at=consumed_at, notion_id=notion_id
+    )
     body = fields.format_body()
     content = frontmatter + body + embed + meta_embed
 

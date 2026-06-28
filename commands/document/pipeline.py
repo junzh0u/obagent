@@ -37,7 +37,7 @@ class DocumentFields(Fields[Literal["title", "date", "tags", "people", "summary"
         return "".join(c for c in title if c not in TITLE_UNSAFE_CHARS).strip()
 
     @override
-    def format_frontmatter(self, *, consumed_at: str = "") -> str:
+    def format_frontmatter(self, *, consumed_at: str = "", notion_id: str = "") -> str:
         # Exclude summary from frontmatter; it goes in the body callout
         title = self.get("title", "")
         date = self.get("date", "")
@@ -47,9 +47,10 @@ class DocumentFields(Fields[Literal["title", "date", "tags", "people", "summary"
         people = self.get("people", "")
         people_list = sorted(people.split(","), key=pinyin_sort_key) if people else []
         people_lines = "".join(f"\n  - {p}" for p in people_list)
+        extra = f"\nnotion_id: {notion_id}" if notion_id else ""
         return (
             f"---\ntitle: {title}\ndate: {date}\ntags:{tag_lines}\n"
-            f"people:{people_lines}\nconsumed_at: {consumed_at}\n---\n"
+            f"people:{people_lines}\nconsumed_at: {consumed_at}{extra}\n---\n"
         )
 
     @override
