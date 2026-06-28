@@ -5,10 +5,10 @@ the request throttle, the retry policy (429 / Cloudflare-WAF challenges / 408 /
 409 / 5xx / socket timeouts), and multipart file upload. Plus Notion's UTF-16
 length helpers for its text/name caps.
 
-Scope is deliberately narrow: **transport + upload only**. No field mapping, no
-page/query wrappers, no sync logic — those live in the ``commands/notion``
-layer. obagent's pipeline/render core must not import this module (the Notion
-dependency is one-directional).
+Scope: the Notion HTTP client — transport, file upload, and thin
+page/query/data-source wrappers. **No field mapping or sync logic** — those live
+in the ``commands/notion`` layer. obagent's pipeline/render core must not import
+this module (the Notion dependency is one-directional).
 """
 
 import json
@@ -21,9 +21,10 @@ from pathlib import Path
 from typing import Any
 
 API = "https://api.notion.com/v1"
-# Proven version for file uploads + classic page ops. Data-source query/parent
-# endpoints (M2) may require bumping this; revisit when those wrappers land.
-NOTION_VERSION = "2022-06-28"
+# Data-sources API. Verified against the live workspace to cover query
+# (/data_sources/{id}/query), page create/update (data_source_id parent), and
+# file uploads — one version for everything.
+NOTION_VERSION = "2025-09-03"
 
 MIN_INTERVAL = 0.34  # ~3 req/s throttle
 MAX_RETRIES = 8
@@ -195,3 +196,68 @@ class NotionClient:
                 self._send_part(uid, {"part_number": str(pn)}, f.read(PART_SIZE), ctype)
         self.api("POST", f"{API}/file_uploads/{uid}/complete", data={})
         return uid
+
+    # -- pages / query (thin data-sources wrappers) ------------------------
+    def create_page(
+        self,
+        data_source_id: str,
+        properties: dict[str, Any],
+        *,
+        children: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Create a page (row) under a data source. Returns the created page."""
+        data: dict[str, Any] = {
+            "parent": {"type": "data_source_id", "data_source_id": data_source_id},
+            "properties": properties,
+        }
+        if children:
+            data["children"] = children
+        return self.api("POST", f"{API}/pages", data=data)
+
+    def update_page(self, page_id: str, properties: dict[str, Any]) -> dict[str, Any]:
+        """Patch a page's properties. Returns the updated page."""
+        return self.api(
+            "PATCH", f"{API}/pages/{page_id}", data={"properties": properties}
+        )
+
+    def query(
+        self,
+        data_source_id: str,
+        *,
+        filter: dict[str, Any] | None = None,
+        sorts: list[dict[str, Any]] | None = None,
+        start_cursor: str | None = None,
+        page_size: int = 100,
+    ) -> dict[str, Any]:
+        """One page of a data-source query (raw response)."""
+        data: dict[str, Any] = {"page_size": page_size}
+        if filter:
+            data["filter"] = filter
+        if sorts:
+            data["sorts"] = sorts
+        if start_cursor:
+            data["start_cursor"] = start_cursor
+        return self.api("POST", f"{API}/data_sources/{data_source_id}/query", data=data)
+
+    def iter_pages(
+        self,
+        data_source_id: str,
+        *,
+        filter: dict[str, Any] | None = None,
+        sorts: list[dict[str, Any]] | None = None,
+        page_size: int = 100,
+    ):
+        """Yield every page in a data source, following pagination."""
+        cursor: str | None = None
+        while True:
+            r = self.query(
+                data_source_id,
+                filter=filter,
+                sorts=sorts,
+                start_cursor=cursor,
+                page_size=page_size,
+            )
+            yield from r.get("results", [])
+            if not r.get("has_more"):
+                return
+            cursor = r.get("next_cursor")

@@ -166,3 +166,70 @@ def test_upload_file_multipart(monkeypatch, tmp_path):
     assert created["data"]["number_of_parts"] == 7
     assert len([u for u in seen if u.endswith("/send")]) == 7
     assert any(u.endswith("/complete") for u in seen)
+
+
+# --- page / query wrappers ------------------------------------------------
+
+
+def _record_api(client, monkeypatch, response=None):
+    """Patch client.api to record (method, url, data) and return ``response``."""
+    calls = []
+
+    def fake_api(method, url, *, data=None, headers=None, raw=False):
+        calls.append({"method": method, "url": url, "data": data})
+        return response if response is not None else {}
+
+    monkeypatch.setattr(client, "api", fake_api)
+    return calls
+
+
+def test_create_page_uses_data_source_parent(monkeypatch):
+    client = NotionClient(token="t")
+    calls = _record_api(client, monkeypatch, {"id": "pg1"})
+    props = {"Merchant": {"rich_text": [{"text": {"content": "Costco"}}]}}
+    out = client.create_page("ds-123", props, children=[{"x": 1}])
+    assert out == {"id": "pg1"}
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"] == f"{notion_api.API}/pages"
+    assert calls[0]["data"]["parent"] == {
+        "type": "data_source_id",
+        "data_source_id": "ds-123",
+    }
+    assert calls[0]["data"]["properties"] == props
+    assert calls[0]["data"]["children"] == [{"x": 1}]
+
+
+def test_update_page_patches_properties(monkeypatch):
+    client = NotionClient(token="t")
+    calls = _record_api(client, monkeypatch, {"id": "pg1"})
+    client.update_page("pg1", {"Total": {"number": 9.5}})
+    assert calls[0]["method"] == "PATCH"
+    assert calls[0]["url"] == f"{notion_api.API}/pages/pg1"
+    assert calls[0]["data"] == {"properties": {"Total": {"number": 9.5}}}
+
+
+def test_query_builds_body_and_url(monkeypatch):
+    client = NotionClient(token="t")
+    calls = _record_api(client, monkeypatch, {"results": [], "has_more": False})
+    flt = {"property": "Sha", "rich_text": {"contains": "abc"}}
+    client.query("ds-9", filter=flt, page_size=25)
+    assert calls[0]["url"] == f"{notion_api.API}/data_sources/ds-9/query"
+    assert calls[0]["data"] == {"page_size": 25, "filter": flt}
+
+
+def test_iter_pages_follows_pagination(monkeypatch):
+    client = NotionClient(token="t")
+    pages = [
+        {"results": [{"id": "a"}, {"id": "b"}], "has_more": True, "next_cursor": "c1"},
+        {"results": [{"id": "c"}], "has_more": False, "next_cursor": None},
+    ]
+    seen_cursors = []
+
+    def fake_query(ds, *, filter=None, sorts=None, start_cursor=None, page_size=100):
+        seen_cursors.append(start_cursor)
+        return pages[len(seen_cursors) - 1]
+
+    monkeypatch.setattr(client, "query", fake_query)
+    ids = [p["id"] for p in client.iter_pages("ds-9")]
+    assert ids == ["a", "b", "c"]
+    assert seen_cursors == [None, "c1"]  # first page no cursor, then next_cursor
