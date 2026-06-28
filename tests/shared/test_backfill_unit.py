@@ -106,6 +106,69 @@ def test_gather_vault_reads_summary_from_body(tmp_path):
     assert notes[0].frontmatter["summary"] == "A membership card."
 
 
+def test_inject_notion_id_idempotent():
+    text = (
+        "---\nmerchant: X\ndate: 2020-01-01\ntotal: $5\nconsumed_at: z\n---\n![[a]]\n"
+    )
+    out = bf.inject_notion_id(text, "pg-1")
+    assert "notion_id: pg-1" in out.split("---")[1]  # inside frontmatter
+    assert bf.inject_notion_id(out, "pg-1") == out  # no duplicate
+
+
+def test_reconcile_total_notion_wins():
+    note = bf.VaultNote(
+        path=Path("/v/x.md"),
+        key=(),
+        shas=["s"],
+        frontmatter={
+            "merchant": "Holiday Inn",
+            "date": "2025-10-12",
+            "total": "¥230.40",
+        },
+    )
+    ned = {"merchant": "Holiday Inn", "date": "2025-10-12", "total": "CNY 230.40"}
+    vu, nu, sh = bf.reconcile("receipt", note, ned)
+    assert vu == {"total": "CNY 230.40"}  # Notion wins -> adopt into vault
+    assert nu == {}
+    assert sh["total"] == "CNY 230.40"
+
+
+def test_reconcile_merchant_quote_artifact_vault_wins():
+    note = bf.VaultNote(
+        path=Path("/v/x.md"),
+        key=(),
+        shas=["s"],
+        frontmatter={"merchant": "76", "date": "2018-07-21", "total": "$95.00"},
+    )
+    ned = {"merchant": '"76"', "date": "2018-07-21", "total": "$95.00"}
+    vu, nu, sh = bf.reconcile("receipt", note, ned)
+    assert vu == {}  # vault wins (artifact)
+    assert nu == {
+        "Merchant": {"rich_text": [{"type": "text", "text": {"content": "76"}}]}
+    }
+    assert sh["merchant"] == "76"
+
+
+def test_reconcile_agree():
+    note = bf.VaultNote(
+        path=Path("/v/x.md"),
+        key=(),
+        shas=["s"],
+        frontmatter={"merchant": "Costco", "date": "2026-06-27", "total": "$103.75"},
+    )
+    ned = {"merchant": "Costco", "date": "2026-06-27", "total": "$103.75"}
+    vu, nu, sh = bf.reconcile("receipt", note, ned)
+    assert vu == {} and nu == {}
+    assert sh == {"merchant": "Costco", "date": "2026-06-27", "total": "$103.75"}
+
+
+def test_stem_receipt():
+    stem = bf._stem(
+        "receipt", {"merchant": "IKEA", "date": "2025-09-04", "total": "$341.69"}
+    )
+    assert stem == "2025-09-04 - IKEA - $341.69"
+
+
 def test_classify_buckets():
     notes = [
         _note(("a",), "match"),  # matched
