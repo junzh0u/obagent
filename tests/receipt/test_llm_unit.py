@@ -293,21 +293,29 @@ def test_migrate_implies_continue(mock_openai_cls, runner, vault):
 @pytest.mark.parametrize(
     "raw, expected",
     [
+        # Dollars collapse to "$"
         ("$5.00", "$5.00"),
         ("$5.00 USD", "$5.00"),
         ("USD 5.00", "$5.00"),
         ("USD$ 88.41", "$88.41"),
-        ("EUR 10.00", "€10.00"),
-        ("£29.99", "£29.99"),
-        ("GBP 29.99", "£29.99"),
         ("CAD$ 15.00", "$15.00"),
-        ("¥1200", "¥1200"),
-        ("JPY 1200", "¥1200"),
         ("$42.50 CAD", "$42.50"),
-        ("RMB 66.00", "¥66.00"),
-        ("¥66.00 RMB", "¥66.00"),
+        # Non-dollars normalize to ISO code (Notion style)
+        ("EUR 10.00", "EUR 10.00"),
+        ("€10.00", "EUR 10.00"),
+        ("£29.99", "GBP 29.99"),
+        ("GBP 29.99", "GBP 29.99"),
+        ("JPY 1200", "JPY 1200"),
+        ("CNY 163.50", "CNY 163.50"),
+        ("RMB 66.00", "CNY 66.00"),  # alias -> canonical
+        ("¥66.00 RMB", "CNY 66.00"),  # trailing code wins over symbol
+        # Bare ¥ stays ¥ (JPY vs CNY ambiguous from the symbol alone)
+        ("¥1200", "¥1200"),
+        # Unparseable -> unchanged
+        ("", ""),
+        ("free", "free"),
     ],
 )
 def test_clean_total(raw, expected):
-    """_clean_total strips currency codes/names, keeping symbol + number."""
+    """_clean_total normalizes totals to Notion style ($ dollars / ISO codes)."""
     assert _clean_total(raw) == expected
