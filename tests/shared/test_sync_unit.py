@@ -85,6 +85,30 @@ def test_write_back_receipt_adopt_total_renames(tmp_path):
     assert "![[_assets_/abc/src/original.pdf#height]]" in text  # embeds preserved
 
 
+def test_sync_command_invokes_run_sync(runner, monkeypatch):
+    called = {}
+
+    def fake_run_sync(client, vault, ds, *, dry_run, full):
+        called.update(dry_run=dry_run, full=full, ds=ds)
+        return {"unchanged": 3}
+
+    monkeypatch.setattr(sync, "run_sync", fake_run_sync)
+    monkeypatch.setenv("NOTION_TOKEN", "t")
+    result = runner.invoke(sync.sync_command, ["--dry-run"], obj={"vault": "/tmp"})
+    assert result.exit_code == 0, result.output
+    assert called["dry_run"] is True and called["full"] is False
+    assert "receipt" in called["ds"] and "document" in called["ds"]
+    assert "unchanged" in result.output
+
+
+def test_sync_command_requires_token(runner, monkeypatch):
+    monkeypatch.delenv("NOTION_TOKEN", raising=False)
+    monkeypatch.setattr(sync, "run_sync", lambda *a, **k: {})
+    result = runner.invoke(sync.sync_command, [], obj={"vault": "/tmp"})
+    assert result.exit_code != 0
+    assert "NOTION_TOKEN" in result.output
+
+
 def test_write_back_document_adopts_summary_and_tags(tmp_path):
     d = tmp_path / "Documents"
     d.mkdir()

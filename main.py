@@ -6,6 +6,7 @@ from commands.consume import consume_all
 from commands.document import document
 from commands.export import export_all
 from commands.merchant import merchant
+from commands.notion.sync import notion
 from commands.people import people
 from commands.receipt import receipt
 from commands.render import render_all
@@ -31,6 +32,7 @@ cli.add_command(document)
 cli.add_command(bank)
 cli.add_command(merchant)
 cli.add_command(people)
+cli.add_command(notion)
 cli.add_command(consume_all, "consume")
 cli.add_command(export_all, "export")
 cli.add_command(render_all, "render")

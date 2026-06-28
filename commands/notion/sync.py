@@ -15,10 +15,13 @@ runs per type that has a configured data source (bank statements are skipped).
 """
 
 import json
+import os
 import subprocess
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+
+import click
 
 from commands.document.pipeline import DocumentFields
 from commands.notion.backfill import (
@@ -264,3 +267,43 @@ def run_sync(
         save_shadow(vault, shadow)
         save_hints(vault, {"watermark": max_edited, "commit": _head_commit(vault)})
     return dict(stats)
+
+
+# -- CLI -------------------------------------------------------------------
+
+# type -> Notion data source id (override via OBAGENT_NOTION_<TYPE>_DS).
+_DEFAULT_DS = {
+    "receipt": "<receipts-data-source-id>",
+    "document": "<documents-data-source-id>",
+}
+
+
+def data_sources() -> dict[str, str]:
+    """Map type -> data source id, each overridable via an env var."""
+    return {
+        t: os.environ.get(f"OBAGENT_NOTION_{t.upper()}_DS", d)
+        for t, d in _DEFAULT_DS.items()
+    }
+
+
+@click.group()
+def notion():
+    """Sync the vault with Notion (Receipts + Documents)."""
+
+
+@notion.command("sync")
+@click.option("--dry-run", is_flag=True, help="Report changes without writing.")
+@click.option(
+    "--full", is_flag=True, help="Ignore the watermark; check every linked record."
+)
+@click.pass_context
+def sync_command(ctx, dry_run, full):
+    """Reconcile the vault and Notion two-way (3-way merge against the shadow)."""
+    client = NotionClient()
+    if not client.token:
+        raise click.UsageError("NOTION_TOKEN is not set.")
+    stats = run_sync(
+        client, Path(ctx.obj["vault"]), data_sources(), dry_run=dry_run, full=full
+    )
+    summary = ", ".join(f"{v} {k}" for k, v in stats.items())
+    click.secho(summary or "nothing to do", bold=True)
