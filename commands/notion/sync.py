@@ -1,0 +1,266 @@
+"""Two-way sync: reconcile vault notes and Notion rows after the initial link.
+
+A git-style 3-way merge against the **shadow** (the field values at last sync):
+
+    base = shadow[notion_id]; v = vault now; n = Notion now
+      v == n            -> agree
+      v == base, n != base -> Notion changed  -> adopt into vault
+      n == base, v != base -> vault changed   -> push to Notion
+      else (both moved)    -> conflict -> last-writer-wins by timestamp + log
+
+Correctness lives in the shadow comparison; the watermark (Notion
+``last_edited_time``) and the last-sync git commit only *narrow* candidates, so
+losing them just triggers a full self-healing pass. Linked by ``notion_id``;
+runs per type that has a configured data source (bank statements are skipped).
+"""
+
+import json
+import subprocess
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+from commands.document.pipeline import DocumentFields
+from commands.notion.backfill import (
+    FOLDER,
+    TITLE_FIELDS,
+    VaultNote,
+    gather_vault,
+    load_shadow,
+    save_shadow,
+)
+from commands.receipt.pipeline import ReceiptFields
+from lib import notion_fieldmap as fm
+from lib.notion_api import NotionClient
+
+HINTS_PATH = ".obagent/notion-sync-hints.json"
+FIELDS_CLASS = {"receipt": ReceiptFields, "document": DocumentFields}
+
+
+# -- 3-way merge (pure) ----------------------------------------------------
+
+
+def merge_fields(
+    type_name: str,
+    base: dict[str, str],
+    vault_front: dict[str, str],
+    notion_ed: dict[str, str],
+    conflict_winner: str,
+) -> tuple[dict[str, str], dict, dict[str, str], list[tuple[str, str, str]]]:
+    """Per-field 3-way merge. Returns (vault_updates, notion_property_updates,
+    new_shadow, conflicts). ``conflict_winner`` ('vault'|'notion') decides
+    fields that moved on both sides."""
+    vault_updates: dict[str, str] = {}
+    notion_updates: dict = {}
+    shadow: dict[str, str] = {}
+    conflicts: list[tuple[str, str, str]] = []
+    for f in fm.FIELD_MAPS.get(type_name, []):
+        k = f.vault_key
+        v, n = vault_front.get(k, ""), notion_ed.get(k, "")
+        nv, nn = f.normalize(v), f.normalize(n)
+        b = base.get(k)
+        nb = f.normalize(b) if b is not None else None
+        if nv == nn:
+            shadow[k] = v
+        elif nb is not None and nb == nv:  # vault unchanged -> Notion wins
+            vault_updates[k] = n
+            shadow[k] = n
+        elif nb is not None and nb == nn:  # Notion unchanged -> vault wins
+            notion_updates.update(f.to_notion(v))
+            shadow[k] = v
+        else:  # both moved (or no base) -> conflict
+            if conflict_winner == "notion":
+                vault_updates[k] = n
+                shadow[k] = n
+            else:
+                notion_updates.update(f.to_notion(v))
+                shadow[k] = v
+            conflicts.append((k, v, n))
+    return vault_updates, notion_updates, shadow, conflicts
+
+
+# -- vault write-back ------------------------------------------------------
+
+
+def write_back(note: VaultNote, field_updates: dict[str, str], type_name: str) -> Path:
+    """Apply adopted field values to a note (rebuild via the type's Fields so
+    lists/summary/title are formatted correctly), renaming if a title field moved.
+    Preserves consumed_at, notion_id, and the asset embeds."""
+    front = {**note.frontmatter, **field_updates}
+    cls = FIELDS_CLASS[type_name]
+    fields = cls({k: front.get(k, "") for k in cls.expected_keys()})
+    text = note.path.read_text()
+    embeds = "".join(ln + "\n" for ln in text.split("\n") if ln.startswith("![["))
+    content = (
+        fields.format_frontmatter(
+            consumed_at=front.get("consumed_at", ""),
+            notion_id=front.get("notion_id", ""),
+        )
+        + fields.format_body()
+        + embeds
+    )
+    note.path.write_text(content)
+    if field_updates.keys() & TITLE_FIELDS.get(type_name, set()):
+        new_path = note.path.with_name(fields.make_title() + ".md")
+        if new_path != note.path and not new_path.exists():
+            note.path.rename(new_path)
+            return new_path
+    return note.path
+
+
+# -- sync state + candidate gathering --------------------------------------
+
+
+def load_hints(vault: Path) -> dict[str, str]:
+    p = vault / HINTS_PATH
+    return json.loads(p.read_text()) if p.exists() else {}
+
+
+def save_hints(vault: Path, hints: dict[str, str]) -> None:
+    p = vault / HINTS_PATH
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(hints, indent=2, sort_keys=True))
+
+
+def vault_index(vault: Path) -> dict[str, tuple[str, VaultNote]]:
+    """Map notion_id -> (type_name, VaultNote) for every linked note."""
+    idx: dict[str, tuple[str, VaultNote]] = {}
+    for t, folder in FOLDER.items():
+        for n in gather_vault(vault / folder, t):
+            if n.notion_id:
+                idx[n.notion_id] = (t, n)
+    return idx
+
+
+def _git_changed_notion_ids(vault: Path, commit: str, idx: dict) -> set[str]:
+    """notion_ids of vault notes changed since ``commit`` (incl. working tree)."""
+    try:
+        root = subprocess.run(
+            ["git", "-C", str(vault), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        out = subprocess.run(
+            ["git", "-C", str(vault), "diff", "--name-only", commit, "--", "*.md"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    except subprocess.CalledProcessError:
+        return set(idx.keys())  # can't diff -> full pass
+    changed = {(Path(root) / line).resolve() for line in out.splitlines() if line}
+    return {nid for nid, (_, n) in idx.items() if n.path.resolve() in changed}
+
+
+def _mtime_iso(path: Path) -> str:
+    return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
+
+
+def _head_commit(vault: Path) -> str:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(vault), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        return ""
+
+
+# -- orchestration ---------------------------------------------------------
+
+
+def run_sync(
+    client: NotionClient,
+    vault: Path,
+    ds_by_type: dict[str, str],
+    *,
+    dry_run: bool = False,
+    full: bool = False,
+) -> dict[str, int]:
+    """One reconciliation pass. ``full`` ignores the watermark/commit hints and
+    checks every linked record (self-healing)."""
+    shadow = load_shadow(vault)
+    hints = load_hints(vault)
+    watermark = None if full else hints.get("watermark")
+    idx = vault_index(vault)
+    stats: defaultdict[str, int] = defaultdict(int)
+
+    # Notion-changed candidates (+ advance the watermark to Notion's clock).
+    notion_changed: dict[str, tuple[str, dict[str, str], str]] = {}
+    max_edited = watermark or ""
+    for t, ds in ds_by_type.items():
+        flt = (
+            {
+                "timestamp": "last_edited_time",
+                "last_edited_time": {"on_or_after": watermark},
+            }
+            if watermark
+            else None
+        )
+        for page in client.iter_pages(ds, filter=flt):
+            le = page.get("last_edited_time", "")
+            notion_changed[page["id"]] = (
+                t,
+                fm.read_editable(t, page["properties"]),
+                le,
+            )
+            max_edited = max(max_edited, le)
+
+    # vault-changed candidates (git diff since last sync; full pass if no commit)
+    if full or not hints.get("commit"):
+        vault_changed = set(idx)
+    else:
+        vault_changed = _git_changed_notion_ids(vault, hints["commit"], idx)
+
+    for nid in set(notion_changed) | vault_changed:
+        if nid not in idx:
+            stats["deleted_in_vault"] += 1  # row exists, note gone -> flag, don't touch
+            continue
+        t, note = idx[nid]
+        base = shadow.get(nid, {})
+        if nid in notion_changed:
+            _, ned, le = notion_changed[nid]
+        else:  # vault-only candidate: fetch current Notion state
+            page = client.api("GET", f"https://api.notion.com/v1/pages/{nid}")
+            if page.get("archived") or page.get("in_trash"):
+                stats["archived_in_notion"] += 1
+                continue
+            ned, le = (
+                fm.read_editable(t, page["properties"]),
+                page.get("last_edited_time", ""),
+            )
+        winner = "notion" if le >= _mtime_iso(note.path) else "vault"
+        vu, nu, sh, conflicts = merge_fields(t, base, note.frontmatter, ned, winner)
+        if not vu and not nu:
+            shadow[nid] = sh
+            stats["unchanged"] += 1
+            continue
+        for k, v, n in conflicts:
+            print(
+                f"  CONFLICT {note.path.name[:34]!r} {k}: vault={v!r} notion={n!r} "
+                f"-> {winner} wins",
+                flush=True,
+            )
+            stats["conflicts"] += 1
+        if dry_run:
+            if vu:
+                print(f"  -> vault {note.path.name[:34]!r}: {vu}", flush=True)
+            if nu:
+                print(f"  -> notion {note.path.name[:34]!r}: {list(nu)}", flush=True)
+            stats["would_change"] += 1
+            continue
+        if vu:
+            write_back(note, vu, t)
+            stats["vault_updated"] += 1
+        if nu:
+            client.update_page(nid, nu)
+            stats["notion_updated"] += 1
+        shadow[nid] = sh
+
+    if not dry_run:
+        save_shadow(vault, shadow)
+        save_hints(vault, {"watermark": max_edited, "commit": _head_commit(vault)})
+    return dict(stats)
