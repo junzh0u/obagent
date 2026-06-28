@@ -87,9 +87,30 @@ def _total_from_notion(props: dict[str, Any]) -> str:
     return read_plain_text(props.get("Non-USD Total", {}))
 
 
+_TOTAL_SYMBOLS = "$¥€£₩₹₽₫₱฿₺₴₸₦₵"
+
+
 def _norm_total(v: str) -> str:
-    """Compare totals ignoring thousands separators / spacing / case."""
-    return re.sub(r"[,\s]", "", v).upper()
+    """Canonical ``currency|amount`` for diffing.
+
+    Collapses decimal/sign/separator formatting (``$2140`` == ``$2140.00``,
+    ``-$73.11`` == ``$-73.11``) but keeps the currency distinct
+    (``¥230.40`` != ``CNY 230.40``), so legacy symbol-vs-ISO totals still
+    surface for adoption.
+    """
+    v = (v or "").strip()
+    num = re.sub(r"[^\d.\-]", "", v)
+    try:
+        amount = f"{float(num):.2f}" if re.search(r"\d", num) else ""
+    except ValueError:
+        amount = ""
+    m = re.match(r"[A-Z]{3}", v)
+    cur = (
+        {"RMB": "CNY"}.get(m.group(), m.group())
+        if m
+        else next((c for c in v if c in _TOTAL_SYMBOLS), "")
+    )
+    return f"{cur}|{amount}"
 
 
 # -- field spec ------------------------------------------------------------

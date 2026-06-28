@@ -92,6 +92,20 @@ def _row(key, pid):
     return bf.NotionRow(page_id=pid, key=key, sha_text="")
 
 
+def test_gather_vault_reads_summary_from_body(tmp_path):
+    """Document summary lives in the body callout, not frontmatter."""
+    d = tmp_path / "Documents"
+    d.mkdir()
+    (d / "2027-01-31 - Card.md").write_text(
+        "---\ntitle: Card\ndate: 2027-01-31\ntags:\npeople:\nconsumed_at: x\n---\n"
+        "> [!summary]\n> A membership card.\n\n"
+        "![[_assets_/abc/src/original.pdf]]\n"
+    )
+    notes = bf.gather_vault(d, "document")
+    assert len(notes) == 1
+    assert notes[0].frontmatter["summary"] == "A membership card."
+
+
 def test_classify_buckets():
     notes = [
         _note(("a",), "match"),  # matched

@@ -86,10 +86,15 @@ def test_receipt_read_editable_non_usd():
     assert fm.read_editable("receipt", page_props)["total"] == "JPY 3,775"
 
 
-def test_total_normalize_ignores_separators():
+def test_total_normalize():
     norm = next(f.normalize for f in fm.RECEIPT_FIELDS if f.vault_key == "total")
-    assert norm("JPY 3,775") == norm("JPY 3775") == "JPY3775"
-    assert norm("$103.75") == "$103.75"
+    # decimal / sign / separator formatting collapses
+    assert norm("$2140") == norm("$2140.00") == "$|2140.00"
+    assert norm("-$73.11") == norm("$-73.11") == "$|-73.11"
+    assert norm("JPY 3,775") == norm("JPY 3775") == "JPY|3775.00"
+    assert norm("RMB 66.00") == norm("CNY 66.00")  # alias -> canonical
+    # currency stays distinct: legacy ¥ vs ISO surfaces as a real diff to adopt
+    assert norm("¥230.40") != norm("CNY 230.40")
 
 
 # -- document fields -------------------------------------------------------

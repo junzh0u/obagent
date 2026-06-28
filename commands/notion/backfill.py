@@ -19,7 +19,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from commands.render import _parse_frontmatter
+from commands.render import _SUMMARY_RE, _parse_frontmatter
 from lib import notion_fieldmap as fm
 from lib.notion_api import NotionClient
 from lib.utils import SHA_RE
@@ -89,6 +89,11 @@ def gather_vault(type_dir: Path, type_name: str) -> list[VaultNote]:
     for md in sorted(type_dir.glob("*.md")):
         text = md.read_text()
         front = _parse_frontmatter(text) or {}
+        # Documents keep `summary` in a body callout, not frontmatter (mirror
+        # render.index_existing_notes so the value round-trips for diffing).
+        m = _SUMMARY_RE.search(text)
+        if m:
+            front["summary"] = m.group(1)
         notes.append(
             VaultNote(
                 path=md,
