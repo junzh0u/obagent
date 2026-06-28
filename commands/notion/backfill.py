@@ -305,6 +305,9 @@ def run_backfill(
         shadow[page_id] = sh
         stats["linked"] += 1
         done += 1
+        if stats["linked"] % 200 == 0:  # periodic checkpoint for the long run
+            save_shadow(vault, shadow)
+            print(f"  linked {stats['linked']}…", flush=True)
     if not dry_run:
         save_shadow(vault, shadow)
     return dict(stats)
