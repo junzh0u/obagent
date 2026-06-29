@@ -19,7 +19,6 @@ services:
       OBAGENT_EXPORT: /drive
       OBAGENT_MIN_AGE: "60"                  # seconds a scan must settle before consuming
       OBAGENT_INTERVAL: "300"               # seconds between passes
-      # OBAGENT_GIT_REMOTES: "github gitlab" # default: all configured remotes
     volumes:
       - /volume1/paperless/vault:/vault      # obsidian-vaults repo root (.git + Paperless/)
       - /volume1/paperless/inbox:/inbox      # scanner drop folder

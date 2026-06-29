@@ -10,7 +10,6 @@
 #   NOTION_TOKEN, MISTRAL_API_KEY, OPENAI_API_KEY
 # Optional:
 #   OBAGENT_MIN_AGE       seconds a scan must be untouched before consuming (default 60)
-#   OBAGENT_GIT_REMOTES   space-separated git remotes to push (default: all)
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 log() { echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $*"; }

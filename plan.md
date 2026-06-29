@@ -69,8 +69,8 @@ All code is done; everything below is NAS/ops in your environment.
 3. **Git push creds from the container** (the one fiddly bit): generate an SSH deploy key,
    add the public key to GitHub **and** GitLab (write access), mount the private key
    read-only at `/root/.ssh`, and make the vault's remotes use SSH URLs (+ `known_hosts`).
-4. **Drop the old NAS git remote** from the vault, or set `OBAGENT_GIT_REMOTES="github gitlab"`
-   so publish only pushes off-NAS.
+4. **Drop the old NAS git remote** from the vault so publish only pushes off-NAS
+   (`publish.sh` pushes to every configured remote).
 5. **Create `.env`** on the NAS from `.env.example` — `NOTION_TOKEN`, `MISTRAL_API_KEY`,
    `OPENAI_API_KEY`, and both `OBAGENT_NOTION_*_DS`. Adjust paths/intervals in
    `docker-compose.yml` to match your volume mounts.

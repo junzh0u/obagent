@@ -141,8 +141,13 @@ NAS needs no Python — the image bundles Python 3.14 + uv + deps.
 - `Dockerfile` — the self-contained image (+ git/ssh for the push).
 - `scripts/run.sh` — one pass: `consume --min-age` → `obagent notion sync` →
   `publish.sh`, with per-step error isolation and a `flock` no-overlap guard.
-- `scripts/publish.sh` — `obagent export` (→ Drive via Cloud Sync) + `git push` to
-  the vault's remotes.
+- `scripts/publish.sh` — `obagent export` (→ Drive via Cloud Sync) + a **guarded
+  fast-forward** (`git fetch` then `merge --ff-only`; integrates remote commits so
+  the push stays a clean fast-forward, and aborts cleanly on divergence — never
+  rebases/merges) + a plain machine `git commit` of the vault changes (the NAS has
+  no Claude/LLM committer; skipped when nothing changed) + `git push` to the vault's
+  remotes. Author falls back to `OBAGENT_GIT_NAME`/`OBAGENT_GIT_EMAIL` only if the
+  repo has no identity.
 - `scripts/loop.sh` — runs `run.sh` every `$OBAGENT_INTERVAL` seconds (the compose
   service command; SIGTERM-clean).
 - `docker-compose.yml` — the Container Manager Project: build + bind-mounts (inbox,
