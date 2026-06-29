@@ -117,12 +117,16 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
 - **`obagent notion sync`** — one reconciliation pass. A git-style **3-way merge**
   against the **shadow** (`{vault}/.obagent/notion-shadow.json` = field values at
   last sync): Notion-changed adopts into the vault, vault-changed pushes to Notion,
-  both-moved is a conflict → last-writer-wins by timestamp + log. Candidates are
-  narrowed by the Notion `last_edited_time` watermark + `git diff` since the
-  last-sync commit (`{vault}/.obagent/notion-sync-hints.json`); correctness rests on
-  the shadow, so losing the hints just triggers a self-healing `--full` pass.
+  both-moved is a conflict → last-writer-wins by timestamp + log. Notes with no
+  `notion_id` yet (new since the last link) get a **row created** — source file(s)
+  uploaded, fields + `Sha` + `Consumed At` set, the id written back — guarded by the
+  `Sha` property (a row already bearing the sha is adopted, not duplicated). Merge
+  candidates are narrowed by the Notion `last_edited_time` watermark + `git diff`
+  since the last-sync commit (`{vault}/.obagent/notion-sync-hints.json`); the create
+  pass instead scans all notes for a missing `notion_id`. Correctness rests on the
+  shadow, so losing the hints just triggers a self-healing `--full` pass.
   `--dry-run` reports without writing. Token from `NOTION_TOKEN`; data-source ids
-  from `OBAGENT_NOTION_<TYPE>_DS` (defaulted in `commands/notion/sync.py`).
+  from `OBAGENT_NOTION_<TYPE>_DS` (env-only, no defaults — an unset type is skipped).
 - **Backfill** (`commands/notion/backfill.py`): the one-time initial link (match
   existing rows by a normalized key, write `notion_id`, init the shadow). Run as a
   one-off — intentionally **not** wired as a CLI command.

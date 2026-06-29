@@ -1,8 +1,56 @@
+from collections import defaultdict
+
 from commands.notion import backfill as bf
 from commands.notion import sync
+from lib.notion_api import NotionClient
 
 R = "receipt"
 USD12 = {"Total": {"number": 12.0}, "Non-USD Total": {"rich_text": []}}
+SHA = "a" * 64
+
+
+class FakeClient(NotionClient):
+    """Records create/upload/query calls for create_unlinked tests."""
+
+    def __init__(self, existing: str | None = None):
+        super().__init__(token="test")
+        self.existing = existing  # page id query should return, or None
+        self.created: list[tuple[str, dict]] = []
+        self.uploaded: list[tuple[str, str]] = []
+
+    def query(
+        self,
+        data_source_id,
+        *,
+        filter=None,
+        sorts=None,
+        start_cursor=None,
+        page_size=100,
+    ):
+        return {"results": [{"id": self.existing}] if self.existing else []}
+
+    def upload_file(self, path, display_name):
+        self.uploaded.append((str(path), display_name))
+        return f"upload-{len(self.uploaded)}"
+
+    def create_page(self, data_source_id, properties, *, children=None):
+        self.created.append((data_source_id, properties))
+        return {"id": "new-page-id", "properties": properties}
+
+
+def _make_receipt(receipts_dir, *, notion_id=""):
+    """A receipt note + its source asset, returning the note path."""
+    src = receipts_dir / "_assets_" / SHA / "src"
+    src.mkdir(parents=True)
+    (src / "original.pdf").write_bytes(b"%PDF-1.4 fake")
+    nid = f"notion_id: {notion_id}\n" if notion_id else ""
+    p = receipts_dir / "2026-06-27 - San Jose Library - $0.00.md"
+    p.write_text(
+        "---\nmerchant: San Jose Library\ndate: 2026-06-27\ntotal: $0.00\n"
+        f"consumed_at: 2026-06-29T06:33:10+00:00\n{nid}---\n"
+        f"![[_assets_/{SHA}/src/original.pdf]]\n"
+    )
+    return p
 
 
 def _base():
@@ -138,3 +186,66 @@ def test_write_back_document_adopts_summary_and_tags(tmp_path):
     assert "- new" in text and "- zoo" in text
     assert "notion_id: pg-2" in text
     assert "![[_assets_/d/src/original.pdf]]" in text
+
+
+# -- create_unlinked (push new notes to Notion) ----------------------------
+
+
+def test_create_unlinked_creates_row_and_links(tmp_path):
+    (tmp_path / "Receipts").mkdir()
+    p = _make_receipt(tmp_path / "Receipts")
+    client = FakeClient(existing=None)
+    shadow: dict[str, dict[str, str]] = {}
+    stats: defaultdict[str, int] = defaultdict(int)
+    sync.create_unlinked(client, tmp_path, {R: "rds"}, shadow, stats, dry_run=False)
+
+    assert stats["created"] == 1
+    ds_id, props = client.created[0]
+    assert ds_id == "rds"
+    # editable fields + machine props + the file are all on the new row
+    assert {"Merchant", "Date", "Total", "Sha", "Consumed At", "File"} <= props.keys()
+    assert client.uploaded[0][1] == p.stem + ".pdf"  # source uploaded, nice name
+    assert "notion_id: new-page-id" in p.read_text()  # id written back
+    assert shadow["new-page-id"]["merchant"] == "San Jose Library"
+    assert shadow["new-page-id"]["total"] == "$0.00"
+
+
+def test_create_unlinked_adopts_existing_by_sha(tmp_path):
+    (tmp_path / "Receipts").mkdir()
+    p = _make_receipt(tmp_path / "Receipts")
+    client = FakeClient(existing="existing-id")  # a row already bears this sha
+    shadow: dict[str, dict[str, str]] = {}
+    stats: defaultdict[str, int] = defaultdict(int)
+    sync.create_unlinked(client, tmp_path, {R: "rds"}, shadow, stats, dry_run=False)
+
+    assert stats["adopted"] == 1
+    assert client.created == []  # no duplicate row
+    assert client.uploaded == []  # no re-upload on adopt
+    assert "notion_id: existing-id" in p.read_text()
+    assert shadow["existing-id"]["merchant"] == "San Jose Library"
+
+
+def test_create_unlinked_dry_run_writes_nothing(tmp_path):
+    (tmp_path / "Receipts").mkdir()
+    p = _make_receipt(tmp_path / "Receipts")
+    client = FakeClient(existing=None)
+    shadow: dict[str, dict[str, str]] = {}
+    stats: defaultdict[str, int] = defaultdict(int)
+    sync.create_unlinked(client, tmp_path, {R: "rds"}, shadow, stats, dry_run=True)
+
+    assert stats["would_create"] == 1
+    assert client.created == [] and client.uploaded == []
+    assert "notion_id" not in p.read_text()
+    assert shadow == {}
+
+
+def test_create_unlinked_skips_already_linked(tmp_path):
+    (tmp_path / "Receipts").mkdir()
+    _make_receipt(tmp_path / "Receipts", notion_id="pg-existing")
+    client = FakeClient(existing=None)
+    shadow: dict[str, dict[str, str]] = {}
+    stats: defaultdict[str, int] = defaultdict(int)
+    sync.create_unlinked(client, tmp_path, {R: "rds"}, shadow, stats, dry_run=False)
+
+    assert client.created == [] and client.uploaded == []
+    assert stats.get("created", 0) == 0 and shadow == {}

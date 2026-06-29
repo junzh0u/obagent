@@ -29,12 +29,15 @@ from commands.notion.backfill import (
     TITLE_FIELDS,
     VaultNote,
     gather_vault,
+    inject_notion_id,
     load_shadow,
     save_shadow,
 )
 from commands.receipt.pipeline import ReceiptFields
 from lib import notion_fieldmap as fm
-from lib.notion_api import NotionClient
+from lib.constants import ASSETS_DIR
+from lib.notion_api import FILE_NAME_LIMIT, NotionClient, truncate_u16
+from lib.utils import source_file
 
 HINTS_PATH = ".obagent/notion-sync-hints.json"
 FIELDS_CLASS = {"receipt": ReceiptFields, "document": DocumentFields}
@@ -172,6 +175,92 @@ def _head_commit(vault: Path) -> str:
         return ""
 
 
+# -- new-note creation (push unlinked notes to Notion) ---------------------
+
+
+def _existing_row_by_sha(
+    client: NotionClient, ds_id: str, shas: list[str]
+) -> str | None:
+    """Page id of a row already carrying this note's sha, else None.
+
+    The create-crash / dedup guard: a sha is effectively unique, so a row whose
+    ``Sha`` contains the note's first sha is the same note — covers a crash
+    between create and the notion_id write-back, and plain re-runs. Skipped when
+    the note has no sha (nothing to match on).
+    """
+    if not shas:
+        return None
+    r = client.query(
+        ds_id,
+        filter={"property": "Sha", "rich_text": {"contains": shas[0]}},
+        page_size=1,
+    )
+    results = r.get("results", [])
+    return results[0]["id"] if results else None
+
+
+def _upload_sources(
+    client: NotionClient, vault: Path, type_name: str, note: VaultNote
+) -> list[tuple[str, str]]:
+    """Upload the note's source file(s); return (upload_id, name) pairs for the
+    ``File`` property. The first file uses the note stem, extras get a -sha12
+    suffix (mirrors export). A missing source is warned and skipped, not fatal."""
+    base = vault / FOLDER[type_name] / ASSETS_DIR
+    pairs: list[tuple[str, str]] = []
+    for i, sha in enumerate(note.shas):
+        src = source_file(base / sha)
+        if src is None:
+            print(
+                f"  warning: no source for {sha[:12]} ({note.path.name!r})", flush=True
+            )
+            continue
+        stem = note.path.stem if i == 0 else f"{note.path.stem}-{sha[:12]}"
+        name = truncate_u16(stem, FILE_NAME_LIMIT - len(src.suffix)) + src.suffix
+        pairs.append((client.upload_file(src, name), name))
+    return pairs
+
+
+def create_unlinked(
+    client: NotionClient,
+    vault: Path,
+    ds_by_type: dict[str, str],
+    shadow: dict[str, dict[str, str]],
+    stats: defaultdict[str, int],
+    *,
+    dry_run: bool,
+) -> None:
+    """Create a Notion row for every note with no notion_id (new since the last
+    link): upload its source file(s), set editable fields + Sha + Consumed At,
+    write the new id back into the note, and seed the shadow. Adopts a row that
+    already bears the note's sha instead of creating a duplicate."""
+    for t, ds in ds_by_type.items():
+        for note in gather_vault(vault / FOLDER[t], t):
+            if note.notion_id:
+                continue
+            existing = _existing_row_by_sha(client, ds, note.shas)
+            if dry_run:
+                action = "adopt" if existing else "create"
+                stats[f"would_{action}"] += 1
+                print(f"  -> {action} {note.path.name[:40]!r}", flush=True)
+                continue
+            if existing:
+                page_id, outcome = existing, "adopted"
+            else:
+                props = {
+                    **fm.editable_properties(t, note.frontmatter),
+                    **fm.sha_property(note.shas),
+                    **fm.consumed_at_property(note.frontmatter.get("consumed_at", "")),
+                    **fm.file_property(_upload_sources(client, vault, t, note)),
+                }
+                page_id, outcome = client.create_page(ds, props)["id"], "created"
+            note.path.write_text(inject_notion_id(note.path.read_text(), page_id))
+            shadow[page_id] = {
+                f.vault_key: note.frontmatter.get(f.vault_key, "")
+                for f in fm.FIELD_MAPS.get(t, [])
+            }
+            stats[outcome] += 1
+
+
 # -- orchestration ---------------------------------------------------------
 
 
@@ -262,6 +351,9 @@ def run_sync(
             client.update_page(nid, nu)
             stats["notion_updated"] += 1
         shadow[nid] = sh
+
+    # Push notes that have no Notion row yet (new since the last link).
+    create_unlinked(client, vault, ds_by_type, shadow, stats, dry_run=dry_run)
 
     if not dry_run:
         save_shadow(vault, shadow)
