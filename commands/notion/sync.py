@@ -17,6 +17,7 @@ runs per type that has a configured data source (bank statements are skipped).
 import json
 import os
 import subprocess
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -163,6 +164,10 @@ def _mtime_iso(path: Path) -> str:
     return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
 
 
+def _dt(t0: float) -> str:
+    return f"{time.monotonic() - t0:.1f}s"
+
+
 def _head_commit(vault: Path) -> str:
     try:
         return subprocess.run(
@@ -241,7 +246,7 @@ def create_unlinked(
             if dry_run:
                 action = "adopt" if existing else "create"
                 stats[f"would_{action}"] += 1
-                print(f"  -> {action} {note.path.name[:40]!r}", flush=True)
+                print(f"  -> {action} {note.path.name!r}", flush=True)
                 continue
             if existing:
                 page_id, outcome = existing, "adopted"
@@ -274,13 +279,24 @@ def run_sync(
 ) -> dict[str, int]:
     """One reconciliation pass. ``full`` ignores the watermark/commit hints and
     checks every linked record (self-healing)."""
+    t_start = time.monotonic()
     shadow = load_shadow(vault)
     hints = load_hints(vault)
     watermark = None if full else hints.get("watermark")
+    head = _head_commit(vault)
+    if not head:
+        print(
+            "  note: no git repo visible at the vault — vault-side narrowing is "
+            "disabled, so every run is a full pass. Mount the dir containing .git.",
+            flush=True,
+        )
+    t0 = time.monotonic()
     idx = vault_index(vault)
+    print(f"  vault scan: {len(idx)} linked notes [{_dt(t0)}]", flush=True)
     stats: defaultdict[str, int] = defaultdict(int)
 
     # Notion-changed candidates (+ advance the watermark to Notion's clock).
+    t0 = time.monotonic()
     notion_changed: dict[str, tuple[str, dict[str, str], str]] = {}
     max_edited = watermark or ""
     for t, ds in ds_by_type.items():
@@ -300,14 +316,28 @@ def run_sync(
                 le,
             )
             max_edited = max(max_edited, le)
+    scope = f"since {watermark}" if watermark else "FULL scan (no watermark)"
+    print(
+        f"  notion query [{scope}]: {len(notion_changed)} rows [{_dt(t0)}]", flush=True
+    )
 
     # vault-changed candidates (git diff since last sync; full pass if no commit)
     if full or not hints.get("commit"):
         vault_changed = set(idx)
+        vsrc = "--full" if full else "FULL (no commit hint)"
     else:
         vault_changed = _git_changed_notion_ids(vault, hints["commit"], idx)
+        vsrc = "git-diff"
+    candidates = set(notion_changed) | vault_changed
+    print(
+        f"  candidates: {len(candidates)} (notion {len(notion_changed)}, "
+        f"vault {len(vault_changed)} [{vsrc}])",
+        flush=True,
+    )
 
-    for nid in set(notion_changed) | vault_changed:
+    t0 = time.monotonic()
+    fetched = 0
+    for nid in candidates:
         if nid not in idx:
             stats["deleted_in_vault"] += 1  # row exists, note gone -> flag, don't touch
             continue
@@ -316,6 +346,7 @@ def run_sync(
         if nid in notion_changed:
             _, ned, le = notion_changed[nid]
         else:  # vault-only candidate: fetch current Notion state
+            fetched += 1
             page = client.api("GET", f"https://api.notion.com/v1/pages/{nid}")
             if page.get("archived") or page.get("in_trash"):
                 stats["archived_in_notion"] += 1
@@ -351,13 +382,21 @@ def run_sync(
             client.update_page(nid, nu)
             stats["notion_updated"] += 1
         shadow[nid] = sh
+    print(
+        f"  reconcile: {len(candidates)} candidates, {fetched} per-note fetches "
+        f"[{_dt(t0)}]",
+        flush=True,
+    )
 
     # Push notes that have no Notion row yet (new since the last link).
+    t0 = time.monotonic()
     create_unlinked(client, vault, ds_by_type, shadow, stats, dry_run=dry_run)
+    print(f"  create pass [{_dt(t0)}]", flush=True)
 
     if not dry_run:
         save_shadow(vault, shadow)
-        save_hints(vault, {"watermark": max_edited, "commit": _head_commit(vault)})
+        save_hints(vault, {"watermark": max_edited, "commit": head})
+    print(f"  total [{_dt(t_start)}]", flush=True)
     return dict(stats)
 
 
