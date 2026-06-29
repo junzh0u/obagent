@@ -38,12 +38,16 @@ git -C "$VAULT" add -A .
 if ! git -C "$VAULT" diff --cached --quiet; then
     added=$(git -C "$VAULT" diff --cached --diff-filter=A --name-only | wc -l | tr -d ' ')
     edited=$(git -C "$VAULT" diff --cached --diff-filter=M --name-only | wc -l | tr -d ' ')
-    git -C "$VAULT" commit -q -m "vault sync: +${added} ~${edited} $(date -u +%Y-%m-%dT%H:%MZ)" \
-        || { echo "publish: commit failed" >&2; exit 1; }
+    if git -C "$VAULT" commit -q -m "vault sync: +${added} ~${edited} $(date -u +%Y-%m-%dT%H:%MZ)"; then
+        echo "committed $(git -C "$VAULT" log -1 --format='%h %s')"
+    else
+        echo "publish: commit failed" >&2; exit 1
+    fi
 fi
 
+# --quiet: success is silent (no transfer spam); errors still surface on stderr.
 rc=0
 for r in $(git -C "$VAULT" remote); do
-    git -C "$VAULT" push "$r" || { echo "publish: push '$r' failed" >&2; rc=1; }
+    git -C "$VAULT" push --quiet "$r" || { echo "publish: push '$r' failed" >&2; rc=1; }
 done
 exit "$rc"
