@@ -17,6 +17,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git openssh-client ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Trust the bind-mounted vault repo. The container runs as root, but the mounted
+# vault files are owned by the NAS user — without this, git's "dubious ownership"
+# guard blocks sync's git-diff narrowing, the machine commit, and the push.
+RUN git config --system --add safe.directory '*'
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 WORKDIR /app

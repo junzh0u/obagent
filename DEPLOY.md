@@ -117,8 +117,12 @@ sudo docker compose up -d --build    # or Container Manager → Project → Buil
 ## Troubleshooting
 - **Push fails / hangs** → key not mode `600`, missing `known_hosts`, vault remote on
   `https://` instead of `git@`, or the deploy key lacks write access.
-- **`notion sync` does a full pass every run** → the container can't see `.git`; `/vault`
-  must be the repo **root**, not the `Paperless` subdir.
+- **`notion sync` does a full pass every run** ("no git repo visible") → the container
+  can't run git on the vault. Either `/vault` isn't the repo **root** (it must be, not the
+  `Paperless` subdir), or git's **dubious-ownership** guard is tripping because the mounted
+  files are owned by the NAS user while the container runs as root. The image trusts the
+  mount via `git config --system --add safe.directory '*'` (rebuild if you're on an older
+  image). The same guard would also block the machine commit + push.
 - **Nothing consumed** → check `/inbox` has the per-type subdirs and files are older than
   `OBAGENT_MIN_AGE`.
 - **Commit identity error** → set `user.name`/`user.email` in the vault clone (step 2) or
