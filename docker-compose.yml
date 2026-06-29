@@ -1,0 +1,27 @@
+# Synology Container Manager "Project" (docker compose).
+# Long-running monitor: builds the image and loops scripts/run.sh on an interval.
+# Secrets go in a sibling .env (gitignored) — see .env.example.
+#
+#   docker compose up -d --build        # start the looping service
+#   docker compose logs -f              # watch
+#   docker compose run --rm obagent /app/scripts/run.sh   # one-off pass instead
+services:
+  obagent:
+    build: .
+    image: obagent
+    container_name: paperless-sync
+    restart: always
+    command: ["/app/scripts/loop.sh"]
+    env_file: .env                          # NOTION_TOKEN, MISTRAL_API_KEY, OPENAI_API_KEY
+    environment:
+      OBAGENT_VAULT: /vault/Paperless       # repo is mounted at /vault (so .git is present)
+      OBAGENT_CONSUME: /inbox
+      OBAGENT_EXPORT: /drive
+      OBAGENT_MIN_AGE: "60"                  # seconds a scan must settle before consuming
+      OBAGENT_INTERVAL: "300"               # seconds between passes
+      # OBAGENT_GIT_REMOTES: "github gitlab" # default: all configured remotes
+    volumes:
+      - /volume1/paperless/vault:/vault      # obsidian-vaults repo root (.git + Paperless/)
+      - /volume1/paperless/inbox:/inbox      # scanner drop folder
+      - /volume1/paperless/export:/drive     # Cloud Sync → Google Drive
+      - /volume1/paperless/ssh:/root/.ssh:ro # deploy key for `git push`
