@@ -8,7 +8,7 @@ INTERVAL="${OBAGENT_INTERVAL:-300}"
 trap 'echo "[loop] stopping"; exit 0' TERM INT
 echo "[loop] running every ${INTERVAL}s"
 while true; do
-    "$HERE/run.sh" || echo "[loop] pass failed (continuing)"
+    sh "$HERE/run.sh" || echo "[loop] pass failed (continuing)"
     sleep "$INTERVAL" &
     wait "$!"  # backgrounded sleep so SIGTERM stops us promptly
 done

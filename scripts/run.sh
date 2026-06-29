@@ -64,7 +64,7 @@ pass_start=$(date +%s)
 printf '\n%s──────── %s ────────%s\n' "$C_B" "$(ts)" "$C_0"
 step "consume (min-age ${MIN_AGE}s)" obagent --vault "$VAULT" consume --min-age "$MIN_AGE"
 step "notion sync" obagent --vault "$VAULT" notion sync
-step "publish" "$HERE/publish.sh"
+step "publish" sh "$HERE/publish.sh"
 
 el=$(( $(date +%s) - pass_start ))
 if [ -n "$FAILED" ]; then

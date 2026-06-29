@@ -39,4 +39,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Default: one pass, then exit (ideal for Task Scheduler `docker run --rm`).
 # For a self-contained loop instead, override CMD:
 #   ["sh","-c","while true; do /app/scripts/run.sh; sleep 60; done"]
-CMD ["/app/scripts/run.sh"]
+CMD ["sh", "/app/scripts/run.sh"]

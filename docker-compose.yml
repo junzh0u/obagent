@@ -11,7 +11,7 @@ services:
     image: obagent
     container_name: obagent
     restart: always
-    command: ["/app/scripts/loop.sh"]
+    command: ["sh", "/app/scripts/loop.sh"]   # invoke via sh — no reliance on the +x bit surviving COPY
     env_file: .env                          # NOTION_TOKEN, MISTRAL_API_KEY, OPENAI_API_KEY
     environment:
       OBAGENT_VAULT: /vault/Paperless       # repo is mounted at /vault (so .git is present)
