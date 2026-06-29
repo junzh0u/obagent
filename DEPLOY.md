@@ -7,8 +7,8 @@ host folders:
 
 | Container path | Host path | What it is |
 |---|---|---|
-| `/vault` | `/volume1/paperless/vault` | the **obsidian-vaults** git repo root (`.git` + `Paperless/`) |
-| `/inbox` | `/volume1/paperless/inbox` | scanner drop (per-type subdirs) |
+| `/vault` | `/volume1/paperless/obsidian-vaults` | the **obsidian-vaults** git repo root (`.git` + `Paperless/`) |
+| `/consume` | `/volume1/paperless/consume` | scanner drop (per-type subdirs) |
 | `/drive` | `/volume1/gdrive/paperless` | a Cloud Sync folder → Google Drive |
 | `/root/.ssh` | `/volume1/paperless/ssh` | the SSH deploy key for `git push` (read-only) |
 
@@ -35,8 +35,8 @@ cd /volume1/paperless/obagent && git checkout feat/notion-sync   # or master onc
 
 ## 2. Clone the vault repo on the NAS
 ```sh
-git clone git@github.com:junzh0u/obsidian-vaults.git /volume1/paperless/vault
-cd /volume1/paperless/vault
+git clone git@github.com:junzh0u/obsidian-vaults.git /volume1/paperless/obsidian-vaults
+cd /volume1/paperless/obsidian-vaults
 # origin fans out to both remotes (SSH URLs, so the deploy key authenticates):
 git remote set-url --add --push origin git@github.com:junzh0u/obsidian-vaults.git
 git remote set-url --add --push origin git@gitlab.com:junzhou/obsidian-vaults.git
@@ -46,8 +46,8 @@ Confirm it's on `main` tracking `origin/main`.
 
 ## 3. Create the directory layout
 ```sh
-mkdir -p /volume1/paperless/inbox/Documents /volume1/paperless/inbox/Receipts \
-         "/volume1/paperless/inbox/Bank Statements"
+mkdir -p /volume1/paperless/consume/Documents /volume1/paperless/consume/Receipts \
+         "/volume1/paperless/consume/Bank Statements"
 mkdir -p /volume1/gdrive/paperless /volume1/paperless/ssh
 ```
 
@@ -101,10 +101,10 @@ sudo docker compose logs -f          # or Container Manager → Project → Logs
 ```
 Look for the framed output: `✓ consume`, the sync timing lines, `✓ publish` with a
 `committed …` line and an error-free push. Then drop a test PDF in
-`/volume1/paperless/inbox/Documents`, wait `min-age` + `interval`, and watch it flow.
+`/volume1/paperless/consume/Documents`, wait `min-age` + `interval`, and watch it flow.
 
 ## 10. Point the scanner
-Set the scanner's scan-to-folder (or SMB share) to `/volume1/paperless/inbox/Documents`
+Set the scanner's scan-to-folder (or SMB share) to `/volume1/paperless/consume/Documents`
 (or the matching type). The `--min-age 60` gate protects against grabbing a file
 mid-upload.
 
@@ -123,7 +123,7 @@ sudo docker compose up -d --build    # or Container Manager → Project → Buil
   files are owned by the NAS user while the container runs as root. The image trusts the
   mount via `git config --system --add safe.directory '*'` (rebuild if you're on an older
   image). The same guard would also block the machine commit + push.
-- **Nothing consumed** → check `/inbox` has the per-type subdirs and files are older than
+- **Nothing consumed** → check `/consume` has the per-type subdirs and files are older than
   `OBAGENT_MIN_AGE`.
 - **Commit identity error** → set `user.name`/`user.email` in the vault clone (step 2) or
   `OBAGENT_GIT_NAME`/`OBAGENT_GIT_EMAIL` in `.env`.
