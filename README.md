@@ -160,6 +160,43 @@ The top-level `obagent consume` also accepts `--prehook CMD` (env var: `OBAGENT_
 OBAGENT_CONSUME_PREHOOK='rclone copy gdrive:scans $OBAGENT_CONSUME' obagent consume
 ```
 
+## Notion sync
+
+Keep the vault and a Notion workspace (Receipts + Documents) reconciled **two-way** —
+edit in either and changes flow both directions. The vault stays the source of truth;
+Notion is an editable mobile view.
+
+```bash
+export NOTION_TOKEN=ntn_...
+obagent notion sync --dry-run   # preview
+obagent notion sync             # reconcile vault <-> Notion
+```
+
+Each note is linked by a `notion_id` in its frontmatter. Sync does a 3-way merge
+against a *shadow* (the values at last sync): a change on either side propagates; a
+genuine both-sides conflict is resolved last-writer-wins and logged. `--full` ignores
+the incremental hints and re-checks every linked record.
+
+The initial one-time link (matching existing Notion rows to vault notes) lives in
+`commands/notion/backfill.py` and is run as a one-off, not a CLI command.
+
+## Deployment
+
+Runs on a Synology NAS via **Container Manager (docker compose)** — the image bundles
+Python, so the NAS needs none.
+
+```bash
+cp .env.example .env             # add NOTION_TOKEN, MISTRAL_API_KEY, OPENAI_API_KEY
+docker compose up -d --build     # looping monitor: consume → notion sync → publish
+docker compose logs -f
+```
+
+`scripts/run.sh` is one pass (`consume --min-age` → `notion sync` → `publish.sh`);
+`scripts/loop.sh` repeats it every `$OBAGENT_INTERVAL`s (the compose service command).
+Or schedule one-off passes with Synology Task Scheduler:
+`docker run --rm --name paperless-sync … obagent` (`--name` prevents overlap). Adjust
+bind-mounts and env in `docker-compose.yml`.
+
 ## Development
 
 ```bash

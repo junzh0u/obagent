@@ -16,10 +16,14 @@
   - `lib/name_store.py` — shared JSON store helpers for aliases and pinned names
   - `lib/constants.py` — shared constants (OCR_MODEL, LLM_MODEL, ASSETS_DIR)
   - `lib/utils.py` — shared utilities (iter_entries, newest_file, source_file, `SHA_RE`)
+  - `lib/notion_api.py` — Notion HTTP client (stdlib urllib): throttle, retry (429 / Cloudflare-WAF / 5xx / timeout), file upload, and data-source page/query wrappers. Pinned to API version `2025-09-03`.
+  - `lib/notion_fieldmap.py` — vault frontmatter ↔ Notion property codecs, per type (see Notion sync)
 - `commands/{receipt,bank_statement,document}/pipeline.py` — concrete `Fields` + `Pipeline` per type
 - `commands/` — CLI command modules (consume, ingest, ocr, llm, render, scan, remove)
 - `commands/export.py` — shared `export` subcommand (registered on `document`, `receipt`, and `bank_statement`); also exposes the top-level `obagent export` aggregator
 - `commands/{bank,merchant,people}.py` — top-level name-management groups built on `lib/name_store.py`
+- `commands/notion/` — Notion sync: `sync.py` (the `obagent notion sync` command + the two-way merge engine) and `backfill.py` (the one-time link, run as a one-off — not a CLI command)
+- `scripts/`, `Dockerfile`, `.dockerignore` — deployment bundle (see Deployment)
 - `tests/` — unit and integration tests with shared fixtures in `conftest.py`
 
 ## Architecture
@@ -67,6 +71,7 @@ DIR/
 - Missing `DIR/{path}/` is a **soft skip** (warning, exit 0). Per-type consume warns and returns without opening API clients; `obagent consume` warns per missing type and continues.
 - The per-type command keeps its existing positional `PATHS` (variadic — multiple files/dirs OK).
 - **`obagent consume`** (top-level only) accepts `--prehook CMD` (env var: `OBAGENT_CONSUME_PREHOOK`). The shell command runs before the per-type loop and before API clients are opened; a non-zero exit aborts with `Prehook failed`. Useful for populating `$OBAGENT_CONSUME` from an outside source (email sync, scanner upload, etc.).
+- **`--min-age N`** (both consume entry points) skips files modified within the last N seconds — a stateless quiescence gate (mtime-based) so a slow scanner→inbox upload isn't grabbed mid-write. Default 0 (off).
 
 ### Export specifics
 
@@ -95,13 +100,64 @@ DIR/
 - `ReceiptPipeline.prepare_context()` loads aliases into `ReceiptFields._aliases`, which `postprocess()` auto-applies on render
 - Has an extra `auto-rename` subcommand: asks an LLM (`AUTO_RENAME_MODEL`) to cluster variants of the same merchant, then prompts the user to accept/reject each suggested rename before applying
 
+## Notion sync
+
+obagent keeps the vault and a Notion workspace (🧾 Receipts + 🗃️ Documents data
+sources) reconciled **two ways**. The vault stays the source of truth and the
+OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not synced.
+
+- **Link:** each note carries a `notion_id` in frontmatter (the Notion page id).
+  `render` preserves it across re-renders/renames, exactly like `consumed_at`.
+  Notion rows carry a `Sha` text property (the note's sha set) as a create-crash
+  dedup guard, plus a `Consumed At` date.
+- **Field map** (`lib/notion_fieldmap.py`), per type: receipt `merchant`/`date`/
+  `total` (USD → `Total` number, non-USD → `Non-USD Total` ISO text); document
+  `title`↔`Name`, `tags`/`people`↔multi-select, `summary` (body callout)↔`Summary`.
+  Receipt `Name` is a Notion formula → **not** synced.
+- **`obagent notion sync`** — one reconciliation pass. A git-style **3-way merge**
+  against the **shadow** (`{vault}/.obagent/notion-shadow.json` = field values at
+  last sync): Notion-changed adopts into the vault, vault-changed pushes to Notion,
+  both-moved is a conflict → last-writer-wins by timestamp + log. Candidates are
+  narrowed by the Notion `last_edited_time` watermark + `git diff` since the
+  last-sync commit (`{vault}/.obagent/notion-sync-hints.json`); correctness rests on
+  the shadow, so losing the hints just triggers a self-healing `--full` pass.
+  `--dry-run` reports without writing. Token from `NOTION_TOKEN`; data-source ids
+  from `OBAGENT_NOTION_<TYPE>_DS` (defaulted in `commands/notion/sync.py`).
+- **Backfill** (`commands/notion/backfill.py`): the one-time initial link (match
+  existing rows by a normalized key, write `notion_id`, init the shadow). Run as a
+  one-off — intentionally **not** wired as a CLI command.
+- **Boundary:** Notion code is one-directional — `lib`/pipeline/render never import
+  it; only `commands/notion` + `main` do.
+
+## Deployment
+
+Built to run on a Synology NAS via **Container Manager (docker compose)**, so the
+NAS needs no Python — the image bundles Python 3.14 + uv + deps.
+
+- `Dockerfile` — the self-contained image (+ git/ssh for the push).
+- `scripts/run.sh` — one pass: `consume --min-age` → `obagent notion sync` →
+  `publish.sh`, with per-step error isolation and a `flock` no-overlap guard.
+- `scripts/publish.sh` — `obagent export` (→ Drive via Cloud Sync) + `git push` to
+  the vault's remotes.
+- `scripts/loop.sh` — runs `run.sh` every `$OBAGENT_INTERVAL` seconds (the compose
+  service command; SIGTERM-clean).
+- `docker-compose.yml` — the Container Manager Project: build + bind-mounts (inbox,
+  vault repo, Drive-export, git ssh key) + env. Secrets in a gitignored `.env`
+  (see `.env.example`).
+
+Either model works: the compose service loops (`restart: always`), **or** schedule
+one-off passes with Synology Task Scheduler via `docker run --rm --name
+paperless-sync … obagent` (the `--name` prevents overlap). The monitor is
+deliberately shell, not an obagent subcommand.
+
 ## Commands
 
 ```bash
-uv sync              # Install dependencies
-uv run obagent       # Run the CLI
-just install         # Install to PATH with zsh completions
-just uninstall       # Remove CLI and completions
+uv sync                              # Install dependencies
+uv run obagent                       # Run the CLI
+uv run obagent notion sync --dry-run # Preview a vault <-> Notion reconciliation
+just install                         # Install to PATH with zsh completions
+just uninstall                       # Remove CLI and completions
 ```
 
 ## Code Quality
