@@ -15,12 +15,12 @@ services:
     env_file: .env                          # NOTION_TOKEN, MISTRAL_API_KEY, OPENAI_API_KEY
     environment:
       OBAGENT_VAULT: /vault/Paperless       # repo is mounted at /vault (so .git is present)
-      OBAGENT_CONSUME: /inbox
+      OBAGENT_CONSUME: /consume
       OBAGENT_EXPORT: /drive
       OBAGENT_MIN_AGE: "60"                  # seconds a scan must settle before consuming
       OBAGENT_INTERVAL: "300"               # seconds between passes
     volumes:
-      - /volume1/paperless/vault:/vault      # obsidian-vaults repo root (.git + Paperless/)
-      - /volume1/paperless/inbox:/inbox      # scanner drop folder
+      - /volume1/paperless/obsidian-vaults:/vault      # obsidian-vaults repo root (.git + Paperless/)
+      - /volume1/paperless/consume:/consume      # scanner drop folder
       - /volume1/gdrive/paperless:/drive     # Cloud Sync → Google Drive
       - /volume1/paperless/ssh:/root/.ssh:ro # deploy key for `git push`
