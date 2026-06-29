@@ -1,100 +1,21 @@
-# Paperless: NAS auto-ingest + two-way Notion sync — Design / Plan
+# Paperless: NAS auto-ingest + two-way Notion sync — Design
 
-> **Status (2026-06-28): BUILT — deployment pending.** The two-way sync is
-> implemented on `feat/notion-sync` and proven live; what remains is the NAS
-> deployment. See **Build status** below for what exists and the **deployment
-> checklist** for what to do next. The original spec (from §1) is kept for rationale —
-> a few shapes changed, and the Build status section overrides it where they differ.
-> Vault: `/Users/junz/Workspace/obsidian-vaults/paperless`.
-
-> **Status:** design, written 2026-06-27, **substantially rethought 2026-06-28.**
-> This supersedes the original "NAS → Notion Ingest Watcher" design (a NAS daemon
-> that uploaded raw scans and let **Notion AI** do the OCR/extraction). That
-> approach was abandoned after a step-back analysis — see
-> [§17 Alternatives considered and rejected](#17-alternatives-considered-and-rejected).
+> **Archived design note (2026-06).** Records the *why* behind the NAS-auto-ingest +
+> two-way Notion sync design, and the alternatives rejected along the way. A
+> point-in-time snapshot, not living docs — for current state see `CLAUDE.md`
+> (structure & conventions) and `DEPLOY.md` (NAS deployment). This superseded the
+> original "NAS → Notion Ingest Watcher" idea (a NAS daemon that uploaded raw scans
+> and let **Notion AI** do the OCR/extraction), abandoned after a step-back — see §17.
 >
-> **One-line summary of where we landed:** keep the obagent **vault as the source
-> of truth and the OCR/LLM pipeline**; move obagent's *consume* step onto the
-> always-on **NAS** so ingestion is automatic; and add a **two-way sync with
-> Notion** so the documents can be browsed and **edited on a phone**, with edits
-> flowing back into the vault's frontmatter (which obagent already treats as a
-> sticky override layer).
-
----
-
-## Build status — AS BUILT (2026-06-28)
-
-Implemented on branch `feat/notion-sync`. The plan below is the original spec; a few
-shapes changed during the build — this section is the source of truth for what exists.
-
-**Done (code complete; 420 tests green; both repos committed, nothing pushed):**
-- **M0** — `Sha` + `Consumed At` added to both Notion data sources.
-- **M1** — `notion_id` preserved in `render` (mirrors `consumed_at`); `lib/notion_api.py`
-  (transport + upload + data-source wrappers, version `2025-09-03`).
-- **M3** — `lib/notion_fieldmap.py` (per-type codecs).
-- **M4 (backfill)** — ran as a one-off (`commands/notion/backfill.py`, functions, **not
-  a CLI command**): all **4031 notes linked**, stores reconciled (0 field diffs), shadow
-  written. Also fixed 15 OCR date errors (Notion was authoritative), removed 2 deleted
-  receipts, archived 1 orphan, upgraded 64 non-USD totals `¥`→ISO.
-- **M5 (merge)** — `obagent notion sync` (`commands/notion/sync.py`): 3-way merge vs
-  shadow; **proven live** (round-trip + watermark + clean restore). Wired as a CLI command.
-- **Quiescence gate** — `obagent consume --min-age N` (in `consume`, not a daemon).
-- **Deploy bundle** — `Dockerfile`, `docker-compose.yml`, `scripts/{run,loop,publish}.sh`.
-- **Config** — data-source ids are **env-only** (`OBAGENT_NOTION_<TYPE>_DS`, no defaults)
-  and were **scrubbed from git history**; `.env.example` documents all 13 env vars.
-- **Docs** — `CLAUDE.md`, `README.md`, this file.
-
-**Deviations from the spec below:**
-- **No `obagent monitor` / NAS daemon.** The monitor is **shell** (`scripts/loop.sh` or
-  Synology Task Scheduler) running one-shot `scripts/run.sh` — orchestration only, so it
-  doesn't belong in obagent. (Supersedes the `obagent monitor` decision in §14/§16.)
-- **Publish is shell** (`scripts/publish.sh` = `obagent export` + `git push`), not an
-  obagent command.
-- **Backfill is a one-off**, intentionally not a CLI command.
-- **Deploy via docker compose** (Container Manager Project) — the image bundles Python.
-
-## Remaining — deployment checklist (pick up here)
-
-All code is done; everything below is NAS/ops in your environment.
-
-1. **Push the work** (nothing is pushed yet):
-   - obagent: push `feat/notion-sync` (merge to `master` if you like).
-   - vault (`~/Workspace/obsidian-vaults`, branch `main`): push to GitHub + GitLab via
-     your usual publish — it has 3 commits waiting (date fixes, 2 removals, the backfill).
-2. **Stage data on a NAS volume**, e.g. `/volume1/paperless/{vault,inbox,export}`:
-   - `vault` = a clone of the **obsidian-vaults git repo root** (so `.git` is present);
-     `OBAGENT_VAULT` points at its `Paperless` subdir.
-   - `inbox` = the scanner drop (it will hold `Receipts/`, `Documents/`, `Bank Statements/`).
-   - `export` = a **Synology Cloud Sync → Google Drive** folder (where `obagent export` writes).
-3. **Git push creds from the container** (the one fiddly bit): generate an SSH deploy key,
-   add the public key to GitHub **and** GitLab (write access), mount the private key
-   read-only at `/root/.ssh`, and make the vault's remotes use SSH URLs (+ `known_hosts`).
-4. **Drop the old NAS git remote** from the vault so publish only pushes off-NAS
-   (`publish.sh` pushes to every configured remote).
-5. **Create `.env`** on the NAS from `.env.example` — `NOTION_TOKEN`, `MISTRAL_API_KEY`,
-   `OPENAI_API_KEY`, and both `OBAGENT_NOTION_*_DS`. Adjust paths/intervals in
-   `docker-compose.yml` to match your volume mounts.
-6. **Build + run** in Container Manager: `docker compose up -d --build` (looping monitor),
-   **or** for Task Scheduler one-shots: `docker run --rm --name paperless-sync … obagent`
-   every N minutes (`--name` prevents overlap; `run.sh` also flocks).
-7. **Point the scanner** at the inbox subdirs.
-8. **Verify** before trusting the loop: `obagent --vault … notion sync --dry-run`
-   (first run is a full pass and writes `.obagent/notion-sync-hints.json`; later runs are
-   incremental). Then watch `docker compose logs -f`.
-
-**Watch-fors:** Bank Statements are not synced to Notion (consume + publish only, by
-design). New non-USD receipts now extract ISO-style totals (`JPY 3775`); legacy ones are
-already upgraded. The Notion AI agent you built is unused by the pipeline (obagent does
-the extraction) — keep it for ad-hoc Q&A or remove it.
-
-**Open / optional (not blocking):**
-- The **shadow + hints** (`.obagent/notion-shadow.json`, `notion-sync-hints.json`) churn
-  on every sync → noisy vault diffs. You chose to commit the shadow; consider gitignoring
-  both if the publish noise annoys (they self-heal — a lost shadow just triggers a full pass).
-- `notion-ingest/DESIGN.md` (separate folder, **not** a git repo) still has the real
-  data-source ids as plaintext — redact if you care.
-- If you ever want Notion AI to enrich Documents (`tags`/`people`/`summary`), that's a
-  separate add; today the sync only reconciles obagent-extracted values.
+> **Where it landed:** keep the obagent **vault as the source of truth and the
+> OCR/LLM pipeline**; move *consume* onto the always-on **NAS** so ingestion is
+> automatic; add a **two-way sync with Notion** so documents can be browsed and
+> **edited on a phone**, edits flowing back into the vault's frontmatter override layer.
+>
+> **As built, a few shapes differ from the spec below:** the monitor and publish are
+> **shell** (`scripts/loop.sh` / `run.sh` / `publish.sh`), not `obagent monitor` /
+> `apply` commands; **backfill** ran as a one-off function, not a CLI command;
+> deployment is **docker compose** (Container Manager). The design intent stands.
 
 ---
 
@@ -808,56 +729,7 @@ No field resync is needed — the existing data is complete (USD in `Total`, non
 
 ---
 
-## 19. Build order / milestones
-
-- **M0 — Prereqs.** Add **`Sha` (text)** + **`Consumed At` (date+time)** to Receipts +
-  Documents (nothing else). Receipts `Name` is a formula → not synced; Documents `Name`
-  *is* the synced title. Confirm the integration is connected to both DBs; decide where
-  the vault's canonical git checkout lives on the NAS. (Backfill = **M4 / §18**.)
-- **M1 — preserve `notion_id`** in `render` (mirror `consumed_at`). Plus
-  `lib/notion_api.py` (HTTP/upload core lifted from `reference_importer.py`).
-- **M2 — `obagent notion sync` (register path):** per-note create + multi-file attach
-  + `Sha`, write `notion_id` back, init the shadow. Smoke-test on a few receipts.
-- **M3 — `obagent <type> apply` + field maps** (Receipts *and* Documents; currency/date
-  normalization, multi-select lists). (Bank Statements: consume + publish only.)
-- **M4 — `obagent notion backfill` (§18):** run `--dry-run` first (the **match report**);
-  then match (Receipts by `Name`, Documents by `(Name, Date)`), write
-  `notion_id`/`Sha`/`Consumed At` into `.md` + rows, init the shadow, create the 1
-  missing receipt, log orphans. (No field resync — data is complete.)
-- **M5 — `obagent notion sync` (two-way merge):** shadow + 3-way merge + normalized
-  compare; narrowing (watermark + `git diff`); vault writes via `apply`→render, Notion
-  via PATCH; conflict LWW+log. Verify: (a) echo is a no-op, (b) Notion-only edit → vault,
-  (c) Obsidian-only edit → Notion, (d) different fields each side both survive.
-- **M6 — `obagent monitor`** loop + quiescence gate (Docker on the NAS); per-step error
-  isolation + SIGTERM. Slow-write unit test on the gate.
-- **M7 — wire publish into the loop:** `git push` to GitHub + GitLab; `obagent export`
-  → Cloud Sync to Drive (browsable PDFs). (Remove the NAS git remote.)
-- **M8 — (optional)** stricter merge condition; per-note UUID; Notion webhook for
-  lower-latency merge.
-
----
-
-## 20. Open questions to confirm
-
-**All resolved as of 2026-06-28.** The only non-decision left is a build-time
-*verification* (item 1): confirm obagent containerizes cleanly on the NAS.
-
-1. ~~Where does auto-consume run~~ **DECIDED: NAS, Docker container.** Remaining check:
-   does obagent's consume rely on anything laptop-specific (local models, config,
-   secrets) that complicates Dockerizing on the NAS?
-2. ~~What does GitHub hold / keep Drive?~~ **DECIDED:** git holds **everything** (full
-   vault), and **Drive is KEPT** — for provider-diversity redundancy + a browsable PDF
-   archive, fed by `obagent export` (renamed, date-bucketed) → Cloud Sync (§12).
-3. ~~Bank Statements Notion DB~~ **DECIDED: not synced to Notion for now** (consume +
-   publish only). Revisit later if you want them in Notion.
-4. ~~`consumed_at` / `Name` mapping~~ **DECIDED:** `consumed_at` → a one-way `Consumed
-   At` (date+time) property; **`Name` is a Notion formula → not synced** (§9).
-5. ~~Conflict policy~~ **DECIDED:** same-field both-sides conflict → last-writer-wins
-   by timestamp + log (§11); deletes never auto-propagate.
-
----
-
-## 21. References / reusable assets
+## 19. References / reusable assets
 
 - **obagent** (`~/Workspace/obagent`): `commands/` = `consume, ingest, ocr, llm,
   render, export, merchant, bank, people, scan, remove`; type modules under
@@ -882,4 +754,3 @@ No field resync is needed — the existing data is complete (USD in `Total`, non
 - **Claude memory:** `reference_notion_api.md` (Notion API/MCP reference);
   `project_notion_paperless_migration.md` (migration history + importer gotchas).
 - **Conventions:** Python with `uv`/`hatchling`/`ruff`/`ty`; `just check` / `just fix`.
-```
