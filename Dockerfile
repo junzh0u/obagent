@@ -29,6 +29,10 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY . .
+# Ensure the entrypoint scripts are executable regardless of the build context's
+# file modes (a clone over SMB / a non-fileMode checkout can drop the +x bit,
+# which makes `exec /app/scripts/loop.sh` fail with "permission denied").
+RUN chmod +x /app/scripts/*.sh
 RUN uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
 
