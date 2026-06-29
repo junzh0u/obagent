@@ -94,10 +94,12 @@ def test_sync_command_invokes_run_sync(runner, monkeypatch):
 
     monkeypatch.setattr(sync, "run_sync", fake_run_sync)
     monkeypatch.setenv("NOTION_TOKEN", "t")
+    monkeypatch.setenv("OBAGENT_NOTION_RECEIPT_DS", "rds")
+    monkeypatch.setenv("OBAGENT_NOTION_DOCUMENT_DS", "dds")
     result = runner.invoke(sync.sync_command, ["--dry-run"], obj={"vault": "/tmp"})
     assert result.exit_code == 0, result.output
     assert called["dry_run"] is True and called["full"] is False
-    assert "receipt" in called["ds"] and "document" in called["ds"]
+    assert called["ds"] == {"receipt": "rds", "document": "dds"}
     assert "unchanged" in result.output
 
 
@@ -107,6 +109,16 @@ def test_sync_command_requires_token(runner, monkeypatch):
     result = runner.invoke(sync.sync_command, [], obj={"vault": "/tmp"})
     assert result.exit_code != 0
     assert "NOTION_TOKEN" in result.output
+
+
+def test_sync_command_requires_data_sources(runner, monkeypatch):
+    monkeypatch.setenv("NOTION_TOKEN", "t")
+    monkeypatch.delenv("OBAGENT_NOTION_RECEIPT_DS", raising=False)
+    monkeypatch.delenv("OBAGENT_NOTION_DOCUMENT_DS", raising=False)
+    monkeypatch.setattr(sync, "run_sync", lambda *a, **k: {})
+    result = runner.invoke(sync.sync_command, [], obj={"vault": "/tmp"})
+    assert result.exit_code != 0
+    assert "data source" in result.output.lower()
 
 
 def test_write_back_document_adopts_summary_and_tags(tmp_path):

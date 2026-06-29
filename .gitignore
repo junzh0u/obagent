@@ -11,6 +11,8 @@ wheels/
 
 # Local environment
 .env
+# Track the template (the global ignore has .env.*)
+!.env.example
 
 # Scratch reference (Notion upload core; lifted into lib/notion_api.py)
 reference_importer.py

@@ -271,19 +271,18 @@ def run_sync(
 
 # -- CLI -------------------------------------------------------------------
 
-# type -> Notion data source id (override via OBAGENT_NOTION_<TYPE>_DS).
-_DEFAULT_DS = {
-    "receipt": "<receipts-data-source-id>",
-    "document": "<documents-data-source-id>",
+# type -> env var holding its Notion data source id. No defaults: these are
+# workspace-specific, so they must be configured explicitly.
+_DS_ENV = {
+    "receipt": "OBAGENT_NOTION_RECEIPT_DS",
+    "document": "OBAGENT_NOTION_DOCUMENT_DS",
 }
 
 
 def data_sources() -> dict[str, str]:
-    """Map type -> data source id, each overridable via an env var."""
-    return {
-        t: os.environ.get(f"OBAGENT_NOTION_{t.upper()}_DS", d)
-        for t, d in _DEFAULT_DS.items()
-    }
+    """Map type -> data source id from OBAGENT_NOTION_<TYPE>_DS. Types whose env
+    var is unset are skipped (not synced)."""
+    return {t: os.environ[ev] for t, ev in _DS_ENV.items() if os.environ.get(ev)}
 
 
 @click.group()
@@ -302,8 +301,12 @@ def sync_command(ctx, dry_run, full):
     client = NotionClient()
     if not client.token:
         raise click.UsageError("NOTION_TOKEN is not set.")
-    stats = run_sync(
-        client, Path(ctx.obj["vault"]), data_sources(), dry_run=dry_run, full=full
-    )
+    ds = data_sources()
+    if not ds:
+        raise click.UsageError(
+            "No Notion data sources configured. Set OBAGENT_NOTION_RECEIPT_DS "
+            "and/or OBAGENT_NOTION_DOCUMENT_DS."
+        )
+    stats = run_sync(client, Path(ctx.obj["vault"]), ds, dry_run=dry_run, full=full)
     summary = ", ".join(f"{v} {k}" for k, v in stats.items())
     click.secho(summary or "nothing to do", bold=True)
