@@ -9,7 +9,7 @@ services:
   obagent:
     build: .
     image: obagent
-    container_name: paperless-sync
+    container_name: obagent
     restart: always
     command: ["/app/scripts/loop.sh"]
     env_file: .env                          # NOTION_TOKEN, MISTRAL_API_KEY, OPENAI_API_KEY
