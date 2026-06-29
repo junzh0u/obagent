@@ -10,6 +10,10 @@ install:
     uv run python gen_zsh_completion.py > ~/.local/share/zsh/site-functions/_obagent
     @echo "Installed. Restart your shell to enable completions."
 
+# Run the obagent CLI (alias for `uv run obagent ...`)
+run *ARGS:
+    uv run obagent {{ARGS}}
+
 # Verify formatting, lint, and test
 check:
     uv run ruff format --check .

@@ -155,6 +155,7 @@ deliberately shell, not an obagent subcommand.
 ```bash
 uv sync                              # Install dependencies
 uv run obagent                       # Run the CLI
+just run notion sync --dry-run       # Alias for `uv run obagent ...`
 uv run obagent notion sync --dry-run # Preview a vault <-> Notion reconciliation
 just install                         # Install to PATH with zsh completions
 just uninstall                       # Remove CLI and completions
