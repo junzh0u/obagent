@@ -136,7 +136,8 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
 ## Deployment
 
 Built to run on a Synology NAS via **Container Manager (docker compose)**, so the
-NAS needs no Python — the image bundles Python 3.14 + uv + deps.
+NAS needs no Python — the image bundles Python 3.14 + uv + deps. Step-by-step NAS
+setup is in **`DEPLOY.md`**.
 
 - `Dockerfile` — the self-contained image (+ git/ssh for the push).
 - `scripts/run.sh` — one pass: `consume --min-age` → `obagent notion sync` →

@@ -22,5 +22,5 @@ services:
     volumes:
       - /volume1/paperless/vault:/vault      # obsidian-vaults repo root (.git + Paperless/)
       - /volume1/paperless/inbox:/inbox      # scanner drop folder
-      - /volume1/paperless/export:/drive     # Cloud Sync → Google Drive
+      - /volume1/gdrive/paperless:/drive     # Cloud Sync → Google Drive
       - /volume1/paperless/ssh:/root/.ssh:ro # deploy key for `git push`
