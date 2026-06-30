@@ -22,7 +22,7 @@ The host folders obagent touches:
 | `/volume1/paperless/obsidian-vaults` | the **obsidian-vaults** git repo (`OBAGENT_VAULT` = its `Paperless/` subdir) |
 | `/volume1/gdrive/paperless/consume` | inbox, per-type subdirs — Cloud Sync ↔ Drive (scans, phone, email) |
 | `/volume1/gdrive/paperless/export` | export outbox — Cloud Sync ↔ Drive |
-| `/volume1/paperless/ssh` | the SSH deploy key for `git push` |
+| `~/.ssh` (job user's home) | the SSH deploy key for `git push` |
 
 Enable **SSH** (Control Panel → Terminal & SNMP) to run the commands below. Run them as
 the user that will own the deployment (e.g. `junz`) — one user throughout means
@@ -57,21 +57,26 @@ git config user.name "obagent"; git config user.email "obagent@junz.info"  # com
 ```
 Confirm it's on `main` tracking `origin/main`.
 
-## 4. SSH deploy key (so the push authenticates, user-independent)
+## 4. SSH deploy key (so the push authenticates)
+Put the key in the job user's home `~/.ssh` — running natively as that user, git/ssh
+finds it automatically (no `core.sshCommand` needed; the `_obagent` wrapper exports the
+same `HOME`):
 ```sh
-mkdir -p /volume1/paperless/ssh
-ssh-keygen -t ed25519 -f /volume1/paperless/ssh/id_ed25519 -N ""
-ssh-keyscan github.com gitlab.com > /volume1/paperless/ssh/known_hosts
-chmod 600 /volume1/paperless/ssh/id_ed25519 /volume1/paperless/ssh/known_hosts
-cat /volume1/paperless/ssh/id_ed25519.pub
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ""
+chmod 600 ~/.ssh/id_ed25519
+ssh-keyscan github.com gitlab.com >> ~/.ssh/known_hosts   # so the non-interactive push
+                                                          # doesn't hang on host verification
+cat ~/.ssh/id_ed25519.pub
 ```
 Add that public key as a **deploy key with write access** on **both** the GitHub and
-GitLab `obsidian-vaults` repos. Pin it on the vault repo so the push works regardless of
-which shell/user runs the job:
-```sh
-git -C /volume1/paperless/obsidian-vaults config core.sshCommand \
-  'ssh -i /volume1/paperless/ssh/id_ed25519 -o UserKnownHostsFile=/volume1/paperless/ssh/known_hosts'
-```
+GitLab `obsidian-vaults` repos.
+- **Gotcha:** the key must be mode `600` (ssh refuses a group/world-readable key) and
+  `~/.ssh/known_hosts` must hold the host keys, or a scheduled (non-interactive) push
+  hangs. Both handled above.
+- Only if the key *can't* live in the job user's home (shared path, or the job runs as a
+  different user) do you need to pin it on the vault repo instead:
+  `git -C /volume1/paperless/obsidian-vaults config core.sshCommand 'ssh -i <key> -o UserKnownHostsFile=<known_hosts>'`.
 
 ## 5. Directory layout
 ```sh
@@ -166,9 +171,10 @@ uv tool install . --compile-bytecode --force --reinstall
   it runs a bare shell and does **not** source dotfiles. Ensure the entry script sets
   `HOME` + `PATH` (incl. `~/.local/bin`) and sources both your rc and the secrets file.
   Test by hand as your user: `bash <entry-script>`.
-- **Push fails / hangs** → deploy key not mode `600`, missing `known_hosts`, vault remote
-  on `https://` instead of `git@`, `core.sshCommand` not set (step 4), or the key lacks
-  write access.
+- **Push fails / hangs** → deploy key not mode `600`, missing `~/.ssh/known_hosts` (a
+  non-interactive push hangs on host verification), vault remote on `https://` instead of
+  `git@`, the key not in the job user's `~/.ssh` (so git doesn't find it), or the key
+  lacks write access.
 - **`notion sync` does a full pass every run** ("no git repo visible") → git can't run on
   the vault. Usually fixed by running the job as the user that **owns** the vault repo (no
   dubious-ownership guard); otherwise `git config --global --add safe.directory '*'` for
