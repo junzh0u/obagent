@@ -425,3 +425,38 @@ def test_no_prune_leaves_deletions_alone(tmp_path):
     assert a.exists()
     assert client.trashed == []
     assert "vault_deleted" not in stats and "notion_trashed" not in stats
+
+
+# -- _upload_sources naming (per-file sync identity) -----------------------
+
+
+def _multifile_note(rec, name, shas):
+    for sha in shas:
+        (rec / "_assets_" / sha / "src").mkdir(parents=True)
+        (rec / "_assets_" / sha / "src" / "original.pdf").write_bytes(b"%PDF")
+    embeds = "".join(f"![[_assets_/{sha}/src/original.pdf]]\n" for sha in shas)
+    p = rec / f"{name}.md"
+    p.write_text(
+        "---\nmerchant: X\ndate: 2026-06-27\ntotal: $0.00\nnotion_id: pg-1\n---\n"
+        + embeds
+    )
+    return bf.gather_vault(rec, "receipt")[0]
+
+
+def test_upload_sources_multifile_encodes_sha(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    note = _multifile_note(rec, "note", ["a" * 64, "b" * 64])
+    pairs = sync._upload_sources(FakeClient(), tmp_path, "receipt", note)
+    assert sorted(n for _, n in pairs) == [
+        "note-aaaaaaaaaaaa.pdf",
+        "note-bbbbbbbbbbbb.pdf",
+    ]
+
+
+def test_upload_sources_singlefile_keeps_clean_name(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    note = _multifile_note(rec, "solo", ["a" * 64])  # one source -> no sha suffix
+    pairs = sync._upload_sources(FakeClient(), tmp_path, "receipt", note)
+    assert [n for _, n in pairs] == ["solo.pdf"]

@@ -221,19 +221,31 @@ def _upload_sources(
     client: NotionClient, vault: Path, type_name: str, note: VaultNote
 ) -> list[tuple[str, str]]:
     """Upload the note's source file(s); return (upload_id, name) pairs for the
-    ``File`` property. The first file uses the note stem, extras get a -sha12
-    suffix (mirrors export). A missing source is warned and skipped, not fatal."""
+    ``File`` property. A **multi-file** note suffixes every name with ``-<sha12>``
+    (kept intact past truncation) so the File entries map back to a sha for the
+    per-file two-way sync; a single-file note keeps the clean stem. A missing source
+    is warned and skipped, not fatal."""
     base = vault / FOLDER[type_name] / ASSETS_DIR
+    multi = len(note.shas) > 1
     pairs: list[tuple[str, str]] = []
-    for i, sha in enumerate(note.shas):
+    for sha in note.shas:
         src = source_file(base / sha)
         if src is None:
             print(
                 f"  warning: no source for {sha[:12]} ({note.path.name!r})", flush=True
             )
             continue
-        stem = note.path.stem if i == 0 else f"{note.path.stem}-{sha[:12]}"
-        name = truncate_u16(stem, FILE_NAME_LIMIT - len(src.suffix)) + src.suffix
+        if multi:
+            sfx = f"-{sha[:12]}"
+            stem = (
+                truncate_u16(
+                    note.path.stem, FILE_NAME_LIMIT - len(src.suffix) - len(sfx)
+                )
+                + sfx
+            )
+        else:
+            stem = truncate_u16(note.path.stem, FILE_NAME_LIMIT - len(src.suffix))
+        name = stem + src.suffix
         pairs.append((client.upload_file(src, name), name))
     return pairs
 

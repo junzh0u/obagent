@@ -160,3 +160,27 @@ def test_file_property():
             ]
         }
     }
+
+
+def test_read_sha_parses_full_shas():
+    props = {"Sha": _rich("\n".join([("a" * 64), ("b" * 64)]))}
+    assert fm.read_sha(props) == {"a" * 64, "b" * 64}
+
+
+def test_read_sha_empty():
+    assert fm.read_sha({}) == set()
+
+
+def test_read_file_sha12_parses_and_counts_unparseable():
+    props = {
+        "File": {
+            "files": [
+                {"name": "2026-06-27 - X-aaaaaaaaaaaa.pdf"},
+                {"name": "2026-06-27 - X-bbbbbbbbbbbb.jpg"},
+                {"name": "renamed-by-user.pdf"},  # no -<sha12> suffix
+            ]
+        }
+    }
+    shas, unparseable = fm.read_file_sha12(props)
+    assert shas == {"aaaaaaaaaaaa", "bbbbbbbbbbbb"}
+    assert unparseable == 1

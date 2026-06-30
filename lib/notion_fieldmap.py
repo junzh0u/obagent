@@ -213,3 +213,29 @@ def file_property(upload_ids_and_names: list[tuple[str, str]]) -> dict[str, Any]
             ]
         }
     }
+
+
+_SHA_RE = re.compile(r"[0-9a-f]{64}")
+_FILE_SHA12_RE = re.compile(r"-([0-9a-f]{12})(?:\.[^.]+)?$")
+
+
+def read_sha(props: dict[str, Any]) -> set[str]:
+    """The full sha set recorded in the ``Sha`` property — the per-file 3-way *base*
+    (the set at last sync). Parsed by regex so it survives any newline handling."""
+    return set(_SHA_RE.findall(read_plain_text(props.get("Sha", {}))))
+
+
+def read_file_sha12(props: dict[str, Any]) -> tuple[set[str], int]:
+    """Recover the ``sha12``s encoded in the ``File`` entry names — the *live* Notion
+    set. Returns ``(sha12s, unparseable)``; ``unparseable`` counts entries whose name
+    carries no ``-<sha12>`` suffix (renamed / pre-migration), which callers use to
+    skip the destructive Notion->vault direction."""
+    shas: set[str] = set()
+    unparseable = 0
+    for f in (props.get("File") or {}).get("files", []):
+        m = _FILE_SHA12_RE.search(f.get("name", ""))
+        if m:
+            shas.add(m.group(1))
+        else:
+            unparseable += 1
+    return shas, unparseable
