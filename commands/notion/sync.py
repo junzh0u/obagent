@@ -16,6 +16,7 @@ runs per type that has a configured data source (bank statements are skipped).
 
 import json
 import os
+import shutil
 import subprocess
 import time
 from collections import defaultdict
@@ -113,6 +114,17 @@ def write_back(note: VaultNote, field_updates: dict[str, str], type_name: str) -
             note.path.rename(new_path)
             return new_path
     return note.path
+
+
+def delete_note(vault: Path, type_name: str, note: VaultNote) -> None:
+    """Delete a linked note and its source asset dir(s). DESTRUCTIVE — removes the
+    original scanned file(s). Used only by --prune to mirror a Notion-trash."""
+    assets = vault / FOLDER[type_name] / ASSETS_DIR
+    note.path.unlink(missing_ok=True)
+    for sha in note.shas:
+        d = assets / sha
+        if d.exists():
+            shutil.rmtree(d)
 
 
 # -- sync state + candidate gathering --------------------------------------
@@ -276,9 +288,13 @@ def run_sync(
     *,
     dry_run: bool = False,
     full: bool = False,
+    prune: bool = False,
 ) -> dict[str, int]:
     """One reconciliation pass. ``full`` ignores the watermark/commit hints and
-    checks every linked record (self-healing)."""
+    checks every linked record (self-healing). ``prune`` propagates deletions both
+    ways (DESTRUCTIVE): a trashed Notion row deletes its linked vault note + source
+    file, and a deleted vault note trashes its Notion row. ``prune`` forces a full
+    scan — the complete live-row set is needed to tell 'trashed' from 'unchanged'."""
     t_start = time.monotonic()
     shadow = load_shadow(vault)
     hints = load_hints(vault)
@@ -296,17 +312,21 @@ def run_sync(
     stats: defaultdict[str, int] = defaultdict(int)
 
     # Notion-changed candidates (+ advance the watermark to Notion's clock).
+    # --prune needs the COMPLETE live-row set (to tell a trashed row from an
+    # unchanged one), so it forces an unfiltered full scan.
+    full_scan = full or prune or not watermark
     t0 = time.monotonic()
     notion_changed: dict[str, tuple[str, dict[str, str], str]] = {}
+    live_by_type: dict[str, set[str]] = {t: set() for t in ds_by_type}
     max_edited = watermark or ""
     for t, ds in ds_by_type.items():
         flt = (
-            {
+            None
+            if full_scan
+            else {
                 "timestamp": "last_edited_time",
                 "last_edited_time": {"on_or_after": watermark},
             }
-            if watermark
-            else None
         )
         for page in client.iter_pages(ds, filter=flt):
             le = page.get("last_edited_time", "")
@@ -315,11 +335,56 @@ def run_sync(
                 fm.read_editable(t, page["properties"]),
                 le,
             )
+            live_by_type[t].add(page["id"])
             max_edited = max(max_edited, le)
-    scope = f"since {watermark}" if watermark else "FULL scan (no watermark)"
+    scope = "FULL scan" if full_scan else f"since {watermark}"
     print(
         f"  notion query [{scope}]: {len(notion_changed)} rows [{_dt(t0)}]", flush=True
     )
+
+    # -- prune: deletion propagation (DESTRUCTIVE, opt-in) --------------------
+    # Direction 1 (Notion-trash -> vault-delete) needs the full live set above.
+    pruned: set[str] = set()
+    vault_missing = bool(prune and shadow and not idx)
+    if vault_missing:
+        print(
+            "  prune: vault scan found 0 linked notes but the shadow is non-empty — "
+            "skipping deletes (is the vault mounted/readable?)",
+            flush=True,
+        )
+    if prune and not vault_missing:
+        for t in ds_by_type:
+            linked = {nid for nid, (tt, _) in idx.items() if tt == t}
+            # A data source that returned zero live rows but still has linked notes
+            # is almost certainly a bad id/outage, not a mass-trash — skip it
+            # rather than wipe those notes.
+            if linked and not live_by_type[t]:
+                print(
+                    f"  prune: 0 live {t} rows but {len(linked)} linked — skipping "
+                    "delete (check the data source id)",
+                    flush=True,
+                )
+                continue
+            for nid in linked - live_by_type[t]:
+                _, note = idx[nid]
+                if dry_run:
+                    print(
+                        f"  -> DELETE {note.path.name[:40]!r} (Notion row trashed)",
+                        flush=True,
+                    )
+                    stats["would_delete_vault"] += 1
+                else:
+                    delete_note(vault, t, note)
+                    print(
+                        f"  deleted {note.path.name[:40]!r} (Notion row trashed)",
+                        flush=True,
+                    )
+                    stats["vault_deleted"] += 1
+                pruned.add(nid)
+        if not dry_run:
+            for nid in pruned:
+                idx.pop(nid, None)
+                shadow.pop(nid, None)
 
     # vault-changed candidates (git diff since last sync; full pass if no commit)
     if full or not hints.get("commit"):
@@ -328,7 +393,7 @@ def run_sync(
     else:
         vault_changed = _git_changed_notion_ids(vault, hints["commit"], idx)
         vsrc = "git-diff"
-    candidates = set(notion_changed) | vault_changed
+    candidates = (set(notion_changed) | vault_changed) - pruned
     print(
         f"  candidates: {len(candidates)} (notion {len(notion_changed)}, "
         f"vault {len(vault_changed)} [{vsrc}])",
@@ -339,7 +404,26 @@ def run_sync(
     fetched = 0
     for nid in candidates:
         if nid not in idx:
-            stats["deleted_in_vault"] += 1  # row exists, note gone -> flag, don't touch
+            # The vault note is gone. Under --prune, a still-live row we had linked
+            # (in the shadow) is propagated as a Notion-trash; else just flag it. A
+            # live row never linked (not in the shadow) isn't ours to touch.
+            if nid not in shadow:
+                continue
+            if prune and not vault_missing and nid in notion_changed:
+                if dry_run:
+                    print(
+                        f"  -> TRASH notion row {nid} (vault note deleted)", flush=True
+                    )
+                    stats["would_trash_notion"] += 1
+                else:
+                    client.trash_page(nid)
+                    shadow.pop(nid, None)
+                    print(
+                        f"  trashed notion row {nid} (vault note deleted)", flush=True
+                    )
+                    stats["notion_trashed"] += 1
+            else:
+                stats["deleted_in_vault"] += 1  # row exists, note gone -> flag only
             continue
         t, note = idx[nid]
         base = shadow.get(nid, {})
@@ -393,6 +477,11 @@ def run_sync(
     create_unlinked(client, vault, ds_by_type, shadow, stats, dry_run=dry_run)
     print(f"  create pass [{_dt(t0)}]", flush=True)
 
+    if prune and not vault_missing and not dry_run:
+        # GC shadow rows whose note AND row are both gone (deleted on both sides).
+        # Safe only with the full live set in hand (which --prune guarantees).
+        for nid in set(shadow) - set(idx) - set(notion_changed):
+            shadow.pop(nid, None)
     if not dry_run:
         save_shadow(vault, shadow)
         save_hints(vault, {"watermark": max_edited, "commit": head})
@@ -426,8 +515,15 @@ def notion():
 @click.option(
     "--full", is_flag=True, help="Ignore the watermark; check every linked record."
 )
+@click.option(
+    "--prune",
+    is_flag=True,
+    help="Propagate DELETIONS both ways (DESTRUCTIVE): trash a Notion row whose "
+    "vault note is gone, and delete a vault note + its source file when its Notion "
+    "row is trashed. Forces a full scan. Pair with --dry-run to preview.",
+)
 @click.pass_context
-def sync_command(ctx, dry_run, full):
+def sync_command(ctx, dry_run, full, prune):
     """Reconcile the vault and Notion two-way (3-way merge against the shadow)."""
     client = NotionClient()
     if not client.token:
@@ -438,6 +534,8 @@ def sync_command(ctx, dry_run, full):
             "No Notion data sources configured. Set OBAGENT_NOTION_RECEIPT_DS "
             "and/or OBAGENT_NOTION_DOCUMENT_DS."
         )
-    stats = run_sync(client, Path(ctx.obj["vault"]), ds, dry_run=dry_run, full=full)
+    stats = run_sync(
+        client, Path(ctx.obj["vault"]), ds, dry_run=dry_run, full=full, prune=prune
+    )
     summary = ", ".join(f"{v} {k}" for k, v in stats.items())
     click.secho(summary or "nothing to do", bold=True)

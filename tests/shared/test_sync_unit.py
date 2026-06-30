@@ -7,6 +7,69 @@ from lib.notion_api import NotionClient
 R = "receipt"
 USD12 = {"Total": {"number": 12.0}, "Non-USD Total": {"rich_text": []}}
 SHA = "a" * 64
+FRONT = {"merchant": "San Jose Library", "date": "2026-06-27", "total": "$0.00"}
+
+
+class PruneClient(NotionClient):
+    """Serves a fixed set of live rows per data source; records trashes. Any GET
+    (vault-only candidate) returns a configured live page."""
+
+    def __init__(self, pages_by_ds, gets=None):
+        super().__init__(token="test")
+        self.pages_by_ds = pages_by_ds
+        self.gets = gets or {}
+        self.trashed: list[str] = []
+        self.updated: list[tuple[str, dict]] = []
+
+    def iter_pages(self, data_source_id, *, filter=None, sorts=None, page_size=100):
+        yield from self.pages_by_ds.get(data_source_id, [])
+
+    def trash_page(self, page_id):
+        self.trashed.append(page_id)
+        return {"id": page_id, "in_trash": True}
+
+    def update_page(self, page_id, properties):
+        self.updated.append((page_id, properties))
+        return {"id": page_id}
+
+    def api(self, method, url, *, data=None, headers=None, raw=False):
+        if method == "GET" and url.rsplit("/", 1)[-1] in self.gets:
+            return self.gets[url.rsplit("/", 1)[-1]]
+        raise AssertionError(f"unexpected api call {method} {url}")
+
+
+def _rt(s):
+    """A rich_text property in the *read* shape Notion returns (with 'type')."""
+    return {"type": "rich_text", "rich_text": [{"plain_text": s}] if s else []}
+
+
+def _page(nid, le="2020-01-01T00:00:00.000Z", front=FRONT):
+    # Read-shape page properties (what the API returns), so read_editable inverts
+    # cleanly and the merge is a no-op for an unchanged row.
+    return {
+        "id": nid,
+        "last_edited_time": le,
+        "properties": {
+            "Merchant": _rt(front["merchant"]),
+            "Date": {"type": "date", "date": {"start": front["date"]}},
+            "Total": {"type": "number", "number": float(front["total"].lstrip("$"))},
+            "Non-USD Total": _rt(""),
+        },
+    }
+
+
+def _linked_receipt(receipts_dir, name, sha, notion_id, front=FRONT):
+    """A linked receipt note + its source asset, returning the note path."""
+    src = receipts_dir / "_assets_" / sha / "src"
+    src.mkdir(parents=True)
+    (src / "original.pdf").write_bytes(b"%PDF-1.4 fake")
+    p = receipts_dir / f"{name}.md"
+    p.write_text(
+        f"---\nmerchant: {front['merchant']}\ndate: {front['date']}\n"
+        f"total: {front['total']}\nconsumed_at: 2026-06-29T06:33:10+00:00\n"
+        f"notion_id: {notion_id}\n---\n![[_assets_/{sha}/src/original.pdf]]\n"
+    )
+    return p
 
 
 class FakeClient(NotionClient):
@@ -136,8 +199,8 @@ def test_write_back_receipt_adopt_total_renames(tmp_path):
 def test_sync_command_invokes_run_sync(runner, monkeypatch):
     called = {}
 
-    def fake_run_sync(client, vault, ds, *, dry_run, full):
-        called.update(dry_run=dry_run, full=full, ds=ds)
+    def fake_run_sync(client, vault, ds, *, dry_run, full, prune):
+        called.update(dry_run=dry_run, full=full, prune=prune, ds=ds)
         return {"unchanged": 3}
 
     monkeypatch.setattr(sync, "run_sync", fake_run_sync)
@@ -147,8 +210,24 @@ def test_sync_command_invokes_run_sync(runner, monkeypatch):
     result = runner.invoke(sync.sync_command, ["--dry-run"], obj={"vault": "/tmp"})
     assert result.exit_code == 0, result.output
     assert called["dry_run"] is True and called["full"] is False
+    assert called["prune"] is False
     assert called["ds"] == {"receipt": "rds", "document": "dds"}
     assert "unchanged" in result.output
+
+
+def test_sync_command_passes_prune(runner, monkeypatch):
+    called = {}
+
+    def fake_run_sync(client, vault, ds, *, dry_run, full, prune):
+        called.update(prune=prune)
+        return {}
+
+    monkeypatch.setattr(sync, "run_sync", fake_run_sync)
+    monkeypatch.setenv("NOTION_TOKEN", "t")
+    monkeypatch.setenv("OBAGENT_NOTION_RECEIPT_DS", "rds")
+    result = runner.invoke(sync.sync_command, ["--prune"], obj={"vault": "/tmp"})
+    assert result.exit_code == 0, result.output
+    assert called["prune"] is True
 
 
 def test_sync_command_requires_token(runner, monkeypatch):
@@ -249,3 +328,100 @@ def test_create_unlinked_skips_already_linked(tmp_path):
 
     assert client.created == [] and client.uploaded == []
     assert stats.get("created", 0) == 0 and shadow == {}
+
+
+# -- prune: deletion propagation (--prune) ---------------------------------
+
+
+def test_prune_deletes_vault_note_when_row_trashed(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    a = _linked_receipt(rec, "A", "a" * 64, "pg-A")
+    b = _linked_receipt(rec, "B", "b" * 64, "pg-B")
+    bf.save_shadow(tmp_path, {"pg-A": FRONT, "pg-B": FRONT})
+    # Only pg-A is still live; pg-B was trashed in Notion.
+    client = PruneClient({"rds": [_page("pg-A")]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, prune=True)
+
+    assert stats.get("vault_deleted") == 1
+    assert a.exists() and not b.exists()
+    assert (rec / "_assets_" / ("a" * 64)).exists()
+    assert not (rec / "_assets_" / ("b" * 64)).exists()  # source file gone too
+    assert client.trashed == []
+
+
+def test_prune_dry_run_keeps_vault_note(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    a = _linked_receipt(rec, "A", "a" * 64, "pg-A")
+    b = _linked_receipt(rec, "B", "b" * 64, "pg-B")
+    bf.save_shadow(tmp_path, {"pg-A": FRONT, "pg-B": FRONT})
+    client = PruneClient({"rds": [_page("pg-A")]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, prune=True, dry_run=True)
+
+    assert stats.get("would_delete_vault") == 1
+    assert a.exists() and b.exists()  # nothing actually deleted
+
+
+def test_prune_skips_delete_when_zero_live_rows(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    a = _linked_receipt(rec, "A", "a" * 64, "pg-A")
+    bf.save_shadow(tmp_path, {"pg-A": FRONT})
+    # Data source returns nothing (bad id / outage) — must NOT wipe the vault.
+    client = PruneClient({"rds": []}, gets={"pg-A": _page("pg-A")})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, prune=True)
+
+    assert "vault_deleted" not in stats
+    assert a.exists()
+
+
+def test_prune_trashes_row_when_vault_note_deleted(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    d = _linked_receipt(rec, "D", "d" * 64, "pg-D")  # still present
+    # pg-C was linked (in the shadow) but its vault note is gone.
+    bf.save_shadow(tmp_path, {"pg-C": FRONT, "pg-D": FRONT})
+    client = PruneClient({"rds": [_page("pg-C"), _page("pg-D")]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, prune=True)
+
+    assert stats.get("notion_trashed") == 1
+    assert client.trashed == ["pg-C"]
+    assert d.exists()  # the surviving note untouched
+
+
+def test_prune_dry_run_does_not_trash(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_receipt(rec, "D", "d" * 64, "pg-D")
+    bf.save_shadow(tmp_path, {"pg-C": FRONT, "pg-D": FRONT})
+    client = PruneClient({"rds": [_page("pg-C"), _page("pg-D")]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, prune=True, dry_run=True)
+
+    assert stats.get("would_trash_notion") == 1
+    assert client.trashed == []
+
+
+def test_prune_skips_trash_when_vault_empty(tmp_path):
+    (tmp_path / "Receipts").mkdir()  # no notes at all
+    bf.save_shadow(tmp_path, {"pg-C": FRONT})
+    client = PruneClient({"rds": [_page("pg-C")]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, prune=True)
+
+    assert client.trashed == []  # empty-vault guard prevented a mass-trash
+    assert "notion_trashed" not in stats
+
+
+def test_no_prune_leaves_deletions_alone(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    a = _linked_receipt(rec, "A", "a" * 64, "pg-A")
+    bf.save_shadow(tmp_path, {"pg-A": FRONT, "pg-B": FRONT})
+    # pg-B's note is already gone and pg-B's row is live; without --prune nothing
+    # destructive happens in either direction.
+    client = PruneClient({"rds": [_page("pg-A"), _page("pg-B")]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, full=True)
+
+    assert a.exists()
+    assert client.trashed == []
+    assert "vault_deleted" not in stats and "notion_trashed" not in stats

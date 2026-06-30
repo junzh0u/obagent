@@ -168,14 +168,24 @@ Notion is an editable mobile view.
 
 ```bash
 export NOTION_TOKEN=ntn_...
-obagent notion sync --dry-run   # preview
-obagent notion sync             # reconcile vault <-> Notion
+obagent notion sync --dry-run            # preview
+obagent notion sync                      # reconcile vault <-> Notion (field edits)
+obagent notion sync --prune --dry-run    # preview deletions too
+obagent notion sync --prune              # also propagate deletions both ways
 ```
 
 Each note is linked by a `notion_id` in its frontmatter. Sync does a 3-way merge
 against a *shadow* (the values at last sync): a change on either side propagates; a
 genuine both-sides conflict is resolved last-writer-wins and logged. `--full` ignores
 the incremental hints and re-checks every linked record.
+
+By default sync moves *field edits*, never deletions. `--prune` opts into two-way
+**deletion** propagation: trashing a row in Notion deletes its vault note **and the
+original scanned file**; deleting a vault note trashes its Notion row (a recoverable
+soft-delete). It forces a full scan and refuses to act when a data source or the
+vault scans to zero (an outage shouldn't wipe everything) — preview with
+`--prune --dry-run` first. (Deleting a vault note already removes its exported copy
+via `export`.)
 
 The initial one-time link (matching existing Notion rows to vault notes) lives in
 `commands/notion/backfill.py` and is run as a one-off, not a CLI command.

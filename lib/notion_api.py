@@ -220,6 +220,11 @@ class NotionClient:
             "PATCH", f"{API}/pages/{page_id}", data={"properties": properties}
         )
 
+    def trash_page(self, page_id: str) -> dict[str, Any]:
+        """Move a page (row) to trash — a soft delete, recoverable in Notion for 30
+        days. Used to propagate a vault-note deletion to its Notion row."""
+        return self.api("PATCH", f"{API}/pages/{page_id}", data={"in_trash": True})
+
     def query(
         self,
         data_source_id: str,

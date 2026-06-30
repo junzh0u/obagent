@@ -127,6 +127,17 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
   shadow, so losing the hints just triggers a self-healing `--full` pass.
   `--dry-run` reports without writing. Token from `NOTION_TOKEN`; data-source ids
   from `OBAGENT_NOTION_<TYPE>_DS` (env-only, no defaults — an unset type is skipped).
+- **Deletions are not propagated by default** — the field merge only ever adopts/
+  pushes values, never deletes (the vault is the source of truth and holds the
+  original scan). **`--prune`** opts into two-way **DELETION** propagation: a trashed
+  Notion row deletes its linked vault note **and its source file** (`delete_note`);
+  a vault note gone since the last sync trashes its Notion row (`client.trash_page`,
+  a recoverable soft-delete). `--prune` forces a **full scan** (the complete live-row
+  set is needed to tell "trashed" from "unchanged") and is guarded against mass
+  deletion — a data source that returns zero live rows, or a vault that scans to zero
+  linked notes, is treated as an outage and skipped, not a mass-trash. Pair with
+  `--dry-run` to preview (`would_delete_vault` / `would_trash_notion`). (vault →
+  export deletion already happens via `export`'s dangling cleanup.)
 - **Backfill** (`commands/notion/backfill.py`): the one-time initial link (match
   existing rows by a normalized key, write `notion_id`, init the shadow). Run as a
   one-off — intentionally **not** wired as a CLI command.
