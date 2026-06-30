@@ -467,7 +467,7 @@ def test_upload_sources_multifile_encodes_sha(tmp_path):
     rec = tmp_path / "Receipts"
     rec.mkdir()
     note = _multifile_note(rec, "note", ["a" * 64, "b" * 64])
-    pairs = sync._upload_sources(FakeClient(), tmp_path, "receipt", note)
+    pairs = bf.upload_sources(FakeClient(), tmp_path, "receipt", note)
     assert sorted(n for _, n in pairs) == [
         "note-aaaaaaaaaaaa.pdf",
         "note-bbbbbbbbbbbb.pdf",
@@ -478,5 +478,5 @@ def test_upload_sources_singlefile_keeps_clean_name(tmp_path):
     rec = tmp_path / "Receipts"
     rec.mkdir()
     note = _multifile_note(rec, "solo", ["a" * 64])  # one source -> no sha suffix
-    pairs = sync._upload_sources(FakeClient(), tmp_path, "receipt", note)
+    pairs = bf.upload_sources(FakeClient(), tmp_path, "receipt", note)
     assert [n for _, n in pairs] == ["solo.pdf"]

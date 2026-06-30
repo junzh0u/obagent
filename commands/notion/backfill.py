@@ -1,8 +1,10 @@
 """Initial backfill: link existing Notion rows to vault notes (one-time).
 
 The 2026-06 import created rows with no ``notion_id`` link. This matches each
-existing row to its vault note and (when not a dry run) records the link —
-without re-uploading attachments.
+existing row to its vault note, records the link, and canonicalizes the row's
+``Sha``/``File`` to the note's current sources — re-uploading attachments with
+sha-encoded names only when they have drifted. Idempotent: re-running is a no-op on
+already-canonical rows.
 
 Matching keys are normalized so they survive cosmetic differences:
 - **receipt**  -> ``(date, merchant, numeric-amount)`` — robust to currency-format
@@ -22,8 +24,9 @@ from pathlib import Path
 
 from commands.render import _SUMMARY_RE, _parse_frontmatter
 from lib import notion_fieldmap as fm
-from lib.notion_api import NotionClient
-from lib.utils import SHA_RE
+from lib.constants import ASSETS_DIR
+from lib.notion_api import FILE_NAME_LIMIT, NotionClient, truncate_u16
+from lib.utils import SHA_RE, source_file
 
 FOLDER = {"receipt": "Receipts", "document": "Documents"}
 # Fields that appear in the filename/title (a change here triggers a rename).
@@ -251,6 +254,63 @@ def _apply_vault(
     return note.path
 
 
+def upload_sources(
+    client: NotionClient, vault: Path, type_name: str, note: VaultNote
+) -> list[tuple[str, str]]:
+    """Upload the note's source file(s); return (upload_id, name) pairs for the
+    ``File`` property. A **multi-file** note suffixes every name with ``-<sha12>``
+    (kept intact past truncation) so the File entries map back to a sha for the
+    per-file two-way sync; a single-file note keeps the clean stem. A missing source
+    is warned and skipped, not fatal."""
+    base = vault / FOLDER[type_name] / ASSETS_DIR
+    multi = len(note.shas) > 1
+    pairs: list[tuple[str, str]] = []
+    for sha in note.shas:
+        src = source_file(base / sha)
+        if src is None:
+            print(
+                f"  warning: no source for {sha[:12]} ({note.path.name!r})", flush=True
+            )
+            continue
+        if multi:
+            sfx = f"-{sha[:12]}"
+            room = FILE_NAME_LIMIT - len(src.suffix) - len(sfx)
+            stem = truncate_u16(note.path.stem, room) + sfx
+        else:
+            stem = truncate_u16(note.path.stem, FILE_NAME_LIMIT - len(src.suffix))
+        name = stem + src.suffix
+        pairs.append((client.upload_file(src, name), name))
+    return pairs
+
+
+def _file_drifted(note: VaultNote, props: dict) -> bool:
+    """A multi-file note whose Notion ``File`` names don't (all) encode its current
+    shas — i.e. the attachments need re-uploading with sha-encoded names. Single-file
+    notes never drift (their clean name carries no sha and needs none)."""
+    if len(note.shas) <= 1:
+        return False
+    notion12, unparseable = fm.read_file_sha12(props)
+    return bool(unparseable) or notion12 != {s[:12] for s in note.shas}
+
+
+def _needs_canonical(note: VaultNote, props: dict) -> bool:
+    """True if the row's ``Sha`` or ``File`` no longer matches the note's sources
+    (upload-free check, for dry-run reporting and the idempotency skip)."""
+    return fm.read_sha(props) != set(note.shas) or _file_drifted(note, props)
+
+
+def _canon_props(
+    client: NotionClient, vault: Path, type_name: str, note: VaultNote, props: dict
+) -> dict:
+    """Property writes that bring a row's ``Sha``/``File`` to the note's current
+    sources: always restamp ``Sha``; re-upload ``File`` only when a multi-file note's
+    names have drifted. Uploads — callers must gate on ``not dry_run``."""
+    update: dict = dict(fm.sha_property(note.shas))
+    if _file_drifted(note, props):
+        update.update(fm.file_property(upload_sources(client, vault, type_name, note)))
+    return update
+
+
 def run_backfill(
     client: NotionClient,
     vault: Path,
@@ -260,9 +320,11 @@ def run_backfill(
     dry_run: bool = True,
     limit: int | None = None,
 ) -> dict[str, int]:
-    """Link matched rows: write notion_id (+ adopt diffs) to the vault, set
-    Sha/Consumed At (+ artifact fixes) on the row, and record the shadow base.
-    Skips notes already linked (idempotent/resumable)."""
+    """Link matched rows and canonicalize their attachments. Unlinked note: write
+    notion_id (+ adopt field diffs) to the vault, and set Sha/Consumed At + a
+    sha-encoded File on the row. Already-linked note: re-stamp Sha and re-upload File
+    only if they have drifted from the note's sources. Idempotent — a row already
+    canonical is left untouched."""
     notes = {n.key: n for n in gather_vault(vault / FOLDER[type_name], type_name)}
     shadow = load_shadow(vault)
     stats: defaultdict[str, int] = defaultdict(int)
@@ -275,10 +337,23 @@ def run_backfill(
         if note is None:
             stats["unmatched_row"] += 1
             continue
-        if note.notion_id:
-            stats["already_linked"] += 1
-            continue
         page_id = page["id"]
+
+        # Already linked: only (re)canonicalize Sha/File if they've drifted.
+        if note.notion_id:
+            if not _needs_canonical(note, props):
+                stats["already_linked"] += 1
+            elif dry_run:
+                stats["would_canonicalize"] += 1
+            else:
+                client.update_page(
+                    page_id, _canon_props(client, vault, type_name, note, props)
+                )
+                stats["canonicalized"] += 1
+                done += 1
+            continue
+
+        # Unlinked: adopt field diffs + write notion_id, then canonicalize the row.
         ned = fm.read_editable(type_name, props)
         vu, nu, sh = reconcile(type_name, note, ned)
         if dry_run:
@@ -295,9 +370,9 @@ def run_backfill(
             continue
         # vault side: notion_id + adopted fields (+ rename)
         _apply_vault(note, page_id, vu, type_name)
-        # notion side: Sha + Consumed At (+ any artifact fixes)
+        # notion side: Sha + sha-encoded File + Consumed At (+ artifact fixes)
         row_props = {
-            **fm.sha_property(note.shas),
+            **_canon_props(client, vault, type_name, note, props),
             **fm.consumed_at_property(note.frontmatter.get("consumed_at", "")),
             **nu,
         }

@@ -83,13 +83,15 @@ makes it the canonical "reconcile existing rows" op and wires it:
 
 ## Build stages (one commit each)
 
-1. **Naming + fieldmap helpers** — `_upload_sources` sha-encodes multi-file names;
-   `read_sha` / `read_file_sha12`. Pure, non-destructive. Tests.
-2. **Default-on vault→Notion file push** — drift = `note.shas` vs `Sha`; re-push
-   `File`+`Sha`. Tests.
-3. **Backfill as a command + canonicalization** (the migration). Tests + docs.
-4. **`--prune` Notion→vault per-file delete** — parse `File` names, 3-way,
-   `remove_entry`, fail-safe guards. Tests + docs.
+1. **Naming + fieldmap helpers** — ✅ **done.** `upload_sources` sha-encodes
+   multi-file names; `read_sha` / `read_file_sha12`. Pure, non-destructive.
+2. **Default-on vault→Notion file push** — *remaining.* drift = `note.shas` vs
+   `Sha`; re-push `File`+`Sha` during normal sync.
+3. **Backfill as a command + canonicalization** — ✅ **done** (3a: wire
+   `obagent notion backfill`; 3b: `upload_sources` relocated to `backfill.py`,
+   `run_backfill` canonicalizes every linked row's `Sha`/`File`, idempotent).
+4. **`--prune` Notion→vault per-file delete** — *remaining.* parse `File` names,
+   3-way, `remove_entry`, fail-safe guards.
 
 ## Risks
 

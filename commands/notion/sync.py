@@ -34,13 +34,12 @@ from commands.notion.backfill import (
     load_shadow,
     run_backfill,
     save_shadow,
+    upload_sources,
 )
 from commands.receipt.pipeline import ReceiptFields
 from commands.remove import remove_entry
 from lib import notion_fieldmap as fm
-from lib.constants import ASSETS_DIR
-from lib.notion_api import FILE_NAME_LIMIT, NotionClient, truncate_u16
-from lib.utils import source_file
+from lib.notion_api import NotionClient
 
 HINTS_PATH = ".obagent/notion-sync-hints.json"
 FIELDS_CLASS = {"receipt": ReceiptFields, "document": DocumentFields}
@@ -218,39 +217,6 @@ def _existing_row_by_sha(
     return results[0]["id"] if results else None
 
 
-def _upload_sources(
-    client: NotionClient, vault: Path, type_name: str, note: VaultNote
-) -> list[tuple[str, str]]:
-    """Upload the note's source file(s); return (upload_id, name) pairs for the
-    ``File`` property. A **multi-file** note suffixes every name with ``-<sha12>``
-    (kept intact past truncation) so the File entries map back to a sha for the
-    per-file two-way sync; a single-file note keeps the clean stem. A missing source
-    is warned and skipped, not fatal."""
-    base = vault / FOLDER[type_name] / ASSETS_DIR
-    multi = len(note.shas) > 1
-    pairs: list[tuple[str, str]] = []
-    for sha in note.shas:
-        src = source_file(base / sha)
-        if src is None:
-            print(
-                f"  warning: no source for {sha[:12]} ({note.path.name!r})", flush=True
-            )
-            continue
-        if multi:
-            sfx = f"-{sha[:12]}"
-            stem = (
-                truncate_u16(
-                    note.path.stem, FILE_NAME_LIMIT - len(src.suffix) - len(sfx)
-                )
-                + sfx
-            )
-        else:
-            stem = truncate_u16(note.path.stem, FILE_NAME_LIMIT - len(src.suffix))
-        name = stem + src.suffix
-        pairs.append((client.upload_file(src, name), name))
-    return pairs
-
-
 def create_unlinked(
     client: NotionClient,
     vault: Path,
@@ -281,7 +247,7 @@ def create_unlinked(
                     **fm.editable_properties(t, note.frontmatter),
                     **fm.sha_property(note.shas),
                     **fm.consumed_at_property(note.frontmatter.get("consumed_at", "")),
-                    **fm.file_property(_upload_sources(client, vault, t, note)),
+                    **fm.file_property(upload_sources(client, vault, t, note)),
                 }
                 page_id, outcome = client.create_page(ds, props)["id"], "created"
             note.path.write_text(inject_notion_id(note.path.read_text(), page_id))

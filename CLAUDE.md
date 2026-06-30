@@ -138,10 +138,12 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
   linked notes, is treated as an outage and skipped, not a mass-trash. Pair with
   `--dry-run` to preview (`would_delete_vault` / `would_trash_notion`). (vault →
   export deletion already happens via `export`'s dangling cleanup.)
-- **Backfill** (`obagent notion backfill`, `commands/notion/backfill.py`): the
-  one-time initial link — match existing rows by a normalized key, write `notion_id`,
-  init the shadow. Idempotent (notes already carrying a `notion_id` are skipped), so
-  it's safe to re-run; `--dry-run` reports matches without writing.
+- **Backfill** (`obagent notion backfill`, `commands/notion/backfill.py`): match
+  existing rows by a normalized key, write `notion_id` + init the shadow, and
+  **canonicalize** each linked row's `Sha`/`File` to the note's sources — re-uploading
+  attachments with sha-encoded `-<sha12>` names only when they've drifted (the
+  migration that enables the per-file two-way sync). Idempotent (an already-linked,
+  already-canonical row is untouched); `--dry-run` reports without writing.
 - **Boundary:** Notion code is one-directional — `lib`/pipeline/render never import
   it; only `commands/notion` + `main` do.
 

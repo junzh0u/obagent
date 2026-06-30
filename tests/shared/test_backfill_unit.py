@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from commands.notion import backfill as bf
+from lib.notion_api import NotionClient
 
 
 def _rich(s):
@@ -190,3 +191,98 @@ def test_classify_buckets():
     assert [(k, pid) for k, pid in rep.notion_only] == [(("notion_only",), "pg-orphan")]
     assert len(rep.ambiguous) == 1
     assert rep.ambiguous[0][0] == ("dup",)
+
+
+# -- run_backfill canonicalization (Sha/File) ------------------------------
+
+
+class FakeBackfillClient(NotionClient):
+    """Serves fixed pages; records update_page + upload_file calls."""
+
+    def __init__(self, pages):
+        super().__init__(token="test")
+        self.pages = pages
+        self.updated: list[tuple[str, dict]] = []
+        self.uploaded: list[tuple[str, str]] = []
+
+    def iter_pages(self, data_source_id, *, filter=None, sorts=None, page_size=100):
+        yield from self.pages
+
+    def update_page(self, page_id, properties):
+        self.updated.append((page_id, properties))
+        return {"id": page_id}
+
+    def upload_file(self, path, display_name):
+        self.uploaded.append((str(path), display_name))
+        return f"upload-{len(self.uploaded)}"
+
+
+def _linked_multifile(rec, shas, *, notion_id="pg-1"):
+    for sha in shas:
+        (rec / "_assets_" / sha / "src").mkdir(parents=True)
+        (rec / "_assets_" / sha / "src" / "original.pdf").write_bytes(b"%PDF")
+    embeds = "".join(f"![[_assets_/{s}/src/original.pdf]]\n" for s in shas)
+    (rec / "r.md").write_text(
+        "---\nmerchant: Costco\ndate: 2026-06-27\ntotal: $10.00\n"
+        f"consumed_at: x\nnotion_id: {notion_id}\n---\n" + embeds
+    )
+
+
+def _receipt_page(sha_text, file_names, pid="pg-1"):
+    return {
+        "id": pid,
+        "properties": {
+            "Merchant": _rich("Costco"),
+            "Date": _date("2026-06-27"),
+            "Total": _number(10.0),
+            "Non-USD Total": {"type": "rich_text", "rich_text": []},
+            "Sha": _rich(sha_text),
+            "File": {"files": [{"name": n} for n in file_names]},
+        },
+    }
+
+
+def test_backfill_canonicalizes_drifted_multifile(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    shas = ["a" * 64, "b" * 64]
+    _linked_multifile(rec, shas)
+    # Row matches by key, but File names aren't sha-encoded and Sha is empty.
+    page = _receipt_page("", ["old1.pdf", "old2.pdf"])
+    client = FakeBackfillClient([page])
+    stats = bf.run_backfill(client, tmp_path, "receipt", "rds", dry_run=False)
+
+    assert stats.get("canonicalized") == 1
+    assert len(client.uploaded) == 2  # both sources re-uploaded
+    pid, props = client.updated[0]
+    assert pid == "pg-1"
+    assert props["Sha"]["rich_text"][0]["text"]["content"] == "\n".join(shas)
+    assert sorted(f["name"] for f in props["File"]["files"]) == [
+        "r-aaaaaaaaaaaa.pdf",
+        "r-bbbbbbbbbbbb.pdf",
+    ]
+
+
+def test_backfill_skips_already_canonical(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    shas = ["a" * 64, "b" * 64]
+    _linked_multifile(rec, shas)
+    page = _receipt_page("\n".join(shas), ["r-aaaaaaaaaaaa.pdf", "r-bbbbbbbbbbbb.pdf"])
+    client = FakeBackfillClient([page])
+    stats = bf.run_backfill(client, tmp_path, "receipt", "rds", dry_run=False)
+
+    assert stats.get("already_linked") == 1
+    assert client.updated == [] and client.uploaded == []  # idempotent no-op
+
+
+def test_backfill_dry_run_reports_canonicalize(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_multifile(rec, ["a" * 64, "b" * 64])
+    page = _receipt_page("", ["old1.pdf", "old2.pdf"])
+    client = FakeBackfillClient([page])
+    stats = bf.run_backfill(client, tmp_path, "receipt", "rds", dry_run=True)
+
+    assert stats.get("would_canonicalize") == 1
+    assert client.updated == [] and client.uploaded == []  # nothing uploaded
