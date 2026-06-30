@@ -20,6 +20,7 @@ class PruneClient(NotionClient):
         self.gets = gets or {}
         self.trashed: list[str] = []
         self.updated: list[tuple[str, dict]] = []
+        self.uploaded: list[tuple[str, str]] = []
 
     def iter_pages(self, data_source_id, *, filter=None, sorts=None, page_size=100):
         yield from self.pages_by_ds.get(data_source_id, [])
@@ -31,6 +32,10 @@ class PruneClient(NotionClient):
     def update_page(self, page_id, properties):
         self.updated.append((page_id, properties))
         return {"id": page_id}
+
+    def upload_file(self, path, display_name):
+        self.uploaded.append((str(path), display_name))
+        return f"upload-{len(self.uploaded)}"
 
     def api(self, method, url, *, data=None, headers=None, raw=False):
         if method == "GET" and url.rsplit("/", 1)[-1] in self.gets:
@@ -480,3 +485,70 @@ def test_upload_sources_singlefile_keeps_clean_name(tmp_path):
     note = _multifile_note(rec, "solo", ["a" * 64])  # one source -> no sha suffix
     pairs = bf.upload_sources(FakeClient(), tmp_path, "receipt", note)
     assert [n for _, n in pairs] == ["solo.pdf"]
+
+
+# -- stage 2: vault->Notion file push on Sha drift -------------------------
+
+
+def _row_with_files(nid, sha_text, file_names):
+    return {
+        "id": nid,
+        "last_edited_time": "2020-01-01T00:00:00.000Z",
+        "properties": {
+            **_page(nid)["properties"],
+            "Sha": _rt(sha_text),
+            "File": {"files": [{"name": n} for n in file_names]},
+        },
+    }
+
+
+def test_sync_pushes_files_when_source_set_changed(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_receipt(rec, "R", "a" * 64, "pg-1")  # vault has ONE source now
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})
+    # Row still records {a, b} + both old attachments (vault dropped b).
+    page = _row_with_files(
+        "pg-1",
+        "\n".join(["a" * 64, "b" * 64]),
+        ["R-aaaaaaaaaaaa.pdf", "R-bbbbbbbbbbbb.pdf"],
+    )
+    client = PruneClient({"rds": [page]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"})
+
+    assert stats.get("files_pushed") == 1
+    assert len(client.uploaded) == 1  # current single source re-uploaded
+    pushed = [p for _pid, p in client.updated if "File" in p]
+    assert len(pushed) == 1
+    assert pushed[0]["Sha"]["rich_text"][0]["text"]["content"] == "a" * 64
+    assert [f["name"] for f in pushed[0]["File"]["files"]] == ["R.pdf"]
+
+
+def test_sync_no_file_push_when_in_sync(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_receipt(rec, "R", "a" * 64, "pg-1")
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})
+    page = _row_with_files("pg-1", "a" * 64, ["R.pdf"])  # Sha matches note.shas
+    client = PruneClient({"rds": [page]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"})
+
+    assert "files_pushed" not in stats
+    assert client.uploaded == []
+
+
+def test_sync_dry_run_reports_file_push(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_receipt(rec, "R", "a" * 64, "pg-1")
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})
+    page = _row_with_files(
+        "pg-1",
+        "\n".join(["a" * 64, "b" * 64]),
+        ["R-aaaaaaaaaaaa.pdf", "R-bbbbbbbbbbbb.pdf"],
+    )
+    client = PruneClient({"rds": [page]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, dry_run=True)
+
+    assert stats.get("would_push_files") == 1
+    assert client.uploaded == [] and client.updated == []

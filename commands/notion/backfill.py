@@ -299,16 +299,17 @@ def _needs_canonical(note: VaultNote, props: dict) -> bool:
     return fm.read_sha(props) != set(note.shas) or _file_drifted(note, props)
 
 
-def _canon_props(
-    client: NotionClient, vault: Path, type_name: str, note: VaultNote, props: dict
+def canon_props(
+    client: NotionClient, vault: Path, type_name: str, note: VaultNote
 ) -> dict:
-    """Property writes that bring a row's ``Sha``/``File`` to the note's current
-    sources: always restamp ``Sha``; re-upload ``File`` only when a multi-file note's
-    names have drifted. Uploads — callers must gate on ``not dry_run``."""
-    update: dict = dict(fm.sha_property(note.shas))
-    if _file_drifted(note, props):
-        update.update(fm.file_property(upload_sources(client, vault, type_name, note)))
-    return update
+    """Property writes that make a row's ``Sha``/``File`` match the note's current
+    sources: restamp ``Sha`` and re-upload ``File`` (the *full* current set, so a
+    removed source drops off even when the note shrinks to a single file). Uploads —
+    callers must gate on ``not dry_run``. Shared by backfill and the sync push."""
+    return {
+        **fm.sha_property(note.shas),
+        **fm.file_property(upload_sources(client, vault, type_name, note)),
+    }
 
 
 def run_backfill(
@@ -346,9 +347,7 @@ def run_backfill(
             elif dry_run:
                 stats["would_canonicalize"] += 1
             else:
-                client.update_page(
-                    page_id, _canon_props(client, vault, type_name, note, props)
-                )
+                client.update_page(page_id, canon_props(client, vault, type_name, note))
                 stats["canonicalized"] += 1
                 done += 1
             continue
@@ -372,7 +371,7 @@ def run_backfill(
         _apply_vault(note, page_id, vu, type_name)
         # notion side: Sha + sha-encoded File + Consumed At (+ artifact fixes)
         row_props = {
-            **_canon_props(client, vault, type_name, note, props),
+            **canon_props(client, vault, type_name, note),
             **fm.consumed_at_property(note.frontmatter.get("consumed_at", "")),
             **nu,
         }

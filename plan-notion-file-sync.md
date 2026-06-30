@@ -85,8 +85,10 @@ makes it the canonical "reconcile existing rows" op and wires it:
 
 1. **Naming + fieldmap helpers** — ✅ **done.** `upload_sources` sha-encodes
    multi-file names; `read_sha` / `read_file_sha12`. Pure, non-destructive.
-2. **Default-on vault→Notion file push** — *remaining.* drift = `note.shas` vs
-   `Sha`; re-push `File`+`Sha` during normal sync.
+2. **Default-on vault→Notion file push** — ✅ **done.** During `sync`, drift =
+   `read_sha(props) != note.shas` → re-push `File`+`Sha` via `canon_props` (also
+   fixed `canon_props` to always re-upload `File`, so a note shrinking to single-file
+   still drops the removed attachment). Stats: `files_pushed` / `would_push_files`.
 3. **Backfill as a command + canonicalization** — ✅ **done** (3a: wire
    `obagent notion backfill`; 3b: `upload_sources` relocated to `backfill.py`,
    `run_backfill` canonicalizes every linked row's `Sha`/`File`, idempotent).

@@ -114,6 +114,14 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
   `total` (USD → `Total` number, non-USD → `Non-USD Total` ISO text); document
   `title`↔`Name`, `tags`/`people`↔multi-select, `summary` (body callout)↔`Summary`.
   Receipt `Name` is a Notion formula → **not** synced.
+- **Attachments** (`File`/`Sha`, vault → Notion one-way): a row's `File` tracks the
+  note's source set; `Sha` records that set (the create-crash dedup guard **and** the
+  base for file drift). Multi-file uploads are named `{stem}-<sha12>` so each `File`
+  entry maps back to a sha. `sync` re-pushes `File`+`Sha` whenever the vault's sources
+  change — `read_sha(props) != note.shas` (e.g. `remove <sha>` from a multi-file note,
+  a dropped source falls off); `backfill` canonicalizes the same way via `canon_props`.
+  A file removed *in Notion* is reasserted from the vault on the next sync (the vault
+  owns the files).
 - **`obagent notion sync`** — one reconciliation pass. A git-style **3-way merge**
   against the **shadow** (`{vault}/.obagent/notion-shadow.json` = field values at
   last sync): Notion-changed adopts into the vault, vault-changed pushes to Notion,

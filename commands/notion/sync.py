@@ -29,6 +29,7 @@ from commands.notion.backfill import (
     FOLDER,
     TITLE_FIELDS,
     VaultNote,
+    canon_props,
     gather_vault,
     inject_notion_id,
     load_shadow,
@@ -297,6 +298,7 @@ def run_sync(
     full_scan = full or prune or not watermark
     t0 = time.monotonic()
     notion_changed: dict[str, tuple[str, dict[str, str], str]] = {}
+    notion_props: dict[str, dict] = {}  # page id -> raw properties (for file sync)
     live_by_type: dict[str, set[str]] = {t: set() for t in ds_by_type}
     max_edited = watermark or ""
     for t, ds in ds_by_type.items():
@@ -315,6 +317,7 @@ def run_sync(
                 fm.read_editable(t, page["properties"]),
                 le,
             )
+            notion_props[page["id"]] = page["properties"]
             live_by_type[t].add(page["id"])
             max_edited = max(max_edited, le)
     scope = "FULL scan" if full_scan else f"since {watermark}"
@@ -415,13 +418,19 @@ def run_sync(
             if page.get("archived") or page.get("in_trash"):
                 stats["archived_in_notion"] += 1
                 continue
+            notion_props[nid] = page["properties"]
             ned, le = (
                 fm.read_editable(t, page["properties"]),
                 page.get("last_edited_time", ""),
             )
         winner = "notion" if le >= _mtime_iso(note.path) else "vault"
         vu, nu, sh, conflicts = merge_fields(t, base, note.frontmatter, ned, winner)
-        if not vu and not nu:
+        # Stage 2: the vault's source set changed (note.shas != the row's recorded
+        # Sha) -> re-push File + Sha so Notion follows the vault (vault wins;
+        # non-destructive). A file-only change has no field diff, so this must be
+        # checked alongside vu/nu, not gated behind them.
+        file_drift = fm.read_sha(notion_props[nid]) != set(note.shas)
+        if not vu and not nu and not file_drift:
             shadow[nid] = sh
             stats["unchanged"] += 1
             continue
@@ -437,6 +446,9 @@ def run_sync(
                 print(f"  -> vault {note.path.name[:34]!r}: {vu}", flush=True)
             if nu:
                 print(f"  -> notion {note.path.name[:34]!r}: {list(nu)}", flush=True)
+            if file_drift:
+                print(f"  -> files {note.path.name[:34]!r}: {len(note.shas)} source(s)")
+                stats["would_push_files"] += 1
             stats["would_change"] += 1
             continue
         if vu:
@@ -445,6 +457,9 @@ def run_sync(
         if nu:
             client.update_page(nid, nu)
             stats["notion_updated"] += 1
+        if file_drift:
+            client.update_page(nid, canon_props(client, vault, t, note))
+            stats["files_pushed"] += 1
         shadow[nid] = sh
     print(
         f"  reconcile: {len(candidates)} candidates, {fetched} per-note fetches "

@@ -286,3 +286,24 @@ def test_backfill_dry_run_reports_canonicalize(tmp_path):
 
     assert stats.get("would_canonicalize") == 1
     assert client.updated == [] and client.uploaded == []  # nothing uploaded
+
+
+def test_backfill_canon_drops_removed_source(tmp_path):
+    """A note shrunk from two sources to one: File is re-pushed to just the survivor
+    (even though the result is single-file, the dropped attachment is removed)."""
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_multifile(rec, ["a" * 64])  # vault now has ONE source
+    # Row still records both shas + both (encoded) attachments.
+    page = _receipt_page(
+        "\n".join(["a" * 64, "b" * 64]),
+        ["r-aaaaaaaaaaaa.pdf", "r-bbbbbbbbbbbb.pdf"],
+    )
+    client = FakeBackfillClient([page])
+    stats = bf.run_backfill(client, tmp_path, "receipt", "rds", dry_run=False)
+
+    assert stats.get("canonicalized") == 1
+    assert len(client.uploaded) == 1  # only the survivor re-uploaded
+    _, props = client.updated[0]
+    assert [f["name"] for f in props["File"]["files"]] == ["r.pdf"]  # b dropped
+    assert props["Sha"]["rich_text"][0]["text"]["content"] == "a" * 64
