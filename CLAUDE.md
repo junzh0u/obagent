@@ -121,7 +121,8 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
   change — `read_sha(props) != note.shas` (e.g. `remove <sha>` from a multi-file note,
   a dropped source falls off); `backfill` canonicalizes the same way via `canon_props`.
   A file removed *in Notion* is reasserted from the vault on the next sync (the vault
-  owns the files).
+  owns the files); under **`--prune`** it instead deletes that vault source
+  (`_prune_notion_removed`), so per-file removal is two-way like row/note deletion.
 - **`obagent notion sync`** — one reconciliation pass. A git-style **3-way merge**
   against the **shadow** (`{vault}/.obagent/notion-shadow.json` = field values at
   last sync): Notion-changed adopts into the vault, vault-changed pushes to Notion,
@@ -140,12 +141,15 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
   original scan). **`--prune`** opts into two-way **DELETION** propagation: a trashed
   Notion row deletes its linked vault note **and its source file** (`delete_note`);
   a vault note gone since the last sync trashes its Notion row (`client.trash_page`,
-  a recoverable soft-delete). `--prune` forces a **full scan** (the complete live-row
-  set is needed to tell "trashed" from "unchanged") and is guarded against mass
-  deletion — a data source that returns zero live rows, or a vault that scans to zero
-  linked notes, is treated as an outage and skipped, not a mass-trash. Pair with
-  `--dry-run` to preview (`would_delete_vault` / `would_trash_notion`). (vault →
-  export deletion already happens via `export`'s dangling cleanup.)
+  a recoverable soft-delete); and — per file — a single source whose `File` attachment
+  was removed in Notion is deleted from the vault (`_prune_notion_removed`, fail-safe:
+  a row with any unparseable `File` name is skipped). `--prune` forces a **full scan**
+  (the complete live-row set is needed to tell "trashed" from "unchanged") and is
+  guarded against mass deletion — a data source that returns zero live rows, or a
+  vault that scans to zero linked notes, is treated as an outage and skipped, not a
+  mass-trash. Pair with `--dry-run` to preview (`would_delete_vault` /
+  `would_trash_notion` / `would_delete_vault_files`). (vault → export deletion already
+  happens via `export`'s dangling cleanup.)
 - **Backfill** (`obagent notion backfill`, `commands/notion/backfill.py`): match
   existing rows by a normalized key, write `notion_id` + init the shadow, and
   **canonicalize** each linked row's `Sha`/`File` to the note's sources — re-uploading

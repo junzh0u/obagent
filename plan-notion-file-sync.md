@@ -1,9 +1,10 @@
 # Notion ↔ vault per-file two-way sync — plan
 
-**Status (2026-06-30): DESIGNED.** Per-file (per-sha) two-way sync of a multi-file
-note's sources against its Notion row's `File` attachments. Whole-note create/delete
-is already handled (`create_unlinked` / `--prune` row delete); this adds the
-per-file granularity *within* a surviving multi-file note.
+**Status (2026-06-30): BUILT** (all four stages — see Build stages). Per-file
+(per-sha) two-way sync of a multi-file note's sources against its Notion row's `File`
+attachments. Whole-note create/delete is already handled (`create_unlinked` /
+`--prune` row delete); this adds the per-file granularity *within* a surviving
+multi-file note.
 
 ## Goal
 
@@ -92,8 +93,11 @@ makes it the canonical "reconcile existing rows" op and wires it:
 3. **Backfill as a command + canonicalization** — ✅ **done** (3a: wire
    `obagent notion backfill`; 3b: `upload_sources` relocated to `backfill.py`,
    `run_backfill` canonicalizes every linked row's `Sha`/`File`, idempotent).
-4. **`--prune` Notion→vault per-file delete** — *remaining.* parse `File` names,
-   3-way, `remove_entry`, fail-safe guards.
+4. **`--prune` Notion→vault per-file delete** — ✅ **done.** `_prune_notion_removed`:
+   a sha in the row's `Sha`+vault but gone from the live `File` names → `remove_entry`
+   (DESTRUCTIVE), then the push restamps `Sha`/`File`. Fail-safe: any unparseable
+   `File` name skips the row. Non-prune reasserts the file instead (vault owns files).
+   Stats: `vault_files_deleted` / `would_delete_vault_files`.
 
 ## Risks
 

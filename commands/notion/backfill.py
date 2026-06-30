@@ -293,9 +293,11 @@ def _file_drifted(note: VaultNote, props: dict) -> bool:
     return bool(unparseable) or notion12 != {s[:12] for s in note.shas}
 
 
-def _needs_canonical(note: VaultNote, props: dict) -> bool:
+def needs_canonical(note: VaultNote, props: dict) -> bool:
     """True if the row's ``Sha`` or ``File`` no longer matches the note's sources
-    (upload-free check, for dry-run reporting and the idempotency skip)."""
+    (upload-free check). Drives backfill's idempotency skip and the sync file push
+    (Sha-drift = vault changed its set; File-drift = a Notion-side File edit to
+    reassert). Shared with sync."""
     return fm.read_sha(props) != set(note.shas) or _file_drifted(note, props)
 
 
@@ -342,7 +344,7 @@ def run_backfill(
 
         # Already linked: only (re)canonicalize Sha/File if they've drifted.
         if note.notion_id:
-            if not _needs_canonical(note, props):
+            if not needs_canonical(note, props):
                 stats["already_linked"] += 1
             elif dry_run:
                 stats["would_canonicalize"] += 1

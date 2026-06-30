@@ -33,6 +33,7 @@ from commands.notion.backfill import (
     gather_vault,
     inject_notion_id,
     load_shadow,
+    needs_canonical,
     run_backfill,
     save_shadow,
     upload_sources,
@@ -127,6 +128,45 @@ def delete_note(vault: Path, type_name: str, note: VaultNote) -> None:
     for sha in note.shas:
         remove_entry(path_dir, sha)
     note.path.unlink(missing_ok=True)
+
+
+def _prune_notion_removed(
+    vault: Path,
+    type_name: str,
+    note: VaultNote,
+    props: dict,
+    stats: defaultdict[str, int],
+    *,
+    dry_run: bool,
+) -> None:
+    """--prune: delete the vault source(s) whose ``File`` entry was removed in Notion
+    — a sha in the row's ``Sha`` (base) and still in the vault, but gone from the live
+    ``File`` names. DESTRUCTIVE (removes the original scan via ``remove_entry``).
+    Mutates ``note.shas`` so the follow-on push restamps ``Sha``/``File`` to match.
+
+    Fail-safe: a row with any unparseable ``File`` name (renamed / pre-migration) is
+    skipped entirely — we can't map names to shas, so we don't risk a wrong delete."""
+    if len(note.shas) <= 1:  # single-file removal is a whole-note delete (row-prune)
+        return
+    notion12, unparseable = fm.read_file_sha12(props)
+    if unparseable:
+        return
+    base12 = {s[:12] for s in fm.read_sha(props)}
+    vault12 = {s[:12] for s in note.shas}
+    removed12 = (base12 & vault12) - notion12
+    for sha in list(note.shas):
+        if sha[:12] not in removed12:
+            continue
+        if dry_run:
+            stats["would_delete_vault_files"] += 1
+        else:
+            remove_entry(vault / FOLDER[type_name], sha)
+            note.shas.remove(sha)
+            stats["vault_files_deleted"] += 1
+        print(
+            f"  source {sha[:12]} of {note.path.name[:34]!r} removed in Notion",
+            flush=True,
+        )
 
 
 # -- sync state + candidate gathering --------------------------------------
@@ -425,11 +465,16 @@ def run_sync(
             )
         winner = "notion" if le >= _mtime_iso(note.path) else "vault"
         vu, nu, sh, conflicts = merge_fields(t, base, note.frontmatter, ned, winner)
-        # Stage 2: the vault's source set changed (note.shas != the row's recorded
-        # Sha) -> re-push File + Sha so Notion follows the vault (vault wins;
-        # non-destructive). A file-only change has no field diff, so this must be
-        # checked alongside vu/nu, not gated behind them.
-        file_drift = fm.read_sha(notion_props[nid]) != set(note.shas)
+        # Stage 4 (--prune): a file removed in Notion deletes the vault source (this
+        # shrinks note.shas, so the push below restamps Sha/File to match).
+        if prune and not vault_missing:
+            _prune_notion_removed(
+                vault, t, note, notion_props[nid], stats, dry_run=dry_run
+            )
+        # Stage 2: push File + Sha so Notion follows the vault — Sha-drift (the vault
+        # changed its set) or File-drift (reassert a Notion-side File edit; vault owns
+        # the files). A file-only change has no field diff, so check it alongside vu/nu.
+        file_drift = needs_canonical(note, notion_props[nid])
         if not vu and not nu and not file_drift:
             shadow[nid] = sh
             stats["unchanged"] += 1
@@ -529,8 +574,9 @@ def notion():
     "--prune",
     is_flag=True,
     help="Propagate DELETIONS both ways (DESTRUCTIVE): trash a Notion row whose "
-    "vault note is gone, and delete a vault note + its source file when its Notion "
-    "row is trashed. Forces a full scan. Pair with --dry-run to preview.",
+    "vault note is gone, delete a vault note + its source file when its row is "
+    "trashed, and delete a single source when its File attachment is removed in "
+    "Notion. Forces a full scan. Pair with --dry-run to preview.",
 )
 @click.pass_context
 def sync_command(ctx, dry_run, full, prune):

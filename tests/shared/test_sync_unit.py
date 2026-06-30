@@ -552,3 +552,83 @@ def test_sync_dry_run_reports_file_push(tmp_path):
 
     assert stats.get("would_push_files") == 1
     assert client.uploaded == [] and client.updated == []
+
+
+# -- stage 4: --prune Notion->vault per-file delete ------------------------
+
+
+def _multifile_front(rec, name, shas, nid="pg-1"):
+    for sha in shas:
+        (rec / "_assets_" / sha / "src").mkdir(parents=True)
+        (rec / "_assets_" / sha / "src" / "original.pdf").write_bytes(b"%PDF")
+    embeds = "".join(f"![[_assets_/{s}/src/original.pdf]]\n" for s in shas)
+    (rec / f"{name}.md").write_text(
+        f"---\nmerchant: {FRONT['merchant']}\ndate: {FRONT['date']}\n"
+        f"total: {FRONT['total']}\nconsumed_at: x\nnotion_id: {nid}\n---\n" + embeds
+    )
+
+
+def test_prune_deletes_source_removed_in_notion(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    shas = ["a" * 64, "b" * 64]
+    _multifile_front(rec, "R", shas)
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})
+    # Row records both shas (base) but its File now has only a (b removed in Notion).
+    page = _row_with_files("pg-1", "\n".join(shas), ["R-aaaaaaaaaaaa.pdf"])
+    client = PruneClient({"rds": [page]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, prune=True)
+
+    assert stats.get("vault_files_deleted") == 1
+    assert not (rec / "_assets_" / ("b" * 64)).exists()  # b's scan deleted
+    assert (rec / "_assets_" / ("a" * 64)).exists()  # a kept
+    pushed = [p for _pid, p in client.updated if "File" in p]  # Sha/File re-pushed to a
+    assert pushed and pushed[-1]["Sha"]["rich_text"][0]["text"]["content"] == "a" * 64
+
+
+def test_prune_dry_run_reports_file_delete(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    shas = ["a" * 64, "b" * 64]
+    _multifile_front(rec, "R", shas)
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})
+    page = _row_with_files("pg-1", "\n".join(shas), ["R-aaaaaaaaaaaa.pdf"])
+    client = PruneClient({"rds": [page]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, prune=True, dry_run=True)
+
+    assert stats.get("would_delete_vault_files") == 1
+    assert (rec / "_assets_" / ("b" * 64)).exists()  # nothing deleted
+    assert client.uploaded == []
+
+
+def test_prune_skips_file_delete_on_unparseable_name(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    shas = ["a" * 64, "b" * 64]
+    _multifile_front(rec, "R", shas)
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})
+    # A renamed (unparseable) File entry -> fail-safe skips the destructive delete.
+    page = _row_with_files("pg-1", "\n".join(shas), ["renamed.pdf"])
+    client = PruneClient({"rds": [page]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"}, prune=True)
+
+    assert "vault_files_deleted" not in stats
+    assert (rec / "_assets_" / ("a" * 64)).exists()
+    assert (rec / "_assets_" / ("b" * 64)).exists()  # both sources kept
+
+
+def test_sync_restores_file_removed_in_notion_without_prune(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    shas = ["a" * 64, "b" * 64]
+    _multifile_front(rec, "R", shas)
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})
+    # File lost b in Notion, but Sha + vault still have both. WITHOUT --prune.
+    page = _row_with_files("pg-1", "\n".join(shas), ["R-aaaaaaaaaaaa.pdf"])
+    client = PruneClient({"rds": [page]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"})  # no prune
+
+    assert "vault_files_deleted" not in stats  # vault untouched
+    assert (rec / "_assets_" / ("b" * 64)).exists()
+    assert stats.get("files_pushed") == 1  # File re-uploaded -> b restored on the row
+    assert len(client.uploaded) == 2
