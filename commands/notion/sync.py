@@ -16,7 +16,6 @@ runs per type that has a configured data source (bank statements are skipped).
 
 import json
 import os
-import shutil
 import subprocess
 import time
 from collections import defaultdict
@@ -36,6 +35,7 @@ from commands.notion.backfill import (
     save_shadow,
 )
 from commands.receipt.pipeline import ReceiptFields
+from commands.remove import remove_entry
 from lib import notion_fieldmap as fm
 from lib.constants import ASSETS_DIR
 from lib.notion_api import FILE_NAME_LIMIT, NotionClient, truncate_u16
@@ -117,14 +117,15 @@ def write_back(note: VaultNote, field_updates: dict[str, str], type_name: str) -
 
 
 def delete_note(vault: Path, type_name: str, note: VaultNote) -> None:
-    """Delete a linked note and its source asset dir(s). DESTRUCTIVE — removes the
-    original scanned file(s). Used only by --prune to mirror a Notion-trash."""
-    assets = vault / FOLDER[type_name] / ASSETS_DIR
-    note.path.unlink(missing_ok=True)
+    """Delete a linked note and its source asset dir(s) via ``remove_entry``.
+    DESTRUCTIVE — removes the original scanned file(s). Used only by --prune to
+    mirror a Notion-trash. A Notion row maps to the whole note, so every sha is
+    removed; the final unlink guarantees the note is gone even if an asset dir was
+    already missing (so its embed wasn't stripped)."""
+    path_dir = vault / FOLDER[type_name]
     for sha in note.shas:
-        d = assets / sha
-        if d.exists():
-            shutil.rmtree(d)
+        remove_entry(path_dir, sha)
+    note.path.unlink(missing_ok=True)
 
 
 # -- sync state + candidate gathering --------------------------------------

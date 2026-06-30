@@ -1,6 +1,6 @@
 import json
 
-from commands.remove import remove
+from commands.remove import remove, remove_entry
 
 
 def _setup_entry(vault, sha="abc123", **fields):
@@ -93,3 +93,35 @@ def test_remove_no_md_still_removes_dir(runner, vault):
 
     assert result.exit_code == 0
     assert not target_dir.exists()
+
+
+def test_remove_entry_reports_and_removes(vault):
+    """The pure helper removes the .md + data dir and reports what it touched."""
+    target_dir, md_path = _setup_entry(vault, sha="deadbeef")
+    result = remove_entry(vault / "papers", "deadbeef")
+    assert result is not None
+    assert result.notes == [(md_path.name, False)]  # note deleted, not just stripped
+    assert result.data_dir == "deadbeef"
+    assert not md_path.exists()
+    assert not target_dir.exists()
+
+
+def test_remove_entry_reports_stripped_embed(vault):
+    """A note with another embed is kept and reported as stripped."""
+    (vault / "papers" / "_assets_" / "sha_b" / "src").mkdir(parents=True)
+    md_path = vault / "papers" / "shared.md"
+    md_path.write_text(
+        "---\n---\n![[_assets_/sha_a/src/original.pdf]]\n"
+        "![[_assets_/sha_b/src/original.pdf]]\n"
+    )
+    result = remove_entry(vault / "papers", "sha_b")
+    assert result is not None
+    assert result.notes == [("shared.md", True)]  # kept (sha_a embed remains)
+    assert md_path.exists()
+    assert "sha_a" in md_path.read_text() and "sha_b" not in md_path.read_text()
+
+
+def test_remove_entry_returns_none_for_missing(vault):
+    """The pure helper reports None (and does nothing) for an unknown sha."""
+    (vault / "papers" / "_assets_").mkdir(parents=True)
+    assert remove_entry(vault / "papers", "nope") is None
