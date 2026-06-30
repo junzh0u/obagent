@@ -16,6 +16,18 @@ from lib.pipeline import Pipeline
 from lib.utils import interruptible
 
 
+def _queue_append(queue: Path, source: Path) -> None:
+    """Append a consumed source's resolved path to the purge queue (one per line).
+
+    O_APPEND makes each small write atomic, so a host-side drain that renames the
+    queue away mid-run never tears a line. ``source.resolve()`` matches the
+    container absolute path metadata.json records (e.g. ``/consume/Receipts/x.pdf``).
+    """
+    queue.parent.mkdir(parents=True, exist_ok=True)
+    with queue.open("a") as f:
+        f.write(f"{source.resolve()}\n")
+
+
 def _consume_path(
     vault: Path,
     path: str,
@@ -28,10 +40,20 @@ def _consume_path(
     llm_model: str,
     keep_original: bool,
     overwrite: bool,
+    purge_queue: Path | None = None,
 ) -> tuple[int, int]:
-    """Run the consume pipeline for one vault subdir. Returns (consumed, skipped)."""
+    """Run the consume pipeline for one vault subdir. Returns (consumed, skipped).
+
+    When ``purge_queue`` is set, sources are **copied** (never moved) and each
+    consumed source's path is appended to the queue file for a host-side job to
+    delete — Cloud Sync can't observe the container's own unlink, so the inbox
+    file must outlive consume and be removed on the host. See DEPLOY.md.
+    """
     pipeline.prepare_context(vault)
     note_index = index_existing_notes(vault / path) if overwrite else None
+    # Purge-queue mode hands deletion to the host, so the source must survive
+    # consume: force copy regardless of --keep-original.
+    effective_keep = keep_original or purge_queue is not None
     consumed = 0
     skipped = 0
     for source in interruptible(sources):
@@ -40,10 +62,13 @@ def _consume_path(
             source,
             vault,
             path,
-            keep_original=keep_original,
+            keep_original=effective_keep,
             overwrite=overwrite,
         )
         if target_dir is None:
+            # Already in the vault — the inbox copy is redundant, queue it now.
+            if purge_queue is not None:
+                _queue_append(purge_queue, source)
             skipped += 1
             continue
         try:
@@ -70,6 +95,11 @@ def _consume_path(
             )
         except Exception as e:
             click.secho(f"  Warning: note rendering failed: {e}", fg="red")
+        # Asset bytes are safely in the vault; record the source for host-side
+        # purge. A mid-pipeline OCR/LLM raise above skips this, leaving the source
+        # in the inbox for a clean retry next pass.
+        if purge_queue is not None:
+            _queue_append(purge_queue, source)
         consumed += 1
     return consumed, skipped
 
@@ -134,8 +164,17 @@ def _api_and_model_options(f):
     """Apply the API key, model, and flag options shared by both consume entry points.
 
     Options are applied bottom-up so --help renders them in the natural order:
-    mistral-api-key, openai-api-key, ocr-model, llm-model, keep-original, overwrite.
+    min-age, mistral-api-key, openai-api-key, ocr-model, llm-model, keep-original,
+    overwrite, purge-queue.
     """
+    f = click.option(
+        "--purge-queue",
+        envvar="OBAGENT_PURGE_QUEUE",
+        type=click.Path(dir_okay=False, path_type=Path),
+        default=None,
+        help="Copy (not move) sources and record their paths to this queue file "
+        "for a host-side job to delete (drains a Cloud-Synced inbox). See DEPLOY.md.",
+    )(f)
     f = click.option(
         "--overwrite",
         is_flag=True,
@@ -201,6 +240,7 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
         llm_model,
         keep_original,
         overwrite,
+        purge_queue,
         min_age,
         input_dir,
         paths,
@@ -226,6 +266,7 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
                 llm_model=llm_model,
                 keep_original=keep_original,
                 overwrite=overwrite,
+                purge_queue=purge_queue,
             )
         _print_summary(consumed, skipped)
 
@@ -258,6 +299,7 @@ def consume_all(
     llm_model,
     keep_original,
     overwrite,
+    purge_queue,
     min_age,
     prehook,
     input_dir,
@@ -296,5 +338,6 @@ def consume_all(
                 llm_model=llm_model,
                 keep_original=keep_original,
                 overwrite=overwrite,
+                purge_queue=purge_queue,
             )
             _print_summary(consumed, skipped)

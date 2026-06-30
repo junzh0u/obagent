@@ -14,13 +14,15 @@ services:
     command: ["sh", "/app/scripts/loop.sh"]   # invoke via sh — no reliance on the +x bit surviving COPY
     env_file: .env                            # NOTION_TOKEN, MISTRAL_API_KEY, OPENAI_API_KEY
     environment:
-      OBAGENT_VAULT: /vault/Paperless         # repo mounted at /vault (so .git is present)
-      OBAGENT_CONSUME: /consume               # inbox  (per-type subdirs; email lands here too)
-      OBAGENT_EXPORT: /export                 # outbox
-      OBAGENT_MIN_AGE: "60"                   # seconds a file must settle before consuming
-      OBAGENT_INTERVAL: "60"                  # seconds between passes
+      OBAGENT_VAULT: /vault/Paperless              # repo mounted at /vault (so .git is present)
+      OBAGENT_CONSUME: /consume                    # inbox  (per-type subdirs; email lands here too)
+      OBAGENT_EXPORT: /export                      # outbox
+      OBAGENT_PURGE_QUEUE: /purge-queue/queue      # consume records consumed paths; host job drains
+      OBAGENT_MIN_AGE: "60"                        # seconds a file must settle before consuming
+      OBAGENT_INTERVAL: "60"                       # seconds between passes
     volumes:
       - /volume1/paperless/obsidian-vaults:/vault   # obsidian-vaults repo root (.git + Paperless/)
       - /volume1/gdrive/paperless/consume:/consume  # Cloud Sync ↔ Drive (inbox: scans, email)
       - /volume1/gdrive/paperless/export:/export    # Cloud Sync ↔ Drive (outbox)
+      - /volume1/paperless/purge-queue:/purge-queue # consume writes; host purge-consumed.sh drains
       - /volume1/paperless/ssh:/root/.ssh:ro        # deploy key for `git push`

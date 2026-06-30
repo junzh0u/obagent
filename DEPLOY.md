@@ -10,6 +10,7 @@ host folders:
 | `/vault` | `/volume1/paperless/obsidian-vaults` | the **obsidian-vaults** git repo root (`.git` + `Paperless/`) |
 | `/consume` | `/volume1/gdrive/paperless/consume` | inbox, per-type subdirs — Cloud Sync ↔ Drive (scans, phone, email) |
 | `/export` | `/volume1/gdrive/paperless/export` | export outbox — Cloud Sync ↔ Drive |
+| `/purge-queue` | `/volume1/paperless/purge-queue` | consume records consumed inbox paths here; a host job drains them |
 | `/root/.ssh` | `/volume1/paperless/ssh` | the SSH deploy key for `git push` (read-only) |
 
 The compose file itself lives with this repo at `/volume1/paperless/obagent`.
@@ -48,8 +49,10 @@ Confirm it's on `main` tracking `origin/main`.
 ```sh
 mkdir -p /volume1/gdrive/paperless/consume/Documents /volume1/gdrive/paperless/consume/Receipts \
          "/volume1/gdrive/paperless/consume/Bank Statements"
-mkdir -p /volume1/gdrive/paperless/export /volume1/paperless/ssh
+mkdir -p /volume1/gdrive/paperless/export /volume1/paperless/ssh /volume1/paperless/purge-queue
 ```
+(`purge-queue` is **not** under `/volume1/gdrive` — it's container↔host only, never
+synced to Drive. See "Draining the Drive consume inbox" below.)
 
 ## 4. SSH deploy key (so the container can `git push`)
 ```sh
@@ -69,8 +72,15 @@ DSM → **Cloud Sync** → Google Drive → local path `/volume1/gdrive`, direct
 **two-way**. One task covers both the **consume inbox** (scans/phone/email land in
 Drive `paperless/consume/{type}/` and sync down to the NAS) and the **export
 outbox** (vault PDFs sync up). Leave **"Don't remove files in the destination
-folder…" OFF** — `consume` **moves** ingested files out, and that local delete must
-propagate back up to drain `consume/` on Drive.
+folder…" OFF** — draining the inbox depends on a host-side delete propagating up to
+Drive (see "Draining the Drive consume inbox" below).
+
+> Why not just let `consume` delete the file? It can't reach Drive. obagent runs in
+> the container; a delete there (move-out or `rm`) is real on disk but fires **no
+> event Cloud Sync's watcher receives**, and on its next reconcile two-way Cloud Sync
+> re-downloads the "missing" file. Only a **host-side** delete propagates. So obagent
+> runs in copy mode and records consumed paths to the purge queue, and a host job does
+> the deleting — set up next.
 
 ## 6. Create `.env`
 ```sh
@@ -96,7 +106,33 @@ DSM → **Container Manager** → **Project** → **Create**:
 
 Over SSH instead: `cd /volume1/paperless/obagent && sudo docker compose up -d --build`.
 
-## 9. Verify
+## 9. Draining the Drive consume inbox (host purge job)
+Two-way Cloud Sync **cannot** drain the inbox on its own: a delete from inside the
+container fires no event its watcher sees, and on reconcile it re-downloads the file
+(see the note under step 5). So `OBAGENT_PURGE_QUEUE: /purge-queue/queue` (set in
+compose) tells `consume` to **copy** each source into the vault and append its path
+to the queue; a **host** job then deletes those inbox files — a host-side delete that
+Cloud Sync *does* propagate up to Drive.
+
+DSM → **Control Panel** → **Task Scheduler** → **Create** → **Scheduled Task** →
+**User-defined script**:
+- **User:** `root` (the inbox + queue are owned by the NAS/container user).
+- **Schedule:** repeat every ~5 minutes (Daily, "Repeat every 5 minutes").
+- **Run command:**
+  ```sh
+  sh /volume1/paperless/obagent/scripts/purge-consumed.sh
+  ```
+  The script reads the queue at `/volume1/paperless/purge-queue/queue` and `rm`s each
+  recorded inbox file. Override `OBAGENT_PURGE_QUEUE_HOST` / `OBAGENT_INBOX_HOST` /
+  `OBAGENT_INBOX_CONTAINER` in the command only if your paths differ from the defaults
+  in the script header.
+
+It only ever `rm`s files **under the configured inbox prefix** that obagent has
+**already copied into the vault** — zero data-loss risk (the vault copy is the source
+of truth), idempotent, and race-safe (it atomically claims a batch, so paths queued
+mid-run are handled next time).
+
+## 10. Verify
 Dry-run first (no writes), then watch the live loop:
 ```sh
 cd /volume1/paperless/obagent
@@ -106,15 +142,17 @@ sudo docker compose logs -f          # or Container Manager → Project → Logs
 Look for the framed output: `✓ consume`, the sync timing lines, `✓ publish` with a
 `committed …` line and an error-free push. Then drop a test PDF into Drive
 `paperless/consume/Documents` (or NAS `/volume1/gdrive/paperless/consume/Documents`),
-wait for it to sync + `min-age` + `interval`, and watch it flow.
+wait for it to sync + `min-age` + `interval`, and watch it flow. The source stays in
+the inbox briefly, then the host purge job (step 9) `rm`s it and it **disappears from
+Drive** — confirm it does *not* re-download.
 
-## 10. Point the scanner
+## 11. Point the scanner
 Set the scanner's scan-to-folder (or SMB share) to
 `/volume1/gdrive/paperless/consume/Documents` (or the matching type) — the same
 Drive-synced inbox that scans, phone uploads, and email ingest all share. The
 `--min-age 60` gate protects against grabbing a file mid-upload/sync.
 
-## 11. (Optional) Email ingest
+## 12. (Optional) Email ingest
 To also feed Gmail into this inbox, deploy `scripts/gmail-ingest.gs` as an Apps
 Script (set its `CONSUME_FOLDER_ID` to the Drive `consume/` folder id, ~15-min
 trigger). It drops body PDFs + attachments into Drive `consume/{Receipts,Documents}/`,

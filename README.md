@@ -214,14 +214,20 @@ Or schedule one-off passes with Synology Task Scheduler:
 `docker run --rm --name paperless-sync … obagent` (`--name` prevents overlap). Adjust
 bind-mounts and env in `docker-compose.yml`.
 
+The consume inbox is Cloud-Synced to Google Drive, but Cloud Sync can't see the
+container's own deletes — so with `OBAGENT_PURGE_QUEUE` set, `consume` copies each
+source and records its path, and a host-side Task Scheduler job
+(`scripts/purge-consumed.sh`) deletes the inbox files so the deletion propagates back
+to Drive. See `DEPLOY.md`.
+
 ## Email ingest
 
 Optionally feed selected incoming Gmail into the vault. A small **Apps Script**
 (`scripts/gmail-ingest.gs`) watches a Gmail label, renders each message body to a
 PDF, pulls every attachment, routes them by type, and drops them into your Google
 Drive **`consume/{type}/`** inbox. **Synology Cloud Sync** (two-way) mirrors that
-inbox to the NAS, and the normal `obagent consume` ingests it each pass — consume
-*moves* the files, so the local delete drains the Drive folder back to empty.
+inbox to the NAS, and the normal `obagent consume` ingests it each pass — the host
+purge job then empties the Drive folder (see Deployment).
 
 Because email reuses the existing consume inbox, there's no email-specific obagent
 wiring. No Gmail credentials live on the NAS (the script runs in Google with your

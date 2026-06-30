@@ -177,14 +177,30 @@ setup is in **`DEPLOY.md`**.
   repo has no identity.
 - `scripts/loop.sh` — runs `run.sh` every `$OBAGENT_INTERVAL` seconds (the compose
   service command; SIGTERM-clean).
+- `scripts/purge-consumed.sh` — **host-side** (DSM Task Scheduler, *not* the
+  container) drain of the consume inbox: `rm`s the files `consume` recorded to
+  `OBAGENT_PURGE_QUEUE`. See "Consume-inbox drain" below.
 - `docker-compose.yml` — the Container Manager Project: build + bind-mounts (inbox,
-  vault repo, Drive-export, git ssh key) + env. Secrets in a gitignored `.env`
-  (see `.env.example`).
+  vault repo, Drive-export, purge-queue, git ssh key) + env. Secrets in a gitignored
+  `.env` (see `.env.example`).
 
 Either model works: the compose service loops (`restart: always`), **or** schedule
 one-off passes with Synology Task Scheduler via `docker run --rm --name
 paperless-sync … obagent` (the `--name` prevents overlap). The monitor is
 deliberately shell, not an obagent subcommand.
+
+### Consume-inbox drain
+
+The consume inbox is two-way **Cloud-Synced** to Google Drive, but Cloud Sync
+**cannot see the container's own deletes** — a `consume` move/unlink inside the
+container fires no event its watcher receives, and on reconcile it re-downloads the
+"missing" file. Only a **host-side** delete propagates up to Drive. So when
+`OBAGENT_PURGE_QUEUE` is set, `consume` **copies** each source (force copy, regardless
+of `--keep-original`) and appends the consumed path to the queue file; a host Task
+Scheduler job runs `scripts/purge-consumed.sh` to `rm` those inbox files host-side,
+which Cloud Sync then drains from Drive. The queue lists only files already copied
+into the vault (zero data-loss; a mid-pipeline failure leaves the source un-queued for
+retry). `OBAGENT_PURGE_QUEUE` unset → unchanged behavior (`consume` moves, no queue).
 
 ## Email ingest
 
@@ -203,8 +219,10 @@ on the obagent side. Full design + one-time setup is in `plan-email-ingest.md`.
   (not the labels — Gmail labels are thread-level); the `CONSUME_FOLDER_ID` script
   property holds the Drive `consume/` folder id (kept out of this repo).
 - **Drain:** the Drive `consume/` tree is two-way Cloud-Synced to the NAS consume
-  mount (`OBAGENT_CONSUME`). `consume` **moves** source files out, so the local
-  delete propagates back up and empties the Drive folder — same as any consume.
+  mount (`OBAGENT_CONSUME`); the Drive folder is emptied by the host-side purge job
+  (`OBAGENT_PURGE_QUEUE` + `scripts/purge-consumed.sh`, see "Consume-inbox drain"
+  under Deployment) — same as any consume, since Cloud Sync can't see the container's
+  own deletes.
 - **No extra obagent wiring:** because email lands in the normal consume tree, the
   existing `obagent consume` ingests it. Body PDF + each attachment become separate
   notes. (`OBAGENT_CONSUME` points at the Drive-synced consume folder in compose.)
