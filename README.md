@@ -187,6 +187,11 @@ vault scans to zero (an outage shouldn't wipe everything) — preview with
 `--prune --dry-run` first. (Deleting a vault note already removes its exported copy
 via `export`.)
 
+Attachments sync per file too (the vault owns the files). Remove a source from a
+multi-file note (`obagent <type> remove <sha>`) and `sync` drops that attachment from
+the Notion row; remove a file *in Notion* and it's reasserted from the vault — or,
+under `--prune`, that vault source (original scan included) is deleted instead.
+
 The initial link (matching existing Notion rows to vault notes by a normalized key)
 is `obagent notion backfill` — it also canonicalizes each row's attachments
 (`Sha`/`File`) to the note's sources. Idempotent and safe to re-run; `--dry-run`
