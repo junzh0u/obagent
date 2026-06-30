@@ -1,7 +1,8 @@
 #!/bin/sh
-# One pass of the paperless pipeline: ingest new scans -> reconcile with Notion
-# -> publish. Run on a schedule (Synology Task Scheduler), typically via a thin
-# dotfiles wrapper that sets up the env first (see DEPLOY.md "entry script").
+# One pass of the paperless pipeline: pull the vault (ff-only) -> ingest new scans
+# -> reconcile with Notion -> publish. Run on a schedule (Synology Task Scheduler),
+# typically via a thin dotfiles wrapper that sets up the env first (see DEPLOY.md
+# "entry script").
 #
 # Steps are isolated (one failing does not abort the others). Each is framed with
 # a ▶ start / ✓ done / ✗ FAILED marker + elapsed time; sub-output is indented and
@@ -52,6 +53,20 @@ step() {  # step LABEL CMD...
     fi
 }
 
+# Pick up remote vault changes before processing, fast-forward ONLY (guarded — like
+# publish.sh; never rebases/merges, so a divergence can't leave the repo mid-merge).
+# So consume/notion-sync act on the latest notes (e.g. edits from a laptop/phone) and
+# the end-of-pass push stays a clean fast-forward. Soft: an offline fetch or a non-ff
+# divergence logs and continues on local state (publish re-checks the ff at the end,
+# and a diverged push fails loudly there).
+pull_vault() {
+    up=$(git -C "$VAULT" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null) || return 0
+    git -C "$VAULT" fetch --quiet || { echo "fetch failed (offline?), continuing on local state"; return 0; }
+    git -C "$VAULT" merge --ff-only "$up" >/dev/null 2>&1 \
+        || echo "'$up' not fast-forwardable; continuing on local state"
+    return 0
+}
+
 # No-overlap guard: if a previous pass is still running, skip this one — so an
 # overlapping Task Scheduler tick no-ops instead of racing.
 LOCK="${OBAGENT_LOCK:-$VAULT/.obagent/run.lock}"
@@ -63,6 +78,7 @@ fi
 
 pass_start=$(date +%s)
 printf '\n%s──────── %s ────────%s\n' "$C_B" "$(ts)" "$C_0"
+step "vault pull" pull_vault
 step "consume (min-age ${MIN_AGE}s)" obagent --vault "$VAULT" consume --min-age "$MIN_AGE"
 step "notion sync" obagent --vault "$VAULT" notion sync
 step "publish" sh "$HERE/publish.sh"
