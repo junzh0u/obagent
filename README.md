@@ -187,8 +187,9 @@ vault scans to zero (an outage shouldn't wipe everything) — preview with
 `--prune --dry-run` first. (Deleting a vault note already removes its exported copy
 via `export`.)
 
-The initial one-time link (matching existing Notion rows to vault notes) lives in
-`commands/notion/backfill.py` and is run as a one-off, not a CLI command.
+The initial one-time link (matching existing Notion rows to vault notes by a
+normalized key) is `obagent notion backfill` — idempotent, so it's safe to re-run;
+`--dry-run` previews the matches.
 
 ## Deployment
 

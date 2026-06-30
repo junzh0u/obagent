@@ -32,6 +32,7 @@ from commands.notion.backfill import (
     gather_vault,
     inject_notion_id,
     load_shadow,
+    run_backfill,
     save_shadow,
 )
 from commands.receipt.pipeline import ReceiptFields
@@ -518,6 +519,21 @@ def data_sources() -> dict[str, str]:
     return {t: os.environ[ev] for t, ev in _DS_ENV.items() if os.environ.get(ev)}
 
 
+def _client_and_ds() -> tuple[NotionClient, dict[str, str]]:
+    """Shared setup for the notion commands: a token-checked client + the configured
+    data sources (raising a UsageError if either is missing)."""
+    client = NotionClient()
+    if not client.token:
+        raise click.UsageError("NOTION_TOKEN is not set.")
+    ds = data_sources()
+    if not ds:
+        raise click.UsageError(
+            "No Notion data sources configured. Set OBAGENT_NOTION_RECEIPT_DS "
+            "and/or OBAGENT_NOTION_DOCUMENT_DS."
+        )
+    return client, ds
+
+
 @click.group()
 def notion():
     """Sync the vault with Notion (Receipts + Documents)."""
@@ -538,17 +554,28 @@ def notion():
 @click.pass_context
 def sync_command(ctx, dry_run, full, prune):
     """Reconcile the vault and Notion two-way (3-way merge against the shadow)."""
-    client = NotionClient()
-    if not client.token:
-        raise click.UsageError("NOTION_TOKEN is not set.")
-    ds = data_sources()
-    if not ds:
-        raise click.UsageError(
-            "No Notion data sources configured. Set OBAGENT_NOTION_RECEIPT_DS "
-            "and/or OBAGENT_NOTION_DOCUMENT_DS."
-        )
+    client, ds = _client_and_ds()
     stats = run_sync(
         client, Path(ctx.obj["vault"]), ds, dry_run=dry_run, full=full, prune=prune
     )
     summary = ", ".join(f"{v} {k}" for k, v in stats.items())
     click.secho(summary or "nothing to do", bold=True)
+
+
+@notion.command("backfill")
+@click.option("--dry-run", is_flag=True, help="Report matches without writing.")
+@click.option(
+    "--limit", type=int, default=None, help="Max rows to link per type (testing)."
+)
+@click.pass_context
+def backfill_command(ctx, dry_run, limit):
+    """Link existing Notion rows to vault notes by a normalized key (idempotent:
+    notes that already carry a notion_id are skipped). The initial one-time link."""
+    client, ds = _client_and_ds()
+    vault = Path(ctx.obj["vault"])
+    for t, ds_id in ds.items():
+        click.secho(f"\n=== {FOLDER[t]} ===", bold=True)
+        stats = run_backfill(client, vault, t, ds_id, dry_run=dry_run, limit=limit)
+        click.secho(
+            ", ".join(f"{v} {k}" for k, v in stats.items()) or "nothing", bold=True
+        )

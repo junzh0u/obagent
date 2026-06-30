@@ -230,6 +230,26 @@ def test_sync_command_passes_prune(runner, monkeypatch):
     assert called["prune"] is True
 
 
+def test_backfill_command_invokes_run_backfill(runner, monkeypatch):
+    calls = []
+
+    def fake_run_backfill(client, vault, t, ds_id, *, dry_run, limit):
+        calls.append((t, ds_id, dry_run, limit))
+        return {"linked": 1}
+
+    monkeypatch.setattr(sync, "run_backfill", fake_run_backfill)
+    monkeypatch.setenv("NOTION_TOKEN", "t")
+    monkeypatch.setenv("OBAGENT_NOTION_RECEIPT_DS", "rds")
+    monkeypatch.setenv("OBAGENT_NOTION_DOCUMENT_DS", "dds")
+    result = runner.invoke(
+        sync.backfill_command, ["--dry-run", "--limit", "5"], obj={"vault": "/tmp"}
+    )
+    assert result.exit_code == 0, result.output
+    assert ("receipt", "rds", True, 5) in calls
+    assert ("document", "dds", True, 5) in calls
+    assert "linked" in result.output
+
+
 def test_sync_command_requires_token(runner, monkeypatch):
     monkeypatch.delenv("NOTION_TOKEN", raising=False)
     monkeypatch.setattr(sync, "run_sync", lambda *a, **k: {})
