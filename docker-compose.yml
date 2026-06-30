@@ -21,6 +21,6 @@ services:
       OBAGENT_INTERVAL: "60"                  # seconds between passes
     volumes:
       - /volume1/paperless/obsidian-vaults:/vault   # obsidian-vaults repo root (.git + Paperless/)
-      - /volume1/gdrive/paperless/consume:/consume  # Cloud Sync ↔ Drive (inbox: scans, phone, email)
+      - /volume1/gdrive/paperless/consume:/consume  # Cloud Sync ↔ Drive (inbox: scans, email)
       - /volume1/gdrive/paperless/export:/export    # Cloud Sync ↔ Drive (outbox)
       - /volume1/paperless/ssh:/root/.ssh:ro        # deploy key for `git push`
