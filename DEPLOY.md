@@ -8,8 +8,8 @@ host folders:
 | Container path | Host path | What it is |
 |---|---|---|
 | `/vault` | `/volume1/paperless/obsidian-vaults` | the **obsidian-vaults** git repo root (`.git` + `Paperless/`) |
-| `/consume` | `/volume1/paperless/consume` | scanner drop (per-type subdirs) |
-| `/drive` | `/volume1/gdrive/paperless` | a Cloud Sync folder → Google Drive |
+| `/consume` | `/volume1/gdrive/paperless/consume` | inbox, per-type subdirs — Cloud Sync ↔ Drive (scans, phone, email) |
+| `/export` | `/volume1/gdrive/paperless/export` | export outbox — Cloud Sync ↔ Drive |
 | `/root/.ssh` | `/volume1/paperless/ssh` | the SSH deploy key for `git push` (read-only) |
 
 The compose file itself lives with this repo at `/volume1/paperless/obagent`.
@@ -46,9 +46,9 @@ Confirm it's on `main` tracking `origin/main`.
 
 ## 3. Create the directory layout
 ```sh
-mkdir -p /volume1/paperless/consume/Documents /volume1/paperless/consume/Receipts \
-         "/volume1/paperless/consume/Bank Statements"
-mkdir -p /volume1/gdrive/paperless /volume1/paperless/ssh
+mkdir -p /volume1/gdrive/paperless/consume/Documents /volume1/gdrive/paperless/consume/Receipts \
+         "/volume1/gdrive/paperless/consume/Bank Statements"
+mkdir -p /volume1/gdrive/paperless/export /volume1/paperless/ssh
 ```
 
 ## 4. SSH deploy key (so the container can `git push`)
@@ -64,9 +64,13 @@ git uses `id_ed25519` automatically.
 - **Gotcha:** the private key must be mode `600` or SSH refuses it; `known_hosts`
   must exist or the push hangs on host verification. Both handled above.
 
-## 5. Cloud Sync the export folder → Google Drive
-DSM → **Cloud Sync** → Google Drive → local path `/volume1/gdrive/paperless`,
-direction **Upload only**. This turns exported PDFs into browsable Drive files.
+## 5. Cloud Sync `/volume1/gdrive` ↔ Google Drive (two-way)
+DSM → **Cloud Sync** → Google Drive → local path `/volume1/gdrive`, direction
+**two-way**. One task covers both the **consume inbox** (scans/phone/email land in
+Drive `paperless/consume/{type}/` and sync down to the NAS) and the **export
+outbox** (vault PDFs sync up). Leave **"Don't remove files in the destination
+folder…" OFF** — `consume` **moves** ingested files out, and that local delete must
+propagate back up to drain `consume/` on Drive.
 
 ## 6. Create `.env`
 ```sh
@@ -81,7 +85,7 @@ inbox mounted directly).
 ## 7. Check `docker-compose.yml`
 The volume paths already match the table above; adjust only if yours differ, and
 confirm `OBAGENT_VAULT: /vault/Paperless` matches your subdir name. `OBAGENT_MIN_AGE`
-(60s) and `OBAGENT_INTERVAL` (300s) can stay.
+(60s) and `OBAGENT_INTERVAL` (60s) can stay.
 
 ## 8. Create the Container Manager Project
 DSM → **Container Manager** → **Project** → **Create**:
@@ -100,13 +104,21 @@ sudo docker compose run --rm obagent obagent --vault /vault/Paperless notion syn
 sudo docker compose logs -f          # or Container Manager → Project → Logs
 ```
 Look for the framed output: `✓ consume`, the sync timing lines, `✓ publish` with a
-`committed …` line and an error-free push. Then drop a test PDF in
-`/volume1/paperless/consume/Documents`, wait `min-age` + `interval`, and watch it flow.
+`committed …` line and an error-free push. Then drop a test PDF into Drive
+`paperless/consume/Documents` (or NAS `/volume1/gdrive/paperless/consume/Documents`),
+wait for it to sync + `min-age` + `interval`, and watch it flow.
 
 ## 10. Point the scanner
-Set the scanner's scan-to-folder (or SMB share) to `/volume1/paperless/consume/Documents`
-(or the matching type). The `--min-age 60` gate protects against grabbing a file
-mid-upload.
+Set the scanner's scan-to-folder (or SMB share) to
+`/volume1/gdrive/paperless/consume/Documents` (or the matching type) — the same
+Drive-synced inbox that scans, phone uploads, and email ingest all share. The
+`--min-age 60` gate protects against grabbing a file mid-upload/sync.
+
+## 11. (Optional) Email ingest
+To also feed Gmail into this inbox, deploy `scripts/gmail-ingest.gs` as an Apps
+Script (set its `CONSUME_FOLDER_ID` to the Drive `consume/` folder id, ~15-min
+trigger). It drops body PDFs + attachments into Drive `consume/{Receipts,Documents}/`,
+which this same Cloud Sync pulls down. See `plan-email-ingest.md`.
 
 ## Updating later
 ```sh
@@ -123,8 +135,8 @@ sudo docker compose up -d --build    # or Container Manager → Project → Buil
   files are owned by the NAS user while the container runs as root. The image trusts the
   mount via `git config --system --add safe.directory '*'` (rebuild if you're on an older
   image). The same guard would also block the machine commit + push.
-- **Nothing consumed** → check `/consume` has the per-type subdirs and files are older than
-  `OBAGENT_MIN_AGE`.
+- **Nothing consumed** → check `/consume` (Drive `paperless/consume/`) has the per-type
+  subdirs, and files have finished syncing and are older than `OBAGENT_MIN_AGE`.
 - **Commit identity error** → set `user.name`/`user.email` in the vault clone (step 2) or
   `OBAGENT_GIT_NAME`/`OBAGENT_GIT_EMAIL` in `.env`.
 - **A failed pass** is loud in the log (`✗ … FAILED`) and exits non-zero.

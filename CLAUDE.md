@@ -160,6 +160,29 @@ one-off passes with Synology Task Scheduler via `docker run --rm --name
 paperless-sync … obagent` (the `--name` prevents overlap). The monitor is
 deliberately shell, not an obagent subcommand.
 
+## Email ingest
+
+Selected incoming Gmail is fed into the pipeline — a **feeder**, no obagent-core
+change. It reuses the **Drive consume inbox**: the script drops files into the same
+`consume/{type}/` tree obagent already ingests, so there is no email-specific wiring
+on the obagent side. Full design + one-time setup is in `plan-email-ingest.md`.
+
+- **`scripts/gmail-ingest.gs`** (Apps Script, paste-deployed, runs in Google with
+  your own Gmail+Drive auth — no creds on the NAS): on a ~15-min trigger it finds
+  threads labeled `obagent/inbox`, and for each not-yet-processed message routes it
+  to a type (subject/sender `ROUTING_RULES` → `Receipts`, default `Documents`),
+  renders the body → PDF, pulls every non-inline attachment, and
+  writes them into `consume/<Type>/` on Drive. Then it swaps labels (`-obagent/inbox
+  +obagent/ingested`). Dedup is a per-message processed-id set in `PropertiesService`
+  (not the labels — Gmail labels are thread-level); the `CONSUME_FOLDER_ID` script
+  property holds the Drive `consume/` folder id (kept out of this repo).
+- **Drain:** the Drive `consume/` tree is two-way Cloud-Synced to the NAS consume
+  mount (`OBAGENT_CONSUME`). `consume` **moves** source files out, so the local
+  delete propagates back up and empties the Drive folder — same as any consume.
+- **No extra obagent wiring:** because email lands in the normal consume tree, the
+  existing `obagent consume` ingests it. Body PDF + each attachment become separate
+  notes. (`OBAGENT_CONSUME` points at the Drive-synced consume folder in compose.)
+
 ## Commands
 
 ```bash
