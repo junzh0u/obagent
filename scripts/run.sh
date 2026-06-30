@@ -1,6 +1,7 @@
 #!/bin/sh
 # One pass of the paperless pipeline: ingest new scans -> reconcile with Notion
-# -> publish. Run on a schedule (Synology Task Scheduler) or in a loop (loop.sh).
+# -> publish. Run on a schedule (Synology Task Scheduler), typically via a thin
+# dotfiles wrapper that sets up the env first (see DEPLOY.md "entry script").
 #
 # Steps are isolated (one failing does not abort the others). Each is framed with
 # a ▶ start / ✓ done / ✗ FAILED marker + elapsed time; sub-output is indented and
@@ -51,8 +52,8 @@ step() {  # step LABEL CMD...
     fi
 }
 
-# No-overlap guard: if a previous pass is still running, skip this one. The lock
-# lives on the (bind-mounted) vault so it is shared across `docker run` ticks.
+# No-overlap guard: if a previous pass is still running, skip this one — so an
+# overlapping Task Scheduler tick no-ops instead of racing.
 LOCK="${OBAGENT_LOCK:-$VAULT/.obagent/run.lock}"
 mkdir -p "$(dirname "$LOCK")"
 exec 9>"$LOCK"

@@ -23,7 +23,7 @@
 - `commands/export.py` — shared `export` subcommand (registered on `document`, `receipt`, and `bank_statement`); also exposes the top-level `obagent export` aggregator
 - `commands/{bank,merchant,people}.py` — top-level name-management groups built on `lib/name_store.py`
 - `commands/notion/` — Notion sync: `sync.py` (the `obagent notion sync` command + the two-way merge engine) and `backfill.py` (the one-time link, run as a one-off — not a CLI command)
-- `scripts/`, `Dockerfile`, `.dockerignore` — deployment bundle (see Deployment)
+- `scripts/` — deployment scripts: `run.sh` (one pass), `publish.sh` (export + git push), `gmail-ingest.gs` (email feeder) (see Deployment)
 - `tests/` — unit and integration tests with shared fixtures in `conftest.py`
 
 ## Architecture
@@ -161,46 +161,35 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
 
 ## Deployment
 
-Built to run on a Synology NAS via **Container Manager (docker compose)**, so the
-NAS needs no Python — the image bundles Python 3.14 + uv + deps. Step-by-step NAS
-setup is in **`DEPLOY.md`**.
+Runs **natively on a Synology NAS** (no Docker): `uv` provides a standalone Python 3.14
+on the host, so the NAS needs no system Python, and a DSM **Task Scheduler** job runs
+one pass on an interval. Step-by-step NAS setup is in **`DEPLOY.md`**.
 
-- `Dockerfile` — the self-contained image (+ git/ssh for the push).
-- `scripts/run.sh` — one pass: `consume --min-age` → `obagent notion sync` →
-  `publish.sh`, with per-step error isolation and a `flock` no-overlap guard.
-- `scripts/publish.sh` — `obagent export` (→ Drive via Cloud Sync) + a **guarded
-  fast-forward** (`git fetch` then `merge --ff-only`; integrates remote commits so
-  the push stays a clean fast-forward, and aborts cleanly on divergence — never
-  rebases/merges) + a plain machine `git commit` of the vault changes (the NAS has
-  no Claude/LLM committer; skipped when nothing changed) + `git push` to the vault's
-  remotes. Author falls back to `OBAGENT_GIT_NAME`/`OBAGENT_GIT_EMAIL` only if the
-  repo has no identity.
-- `scripts/loop.sh` — runs `run.sh` every `$OBAGENT_INTERVAL` seconds (the compose
-  service command; SIGTERM-clean).
-- `scripts/purge-consumed.sh` — **host-side** (DSM Task Scheduler, *not* the
-  container) drain of the consume inbox: `rm`s the files `consume` recorded to
-  `OBAGENT_PURGE_QUEUE`. See "Consume-inbox drain" below.
-- `docker-compose.yml` — the Container Manager Project: build + bind-mounts (inbox,
-  vault repo, Drive-export, purge-queue, git ssh key) + env. Secrets in a gitignored
-  `.env` (see `.env.example`).
+- **Install the CLI:** `uv tool install .` puts `obagent` on `~/.local/bin` (same as
+  `just install`); update with `git pull && uv tool install . --force --reinstall`.
+- **The pass lives in the repo; the env wiring in the operator's dotfiles.**
+  - `scripts/run.sh` — one pass: `consume --min-age` → `obagent notion sync` →
+    `publish.sh`, with per-step error isolation + a `flock` no-overlap guard.
+  - `scripts/publish.sh` — `obagent export` (→ Drive via Cloud Sync) + a **guarded
+    fast-forward** (`git fetch` then `merge --ff-only`; integrates remote commits,
+    aborts cleanly on divergence — never rebases/merges) + a plain machine `git commit`
+    of the vault changes (no LLM committer on the NAS; skipped when nothing changed;
+    author falls back to `OBAGENT_GIT_NAME`/`OBAGENT_GIT_EMAIL` only if the repo has no
+    identity) + `git push` to the vault remotes.
+  - A thin **dotfiles** entry script (e.g. `bin/<host>/_obagent`) is the Task-Scheduler
+    target: it sets `HOME`/`PATH`, sources the shell rc (`OBAGENT_VAULT/CONSUME/EXPORT`)
+    + a **gitignored** secrets file (API keys + Notion DS ids), then `exec`s
+    `scripts/run.sh`. DSM runs jobs with a bare env, so the wrapper (not run.sh) owns
+    env setup; the pass updates with `git pull`.
+- `scripts/` also holds `gmail-ingest.gs` (the email feeder, below).
 
-Either model works: the compose service loops (`restart: always`), **or** schedule
-one-off passes with Synology Task Scheduler via `docker run --rm --name
-paperless-sync … obagent` (the `--name` prevents overlap). The monitor is
-deliberately shell, not an obagent subcommand.
-
-### Consume-inbox drain
-
-The consume inbox is two-way **Cloud-Synced** to Google Drive, but Cloud Sync
-**cannot see the container's own deletes** — a `consume` move/unlink inside the
-container fires no event its watcher receives, and on reconcile it re-downloads the
-"missing" file. Only a **host-side** delete propagates up to Drive. So when
-`OBAGENT_PURGE_QUEUE` is set, `consume` **copies** each source (force copy, regardless
-of `--keep-original`) and appends the consumed path to the queue file; a host Task
-Scheduler job runs `scripts/purge-consumed.sh` to `rm` those inbox files host-side,
-which Cloud Sync then drains from Drive. The queue lists only files already copied
-into the vault (zero data-loss; a mid-pipeline failure leaves the source un-queued for
-retry). `OBAGENT_PURGE_QUEUE` unset → unchanged behavior (`consume` moves, no queue).
+**Why native, not Docker:** Synology **Cloud Sync** drains the consume inbox (and
+removes stale exports) from Google Drive only when the delete happens **on the host** —
+a delete from *inside a container* fires no event its watcher receives, and on reconcile
+two-way Cloud Sync re-downloads the "missing" file. Running obagent on the host makes
+consume's move-out *and* export's dangling cleanup host-side, so both propagate to
+Drive. (This superseded an earlier Docker deployment + an `OBAGENT_PURGE_QUEUE`
+workaround; rationale in `plans/2026-06-30-native-nas-migration.md`.)
 
 ## Email ingest
 
@@ -218,14 +207,12 @@ on the obagent side. Full design + one-time setup is in `plans/2026-06-29-email-
   +obagent/ingested`). Dedup is a per-message processed-id set in `PropertiesService`
   (not the labels — Gmail labels are thread-level); the `CONSUME_FOLDER_ID` script
   property holds the Drive `consume/` folder id (kept out of this repo).
-- **Drain:** the Drive `consume/` tree is two-way Cloud-Synced to the NAS consume
-  mount (`OBAGENT_CONSUME`); the Drive folder is emptied by the host-side purge job
-  (`OBAGENT_PURGE_QUEUE` + `scripts/purge-consumed.sh`, see "Consume-inbox drain"
-  under Deployment) — same as any consume, since Cloud Sync can't see the container's
-  own deletes.
+- **Drain:** the Drive `consume/` tree is two-way Cloud-Synced to the NAS consume dir
+  (`OBAGENT_CONSUME`). `consume` **moves** the source out; running on the host, that
+  delete propagates back up and empties the Drive folder — same as any consume.
 - **No extra obagent wiring:** because email lands in the normal consume tree, the
   existing `obagent consume` ingests it. Body PDF + each attachment become separate
-  notes. (`OBAGENT_CONSUME` points at the Drive-synced consume folder in compose.)
+  notes. (`OBAGENT_CONSUME` points at the Drive-synced consume folder.)
 
 ## Commands
 

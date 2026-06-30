@@ -31,7 +31,7 @@ if up=$(git -C "$VAULT" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}
 fi
 
 # Commit vault changes (notes, shadow) so the push has something to send. The NAS
-# container has no global git identity — set a fallback only if none is configured.
+# has no global git identity — set a fallback only if none is configured.
 git -C "$VAULT" config user.name  >/dev/null 2>&1 || git -C "$VAULT" config user.name  "${OBAGENT_GIT_NAME:-obagent}"
 git -C "$VAULT" config user.email >/dev/null 2>&1 || git -C "$VAULT" config user.email "${OBAGENT_GIT_EMAIL:-obagent@localhost}"
 git -C "$VAULT" add -A .

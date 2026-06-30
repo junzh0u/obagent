@@ -1,40 +1,52 @@
-# Deploying obagent on a Synology NAS (Container Manager + docker compose)
+# Deploying obagent on a Synology NAS (native — uv + Task Scheduler)
 
-obagent runs unattended on the NAS: Container Manager builds the image from this
-repo and runs `scripts/loop.sh` as an always-on service. Each pass does
-**consume → notion sync → publish** (`scripts/run.sh`). The container reads four
-host folders:
+obagent runs unattended on the NAS as a plain host process — **no Docker**.
+[`uv`](https://docs.astral.sh/uv/) installs a standalone Python 3.14 on the host, the
+`obagent` CLI installs to `~/.local/bin`, and a DSM **Task Scheduler** job runs one
+**consume → notion sync → publish** pass on an interval. The orchestration glue (the
+entry script + env) lives in your **dotfiles**, not this repo.
 
-| Container path | Host path | What it is |
-|---|---|---|
-| `/vault` | `/volume1/paperless/obsidian-vaults` | the **obsidian-vaults** git repo root (`.git` + `Paperless/`) |
-| `/consume` | `/volume1/gdrive/paperless/consume` | inbox, per-type subdirs — Cloud Sync ↔ Drive (scans, phone, email) |
-| `/export` | `/volume1/gdrive/paperless/export` | export outbox — Cloud Sync ↔ Drive |
-| `/purge-queue` | `/volume1/paperless/purge-queue` | consume records consumed inbox paths here; a host job drains them |
-| `/root/.ssh` | `/volume1/paperless/ssh` | the SSH deploy key for `git push` (read-only) |
+> **Why native, not Docker?** Synology **Cloud Sync** propagates a delete to Google
+> Drive only when it happens **on the host**. A delete from inside a container (consume
+> moving a source out of the inbox, export removing a stale file) fires no event Cloud
+> Sync's watcher receives, and on its next reconcile two-way Cloud Sync re-downloads the
+> "missing" file — so the Drive consume inbox never drains and stale exports never
+> disappear. Running on the host fixes both. (Earlier versions ran in Docker with an
+> `OBAGENT_PURGE_QUEUE` workaround; `plans/2026-06-30-native-nas-migration.md` has the
+> full rationale.)
 
-The compose file itself lives with this repo at `/volume1/paperless/obagent`.
-`OBAGENT_VAULT=/vault/Paperless`, so `/vault` must be the **repo root** (not the
-`Paperless` subdir) — that's what makes the git-diff sync narrowing and the push work.
+The host folders obagent touches:
 
-> Loop service vs Task Scheduler: this guide uses the **loop service** (simplest;
-> one Project; continuous `docker compose logs`). To run discrete passes instead,
-> skip the loop and have **Task Scheduler** run
-> `docker compose run --rm obagent /app/scripts/run.sh` every N minutes — `run.sh`
-> has a `flock` no-overlap guard and exits non-zero on failure (so DSM can email you).
+| Path | What it is |
+|---|---|
+| `/volume1/paperless/obsidian-vaults` | the **obsidian-vaults** git repo (`OBAGENT_VAULT` = its `Paperless/` subdir) |
+| `/volume1/gdrive/paperless/consume` | inbox, per-type subdirs — Cloud Sync ↔ Drive (scans, phone, email) |
+| `/volume1/gdrive/paperless/export` | export outbox — Cloud Sync ↔ Drive |
+| `/volume1/paperless/ssh` | the SSH deploy key for `git push` |
 
-Enable **SSH** (Control Panel → Terminal & SNMP) to run the commands below, or use
-File Station + the Container Manager UI where noted. Commands assume `sudo`/admin.
+Enable **SSH** (Control Panel → Terminal & SNMP) to run the commands below. Run them as
+the user that will own the deployment (e.g. `junz`) — one user throughout means
+consistent file ownership (no git "dubious ownership") and a stable `$HOME` for uv.
 
-## 1. Put the obagent repo on the NAS
-The compose `build: .` needs this source on the NAS.
+## 1. Install uv + Python 3.14
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh   # uv -> ~/.local/bin (static musl binary)
+. ~/.local/bin/env                                 # PATH for this session
+uv python install 3.14
+```
+
+## 2. Clone the obagent repo + install the CLI
+Use **git clone** (not a folder-copy — a copy drags a foreign `.venv`/`.env` and
+arch-mismatched binaries):
 ```sh
 git clone <your-obagent-remote> /volume1/paperless/obagent
-cd /volume1/paperless/obagent && git checkout feat/notion-sync   # or master once merged
+cd /volume1/paperless/obagent
+uv tool install . --compile-bytecode              # `obagent` -> ~/.local/bin
+obagent --help                                    # smoke test
 ```
-(No remote yet? Copy the folder up with File Station / `rsync`.)
+Update later with `git pull && uv tool install . --compile-bytecode --force --reinstall`.
 
-## 2. Clone the vault repo on the NAS
+## 3. Clone the vault repo
 ```sh
 git clone git@github.com:junzh0u/obsidian-vaults.git /volume1/paperless/obsidian-vaults
 cd /volume1/paperless/obsidian-vaults
@@ -45,136 +57,126 @@ git config user.name "obagent"; git config user.email "obagent@junz.info"  # com
 ```
 Confirm it's on `main` tracking `origin/main`.
 
-## 3. Create the directory layout
+## 4. SSH deploy key (so the push authenticates, user-independent)
 ```sh
-mkdir -p /volume1/gdrive/paperless/consume/Documents /volume1/gdrive/paperless/consume/Receipts \
-         "/volume1/gdrive/paperless/consume/Bank Statements"
-mkdir -p /volume1/gdrive/paperless/export /volume1/paperless/ssh /volume1/paperless/purge-queue
-```
-(`purge-queue` is **not** under `/volume1/gdrive` — it's container↔host only, never
-synced to Drive. See "Draining the Drive consume inbox" below.)
-
-## 4. SSH deploy key (so the container can `git push`)
-```sh
+mkdir -p /volume1/paperless/ssh
 ssh-keygen -t ed25519 -f /volume1/paperless/ssh/id_ed25519 -N ""
 ssh-keyscan github.com gitlab.com > /volume1/paperless/ssh/known_hosts
 chmod 600 /volume1/paperless/ssh/id_ed25519 /volume1/paperless/ssh/known_hosts
 cat /volume1/paperless/ssh/id_ed25519.pub
 ```
 Add that public key as a **deploy key with write access** on **both** the GitHub and
-GitLab `obsidian-vaults` repos. The container mounts this folder at `/root/.ssh`;
-git uses `id_ed25519` automatically.
-- **Gotcha:** the private key must be mode `600` or SSH refuses it; `known_hosts`
-  must exist or the push hangs on host verification. Both handled above.
+GitLab `obsidian-vaults` repos. Pin it on the vault repo so the push works regardless of
+which shell/user runs the job:
+```sh
+git -C /volume1/paperless/obsidian-vaults config core.sshCommand \
+  'ssh -i /volume1/paperless/ssh/id_ed25519 -o UserKnownHostsFile=/volume1/paperless/ssh/known_hosts'
+```
 
-## 5. Cloud Sync `/volume1/gdrive` ↔ Google Drive (two-way)
+## 5. Directory layout
+```sh
+mkdir -p /volume1/gdrive/paperless/consume/Documents \
+         /volume1/gdrive/paperless/consume/Receipts \
+         "/volume1/gdrive/paperless/consume/Bank Statements" \
+         /volume1/gdrive/paperless/export
+```
+
+## 6. Cloud Sync `/volume1/gdrive` ↔ Google Drive (two-way)
 DSM → **Cloud Sync** → Google Drive → local path `/volume1/gdrive`, direction
-**two-way**. One task covers both the **consume inbox** (scans/phone/email land in
-Drive `paperless/consume/{type}/` and sync down to the NAS) and the **export
-outbox** (vault PDFs sync up). Leave **"Don't remove files in the destination
-folder…" OFF** — draining the inbox depends on a host-side delete propagating up to
-Drive (see "Draining the Drive consume inbox" below).
+**two-way**. One task covers both the **consume inbox** (scans/phone/email land in Drive
+`paperless/consume/{type}/` and sync down) and the **export outbox** (vault PDFs sync
+up). Leave **"Don't remove files in the destination folder…" OFF** — draining the inbox
+and removing stale exports both rely on the NAS-side delete propagating up, and now that
+obagent runs on the host, it does.
 
-> Why not just let `consume` delete the file? It can't reach Drive. obagent runs in
-> the container; a delete there (move-out or `rm`) is real on disk but fires **no
-> event Cloud Sync's watcher receives**, and on its next reconcile two-way Cloud Sync
-> re-downloads the "missing" file. Only a **host-side** delete propagates. So obagent
-> runs in copy mode and records consumed paths to the purge queue, and a host job does
-> the deleting — set up next.
-
-## 6. Create `.env`
+## 7. Environment
+obagent reads its config from the environment. Put the **non-secret paths** in your
+shell rc / dotfile and the **secrets** in a separate **gitignored** file:
 ```sh
-cd /volume1/paperless/obagent && cp .env.example .env && vi .env
+# tracked dotfile (e.g. ~/.config/zsh/.zshenv.<host>):
+export OBAGENT_VAULT=/volume1/paperless/obsidian-vaults/Paperless
+export OBAGENT_CONSUME=/volume1/gdrive/paperless/consume
+export OBAGENT_EXPORT=/volume1/gdrive/paperless/export
+
+# GITIGNORED file (e.g. ~/.config/zsh/.zshenv.secret) — API tokens + Notion DS ids:
+export NOTION_TOKEN=ntn_…
+export MISTRAL_API_KEY=…
+export OPENAI_API_KEY=…
+export OBAGENT_NOTION_RECEIPT_DS=…
+export OBAGENT_NOTION_DOCUMENT_DS=…
 ```
-Fill the **secrets** (`NOTION_TOKEN`, `MISTRAL_API_KEY`, `OPENAI_API_KEY`) and the
-**two data-source ids** (`OBAGENT_NOTION_RECEIPT_DS`, `OBAGENT_NOTION_DOCUMENT_DS`).
-Leave the path vars commented — compose sets them. **Do not set
-`OBAGENT_CONSUME_PREHOOK`** (the `nas-mount` prehook is for the Mac; the NAS has the
-inbox mounted directly).
+(`.env.example` lists every var obagent reads. A type whose `..._DS` is unset is simply
+not synced.)
 
-## 7. Check `docker-compose.yml`
-The volume paths already match the table above; adjust only if yours differ, and
-confirm `OBAGENT_VAULT: /vault/Paperless` matches your subdir name. `OBAGENT_MIN_AGE`
-(60s) and `OBAGENT_INTERVAL` (60s) can stay.
+## 8. The Task Scheduler entry script
+DSM Task Scheduler runs jobs with a **bare environment** — it does **not** source your
+shell dotfiles. So the scheduled job is a small entry script (kept in your dotfiles)
+that sets `HOME`/`PATH`, sources your rc **and** the secrets file, then hands off to the
+pass logic in this repo (`scripts/run.sh`):
+```bash
+#!/bin/bash
+export HOME=/volume1/homes/<you>
+export PATH=$HOME/.local/bin:$PATH         # so `obagent` (uv tool) + `uv` resolve
+source <your rc>        # -> OBAGENT_VAULT/CONSUME/EXPORT
+source <your secrets>   # -> API keys + Notion DS ids (gitignored)
+exec sh /volume1/paperless/obagent/scripts/run.sh
+```
+`scripts/run.sh` runs one guarded pass (a `flock` lockfile prevents overlap):
+`obagent consume --min-age` → `obagent notion sync` → `scripts/publish.sh` (`obagent
+export` → Drive, then a guarded `git fetch && merge --ff-only`, a machine `git commit`
+of the vault changes, and `git push` to every remote). Keeping the pass in the repo
+means it updates with `git pull`; the dotfiles wrapper only owns env setup.
 
-## 8. Create the Container Manager Project
-DSM → **Container Manager** → **Project** → **Create**:
-- **Name:** `paperless-sync`
-- **Path:** `/volume1/paperless/obagent`
-- **Source:** "Use existing docker-compose.yml" → Next → it builds the image (first
-  build ~1–2 min) and starts the service. `restart: always` keeps it looping.
+Then DSM → **Control Panel → Task Scheduler → Create → Scheduled Task → User-defined
+script**: **User** = you (the deployment owner), **Schedule** = repeat every ~5 min,
+**Run command** = the entry script's full path.
 
-Over SSH instead: `cd /volume1/paperless/obagent && sudo docker compose up -d --build`.
-
-## 9. Draining the Drive consume inbox (host purge job)
-Two-way Cloud Sync **cannot** drain the inbox on its own: a delete from inside the
-container fires no event its watcher sees, and on reconcile it re-downloads the file
-(see the note under step 5). So `OBAGENT_PURGE_QUEUE: /purge-queue/queue` (set in
-compose) tells `consume` to **copy** each source into the vault and append its path
-to the queue; a **host** job then deletes those inbox files — a host-side delete that
-Cloud Sync *does* propagate up to Drive.
-
-DSM → **Control Panel** → **Task Scheduler** → **Create** → **Scheduled Task** →
-**User-defined script**:
-- **User:** `root` (the inbox + queue are owned by the NAS/container user).
-- **Schedule:** repeat every ~5 minutes (Daily, "Repeat every 5 minutes").
-- **Run command:**
-  ```sh
-  sh /volume1/paperless/obagent/scripts/purge-consumed.sh
-  ```
-  The script reads the queue at `/volume1/paperless/purge-queue/queue` and `rm`s each
-  recorded inbox file. Override `OBAGENT_PURGE_QUEUE_HOST` / `OBAGENT_INBOX_HOST` /
-  `OBAGENT_INBOX_CONTAINER` in the command only if your paths differ from the defaults
-  in the script header.
-
-It only ever `rm`s files **under the configured inbox prefix** that obagent has
-**already copied into the vault** — zero data-loss risk (the vault copy is the source
-of truth), idempotent, and race-safe (it atomically claims a batch, so paths queued
-mid-run are handled next time).
-
-## 10. Verify
-Dry-run first (no writes), then watch the live loop:
+## 9. Verify
+Dry-run first (no writes):
 ```sh
-cd /volume1/paperless/obagent
-sudo docker compose run --rm obagent obagent --vault /vault/Paperless notion sync --dry-run
-sudo docker compose logs -f          # or Container Manager → Project → Logs
+obagent --vault /volume1/paperless/obsidian-vaults/Paperless notion sync --dry-run
 ```
-Look for the framed output: `✓ consume`, the sync timing lines, `✓ publish` with a
-`committed …` line and an error-free push. Then drop a test PDF into Drive
-`paperless/consume/Documents` (or NAS `/volume1/gdrive/paperless/consume/Documents`),
-wait for it to sync + `min-age` + `interval`, and watch it flow. The source stays in
-the inbox briefly, then the host purge job (step 9) `rm`s it and it **disappears from
-Drive** — confirm it does *not* re-download.
+Then drop a test PDF into Drive `paperless/consume/Documents/` (or NAS
+`/volume1/gdrive/paperless/consume/Documents`), wait for it to sync down + settle
+(`--min-age`) + the next tick, and watch it flow: a note appears in the vault, the
+source **disappears from the inbox and from Drive** (drained host-side), and `publish`
+commits + pushes. Confirm the source does **not** re-download. Run the entry script by
+hand once (`bash <entry-script>`) to confirm it picks up the env before scheduling.
 
-## 11. Point the scanner
+## 10. Point the scanner
 Set the scanner's scan-to-folder (or SMB share) to
 `/volume1/gdrive/paperless/consume/Documents` (or the matching type) — the same
 Drive-synced inbox that scans, phone uploads, and email ingest all share. The
 `--min-age 60` gate protects against grabbing a file mid-upload/sync.
 
-## 12. (Optional) Email ingest
-To also feed Gmail into this inbox, deploy `scripts/gmail-ingest.gs` as an Apps
-Script (set its `CONSUME_FOLDER_ID` to the Drive `consume/` folder id, ~15-min
-trigger). It drops body PDFs + attachments into Drive `consume/{Receipts,Documents}/`,
-which this same Cloud Sync pulls down. See `plans/2026-06-29-email-ingest.md`.
+## 11. (Optional) Email ingest
+To also feed Gmail into this inbox, deploy `scripts/gmail-ingest.gs` as an Apps Script
+(set its `CONSUME_FOLDER_ID` to the Drive `consume/` folder id, ~15-min trigger). It
+drops body PDFs + attachments into Drive `consume/{Receipts,Documents}/`, which this same
+Cloud Sync pulls down. See `plans/2026-06-29-email-ingest.md`.
 
 ## Updating later
 ```sh
-cd /volume1/paperless/obagent && git pull
-sudo docker compose up -d --build    # or Container Manager → Project → Build, then Up
+cd /volume1/paperless/obagent && git pull --ff-only
+uv tool install . --compile-bytecode --force --reinstall
 ```
 
 ## Troubleshooting
-- **Push fails / hangs** → key not mode `600`, missing `known_hosts`, vault remote on
-  `https://` instead of `git@`, or the deploy key lacks write access.
-- **`notion sync` does a full pass every run** ("no git repo visible") → the container
-  can't run git on the vault. Either `/vault` isn't the repo **root** (it must be, not the
-  `Paperless` subdir), or git's **dubious-ownership** guard is tripping because the mounted
-  files are owned by the NAS user while the container runs as root. The image trusts the
-  mount via `git config --system --add safe.directory '*'` (rebuild if you're on an older
-  image). The same guard would also block the machine commit + push.
-- **Nothing consumed** → check `/consume` (Drive `paperless/consume/`) has the per-type
-  subdirs, and files have finished syncing and are older than `OBAGENT_MIN_AGE`.
-- **Commit identity error** → set `user.name`/`user.email` in the vault clone (step 2) or
-  `OBAGENT_GIT_NAME`/`OBAGENT_GIT_EMAIL` in `.env`.
-- **A failed pass** is loud in the log (`✗ … FAILED`) and exits non-zero.
+- **Nothing runs / `obagent: not found`** → the Task Scheduler job didn't get your env:
+  it runs a bare shell and does **not** source dotfiles. Ensure the entry script sets
+  `HOME` + `PATH` (incl. `~/.local/bin`) and sources both your rc and the secrets file.
+  Test by hand as your user: `bash <entry-script>`.
+- **Push fails / hangs** → deploy key not mode `600`, missing `known_hosts`, vault remote
+  on `https://` instead of `git@`, `core.sshCommand` not set (step 4), or the key lacks
+  write access.
+- **`notion sync` does a full pass every run** ("no git repo visible") → git can't run on
+  the vault. Usually fixed by running the job as the user that **owns** the vault repo (no
+  dubious-ownership guard); otherwise `git config --global --add safe.directory '*'` for
+  the job's user.
+- **Nothing consumed** → check `/volume1/gdrive/paperless/consume/{type}/` has the file,
+  it finished syncing, and it's older than `--min-age`.
+- **Source re-appears on Drive after consume** → the delete happened off-host (you're
+  still running in a container, or a different machine holds the inbox). obagent must run
+  on the same host Cloud Sync watches.
+- **Commit identity error** → set `user.name`/`user.email` in the vault clone (step 3) or
+  `OBAGENT_GIT_NAME`/`OBAGENT_GIT_EMAIL` in the env.

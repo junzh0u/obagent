@@ -1,10 +1,15 @@
 # Consume-inbox Drive drain via host-side purge queue — plan
 
-**Status (2026-06-30): BUILT.** `OBAGENT_PURGE_QUEUE` (copy mode + record consumed
-paths), `scripts/purge-consumed.sh` (host drain), compose mount/env, `.env.example`,
-`DEPLOY.md` (§5 reasoning + new §9 drain job), `CLAUDE.md`/`README.md`, and tests
-(`tests/shared/test_consume_purge_queue.py`) all landed. This fixes the broken
-"Cloud Sync drains the Drive consume inbox" assumption from the deployment.
+**Status (2026-06-30): SUPERSEDED & REVERTED** by `2026-06-30-native-nas-migration.md`.
+The purge queue was a workaround for the container delete-propagation gap; running
+obagent **natively on the host** makes deletes propagate directly, so this whole
+mechanism (`OBAGENT_PURGE_QUEUE`, `scripts/purge-consumed.sh`) was removed. Kept for the
+diagnosis below — *why* Cloud Sync can't see a container's deletes — which is the root
+cause the native migration addresses.
+
+**Original status (BUILT):** `OBAGENT_PURGE_QUEUE` (copy mode + record consumed paths),
+`scripts/purge-consumed.sh` (host drain), compose mount/env, `.env.example`,
+`DEPLOY.md`, `CLAUDE.md`/`README.md`, and tests all landed — then reverted (above).
 
 ## Problem & diagnosis (why the current drain fails)
 

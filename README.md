@@ -199,26 +199,22 @@ previews.
 
 ## Deployment
 
-Runs on a Synology NAS via **Container Manager (docker compose)** — the image bundles
-Python, so the NAS needs none.
+Runs **natively on a Synology NAS** (no Docker). [`uv`](https://docs.astral.sh/uv/)
+installs a standalone Python 3.14 on the host, so the NAS needs no system Python:
 
 ```bash
-cp .env.example .env             # add NOTION_TOKEN, MISTRAL_API_KEY, OPENAI_API_KEY
-docker compose up -d --build     # looping monitor: consume → notion sync → publish
-docker compose logs -f
+uv tool install .                # obagent -> ~/.local/bin (a Python 3.14 CLI)
 ```
 
-`scripts/run.sh` is one pass (`consume --min-age` → `notion sync` → `publish.sh`);
-`scripts/loop.sh` repeats it every `$OBAGENT_INTERVAL`s (the compose service command).
-Or schedule one-off passes with Synology Task Scheduler:
-`docker run --rm --name paperless-sync … obagent` (`--name` prevents overlap). Adjust
-bind-mounts and env in `docker-compose.yml`.
+A DSM **Task Scheduler** job then runs one pass on an interval via `scripts/run.sh`:
+`consume --min-age` → `notion sync` → publish (`export` + a guarded fast-forward + a
+machine `git commit` + `git push`), `flock`-guarded against overlap. The pass logic
+lives in the repo; a thin wrapper in your dotfiles loads the env and calls it.
 
-The consume inbox is Cloud-Synced to Google Drive, but Cloud Sync can't see the
-container's own deletes — so with `OBAGENT_PURGE_QUEUE` set, `consume` copies each
-source and records its path, and a host-side Task Scheduler job
-(`scripts/purge-consumed.sh`) deletes the inbox files so the deletion propagates back
-to Drive. See `DEPLOY.md`.
+Running on the host (not a container) is deliberate: Synology **Cloud Sync** drains the
+consume inbox and removes stale exports from Google Drive only when the delete happens
+**host-side** — a delete from inside a container is invisible to its watcher. See
+`DEPLOY.md` for the full setup.
 
 ## Email ingest
 
@@ -226,8 +222,9 @@ Optionally feed selected incoming Gmail into the vault. A small **Apps Script**
 (`scripts/gmail-ingest.gs`) watches a Gmail label, renders each message body to a
 PDF, pulls every attachment, routes them by type, and drops them into your Google
 Drive **`consume/{type}/`** inbox. **Synology Cloud Sync** (two-way) mirrors that
-inbox to the NAS, and the normal `obagent consume` ingests it each pass — the host
-purge job then empties the Drive folder (see Deployment).
+inbox to the NAS, and the normal `obagent consume` ingests it each pass — consume
+*moves* the source out, and (running on the host) that delete propagates back up to
+empty the Drive folder.
 
 Because email reuses the existing consume inbox, there's no email-specific obagent
 wiring. No Gmail credentials live on the NAS (the script runs in Google with your
