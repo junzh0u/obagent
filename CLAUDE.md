@@ -207,7 +207,7 @@ retry). `OBAGENT_PURGE_QUEUE` unset → unchanged behavior (`consume` moves, no 
 Selected incoming Gmail is fed into the pipeline — a **feeder**, no obagent-core
 change. It reuses the **Drive consume inbox**: the script drops files into the same
 `consume/{type}/` tree obagent already ingests, so there is no email-specific wiring
-on the obagent side. Full design + one-time setup is in `plan-email-ingest.md`.
+on the obagent side. Full design + one-time setup is in `plans/2026-06-29-email-ingest.md`.
 
 - **`scripts/gmail-ingest.gs`** (Apps Script, paste-deployed, runs in Google with
   your own Gmail+Drive auth — no creds on the NAS): on a ~15-min trigger it finds

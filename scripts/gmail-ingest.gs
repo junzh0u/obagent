@@ -19,7 +19,7 @@
  * Dedup is the per-message processed-id set (PROP_KEY), NOT the labels — Gmail
  * labels are thread-level, so a reply re-surfaces a thread and we must skip the
  * messages already exported. The label swap only keeps each search() batch small.
- * See plan-email-ingest.md → "Dedup — robust design".
+ * See plans/2026-06-29-email-ingest.md → "Dedup — robust design".
  *
  * SETUP: paste into a new Apps Script project, set the CONSUME_FOLDER_ID script
  * property (Project Settings → Script Properties) to your Drive consume/ folder id,

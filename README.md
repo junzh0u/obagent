@@ -231,7 +231,7 @@ purge job then empties the Drive folder (see Deployment).
 
 Because email reuses the existing consume inbox, there's no email-specific obagent
 wiring. No Gmail credentials live on the NAS (the script runs in Google with your
-own auth). Setup and design notes are in `plan-email-ingest.md`.
+own auth). Setup and design notes are in `plans/2026-06-29-email-ingest.md`.
 
 ## Development
 

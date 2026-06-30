@@ -156,7 +156,7 @@ Drive-synced inbox that scans, phone uploads, and email ingest all share. The
 To also feed Gmail into this inbox, deploy `scripts/gmail-ingest.gs` as an Apps
 Script (set its `CONSUME_FOLDER_ID` to the Drive `consume/` folder id, ~15-min
 trigger). It drops body PDFs + attachments into Drive `consume/{Receipts,Documents}/`,
-which this same Cloud Sync pulls down. See `plan-email-ingest.md`.
+which this same Cloud Sync pulls down. See `plans/2026-06-29-email-ingest.md`.
 
 ## Updating later
 ```sh
