@@ -148,7 +148,7 @@ def test_already_consumed_root_file_is_skipped(
 @patch("commands.consume.run_ocr")
 @patch("commands.consume.OpenAI")
 @patch("commands.consume.Mistral")
-def test_ocr_failure_keeps_root_file_and_cleans_staging(
+def test_ocr_failure_isolates_the_file(
     mock_mistral,
     mock_openai,
     mock_ocr,
@@ -160,7 +160,7 @@ def test_ocr_failure_keeps_root_file_and_cleans_staging(
     tmp_path,
     monkeypatch,
 ):
-    """OCR failure during classification leaves the root file for retry; staging cleaned."""
+    """OCR failure is isolated: warn + count, keep the file for retry, pass exits 0."""
     monkeypatch.delenv("OBAGENT_CONSUME_PREHOOK", raising=False)
     _setup_ctx_managers(mock_mistral, mock_openai)
     mock_ocr.side_effect = Exception("Status 502")
@@ -171,8 +171,55 @@ def test_ocr_failure_keeps_root_file_and_cleans_staging(
 
     result = _invoke(inbox, vault, runner)
 
-    assert result.exit_code != 0
-    assert "Classify failed" in result.output
+    assert result.exit_code == 0, result.output
+    assert "classify failed" in result.output.lower()
+    assert "1 failed" in result.output
     assert pdf.exists()  # kept for retry
     assert not (vault / ".obagent" / "staging").exists()  # staging cleaned
     mock_classify.assert_not_called()
+
+
+@patch("commands.consume.render_note")
+@patch("commands.consume.extract_fields")
+@patch("commands.consume.classify_document")
+@patch("commands.consume.run_ocr")
+@patch("commands.consume.OpenAI")
+@patch("commands.consume.Mistral")
+def test_one_bad_file_does_not_block_the_batch(
+    mock_mistral,
+    mock_openai,
+    mock_ocr,
+    mock_classify,
+    mock_llm,
+    mock_render,
+    runner,
+    vault,
+    tmp_path,
+    monkeypatch,
+):
+    """A file whose OCR fails is isolated; other loose files still get classified."""
+    monkeypatch.delenv("OBAGENT_CONSUME_PREHOOK", raising=False)
+    _setup_ctx_managers(mock_mistral, mock_openai)
+    mock_classify.return_value = receipt_pipeline
+    # Processed in sorted order (good.pdf, zbad.pdf): OCR succeeds, then fails.
+    mock_ocr.side_effect = [None, Exception("boom")]
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    good = inbox / "good.pdf"
+    good.write_bytes(b"good content")
+    bad = inbox / "zbad.pdf"
+    bad.write_bytes(b"bad content")
+    sha_good = hashlib.sha256(b"good content").hexdigest()
+
+    result = _invoke(inbox, vault, runner)
+
+    assert result.exit_code == 0, result.output
+    # the good file is classified, relocated, and its root original removed
+    assert (
+        vault / "Receipts" / ASSETS_DIR / sha_good / "src" / "original.pdf"
+    ).exists()
+    assert not good.exists()
+    # the bad file is isolated and kept for retry
+    assert bad.exists()
+    assert "1 consumed" in result.output and "1 failed" in result.output
+    mock_llm.assert_called_once()  # only the good file reached extraction

@@ -120,19 +120,23 @@ def _classify_and_consume_root(
     classify_model: str,
     keep_original: bool,
     overwrite: bool,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """OCR + LLM-classify loose root files, then run the matched type's llm→render.
 
     Each file is copied into a neutral staging asset dir, OCR'd once, classified,
-    then the asset is relocated to ``vault/{Type}/`` (so llm/render skip OCR). The
-    root original is removed only after a successful relocate — an OCR/classify
-    failure cleans staging and leaves the file for the next pass.
+    then the asset is relocated to ``vault/{Type}/`` (so llm/render skip OCR).
+    Failures are **isolated per file** (warn, count, continue) so one bad scan does
+    not abort the batch. An OCR/classify failure cleans staging and leaves the root
+    original for a clean retry; a post-relocate failure leaves the committed asset
+    for a manual ``obagent {type} llm|render <sha>``. Returns (consumed, skipped,
+    failed).
     """
     default_pipeline = _default_pipeline()
     type_paths = [p.default_path for p in Pipeline._registry]
     staging_root = vault / STAGING_PATH
     consumed = 0
     skipped = 0
+    failed = 0
     shutil.rmtree(staging_root, ignore_errors=True)  # clear any crashed-run leftovers
     try:
         for source in interruptible(sources):
@@ -149,6 +153,8 @@ def _classify_and_consume_root(
             )
             if staging is None:  # unreachable with overwrite=True
                 continue
+            # OCR → classify → relocate. A failure here drops the staging asset and
+            # leaves the root original in place for a clean retry next pass.
             try:
                 run_ocr(staging, mistral_client, model=ocr_model, overwrite=overwrite)
                 txt = newest_file(staging / "ocr", "*.txt")
@@ -159,17 +165,21 @@ def _classify_and_consume_root(
                     default_pipeline=default_pipeline,
                     model=classify_model,
                 )
+                final = vault / pipeline.default_path / ASSETS_DIR / sha
+                final.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(staging), str(final))
             except Exception as e:
-                # Leave the root original in place for a clean retry next pass.
-                raise click.ClickException(
-                    f"Classify failed for {source.name}: {e}"
-                ) from e
-            final = vault / pipeline.default_path / ASSETS_DIR / sha
-            final.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(staging), str(final))
+                shutil.rmtree(staging, ignore_errors=True)
+                click.secho(
+                    f"  Warning: classify failed for {source.name}: {e}", fg="red"
+                )
+                failed += 1
+                continue
             click.secho(f"  Classified as {pipeline.default_path}", fg="green")
             if not keep_original:
                 source.unlink()  # committed to the vault — host delete drains Drive
+            # The asset is now committed; a post-relocate failure leaves it for a
+            # manual re-run (dedup skips it next pass), so isolate rather than abort.
             pipeline.prepare_context(vault)
             try:
                 extract_fields(
@@ -181,7 +191,12 @@ def _classify_and_consume_root(
                     pipeline=pipeline,
                 )
             except Exception as e:
-                raise click.ClickException(f"Field extraction failed: {e}") from e
+                click.secho(
+                    f"  Warning: field extraction failed for {source.name}: {e}",
+                    fg="red",
+                )
+                failed += 1
+                continue
             try:
                 render_note(
                     final, overwrite=overwrite, note_index=None, pipeline=pipeline
@@ -191,7 +206,7 @@ def _classify_and_consume_root(
             consumed += 1
     finally:
         shutil.rmtree(staging_root, ignore_errors=True)  # leave nothing behind
-    return consumed, skipped
+    return consumed, skipped, failed
 
 
 def _resolve_consume_sources(
@@ -242,12 +257,12 @@ def _filter_stable(sources: list[Path], min_age: int) -> list[Path]:
     return stable
 
 
-def _print_summary(consumed: int, skipped: int) -> None:
-    total = consumed + skipped
-    click.secho(
-        f"{total} files found: {consumed} consumed, {skipped} already in vault",
-        bold=True,
-    )
+def _print_summary(consumed: int, skipped: int, failed: int = 0) -> None:
+    total = consumed + skipped + failed
+    summary = f"{consumed} consumed, {skipped} already in vault"
+    if failed:
+        summary += f", {failed} failed"
+    click.secho(f"{total} files found: {summary}", bold=True)
 
 
 def _api_and_model_options(f):
@@ -444,7 +459,7 @@ def consume_all(
             if not root_sources:
                 click.secho("  No loose files in the inbox root.", fg="yellow")
             else:
-                consumed, skipped = _classify_and_consume_root(
+                consumed, skipped, failed = _classify_and_consume_root(
                     vault,
                     root_sources,
                     mistral_client=mistral_client,
@@ -455,4 +470,4 @@ def consume_all(
                     keep_original=keep_original,
                     overwrite=overwrite,
                 )
-                _print_summary(consumed, skipped)
+                _print_summary(consumed, skipped, failed)

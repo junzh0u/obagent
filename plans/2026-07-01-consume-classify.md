@@ -91,9 +91,13 @@ if classify:                                      # --classify / --no-classify, 
   only *after* relocation. OCR/classify failure → remove the staging copy, leave the
   original in the root for the next pass. (Post-relocation llm/render failure leaves the
   asset for manual `obagent {type} llm|render {sha}` — same as today's per-type consume.)
-- **Error policy** matches `_consume_path`: OCR/classify/extract failure raises
-  (`ClickException`), render failure warns. *(Optional refinement: per-file isolation so
-  one bad scan doesn't abort the batch — note it, not in v1.)*
+- **Error policy — per-file isolation** (unlike `_consume_path`, which aborts): a
+  failure on one loose file warns, increments a `failed` count, and continues, so one
+  bad scan never blocks the batch. The pass exits 0 with `N failed` in the summary.
+  OCR/classify failure cleans staging and leaves the root file for retry; a
+  post-relocate (extract) failure leaves the committed asset for a manual re-run
+  (`obagent {type} llm|render <sha>` — dedup skips it next pass); render failure warns
+  but the file still counts as consumed.
 
 ## Follow-on — simplify `gmail-ingest.gs` (replace ROUTING_RULES with the smart inbox)
 Once the classifier exists, the Apps Script no longer guesses the type — it drops
