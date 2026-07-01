@@ -65,6 +65,10 @@ class BankStatementFields(
 
 class BankStatementPipeline(Pipeline):
     fields_class = BankStatementFields
+    classify_description = (
+        "A bank or credit-card account statement — covers a statement period, "
+        "with an account number and balances/transactions."
+    )
 
     @property
     @override

@@ -130,6 +130,10 @@ class ReceiptFields(Fields[Literal["merchant", "date", "total"]]):
 
 class ReceiptPipeline(Pipeline):
     fields_class = ReceiptFields
+    classify_description = (
+        "A purchase receipt, invoice, or order confirmation — a record of a "
+        "transaction with a merchant, amount(s), and date."
+    )
 
     @override
     def prepare_context(self, vault: Path) -> None:

@@ -154,6 +154,8 @@ Per-type `consume` and `export` resolve their directory the same way:
 
 Top-level `obagent consume` / `obagent export` drop the positional and require the option/env var; both loop over every type and apply `DIR/{path}/` per pipeline. Missing type subdirs are soft-skipped on consume; export will happily create them.
 
+**Smart inbox:** files dropped **loose in the inbox root** (not pre-sorted into a type subdir) are auto-classified by `obagent consume` — OCR'd once, then an LLM decides the type (receipt / bank statement / document) and routes them, skipping a second OCR. Pass `--no-classify` to disable, or `--classify-model` to pick the model.
+
 The top-level `obagent consume` also accepts `--prehook CMD` (env var: `OBAGENT_CONSUME_PREHOOK`), a shell command that runs before the per-type loop. Useful for populating the inbox from an outside source. A non-zero exit aborts before any API clients are opened.
 
 ```bash
@@ -220,11 +222,12 @@ consume inbox and removes stale exports from Google Drive only when the delete h
 
 Optionally feed selected incoming Gmail into the vault. A small **Apps Script**
 (`scripts/gmail-ingest.gs`) watches a Gmail label, renders each message body to a
-PDF, pulls every attachment, routes them by type, and drops them into your Google
-Drive **`consume/{type}/`** inbox. **Synology Cloud Sync** (two-way) mirrors that
-inbox to the NAS, and the normal `obagent consume` ingests it each pass — consume
-*moves* the source out, and (running on the host) that delete propagates back up to
-empty the Drive folder.
+PDF, pulls every attachment, and drops them into your Google Drive **consume** inbox —
+into `consume/{type}/` when the thread is pinned with an `obagent/inbox/{receipt,document}`
+label, otherwise into the `consume/` root for obagent's smart inbox to classify.
+**Synology Cloud Sync** (two-way) mirrors that inbox to the NAS, and the normal
+`obagent consume` ingests it each pass — consume *moves* the source out, and (running on
+the host) that delete propagates back up to empty the Drive folder.
 
 Because email reuses the existing consume inbox, there's no email-specific obagent
 wiring. No Gmail credentials live on the NAS (the script runs in Google with your

@@ -6,16 +6,17 @@
  * Each firing:
  *   1. takes a script lock (no overlapping runs)
  *   2. finds threads labeled `obagent/inbox`
- *   3. for each *not-yet-processed* message: routes it to a document type — a thread
- *      labeled obagent/inbox/receipt or obagent/inbox/document pins the type, else a
- *      subject/sender heuristic decides — renders the body to a PDF and pulls every
- *      (non-inline) attachment, and writes them into  consume/<Type>/  on Drive
+ *   3. for each *not-yet-processed* message: renders the body to a PDF and pulls every
+ *      (non-inline) attachment, and writes them into Drive — a thread labeled
+ *      obagent/inbox/receipt or obagent/inbox/document pins the type (consume/<Type>/);
+ *      otherwise they land in the consume/ root, where obagent classifies them by OCR
  *   4. dequeues the thread (-obagent/inbox +obagent/ingested)
  *
  * The consume folder is the Drive side of the NAS consume inbox (Synology Cloud
- * Sync, two-way). obagent's normal `consume` ingests <Type>/ files and MOVES them
- * out, so the local delete propagates back up and drains the Drive folder. Email
- * therefore rides the existing inbox — no dedicated folder, no extra obagent wiring.
+ * Sync, two-way). obagent's normal `consume` ingests it (a type subdir directly, or
+ * classifies loose root files) and removes each source, so the local delete propagates
+ * back up and drains the Drive folder. Email therefore rides the existing inbox — no
+ * dedicated folder, no extra obagent wiring.
  *
  * Dedup is the per-message processed-id set (PROP_KEY), NOT the labels — Gmail
  * labels are thread-level, so a reply re-surfaces a thread and we must skip the
@@ -25,7 +26,7 @@
  * SETUP: paste into a new Apps Script project, set the CONSUME_FOLDER_ID script
  * property (Project Settings → Script Properties) to your Drive consume/ folder id,
  * add a time-driven trigger on ingestEmail() (~every 15 min), authorize when
- * prompted. Label a thread obagent/inbox to queue it (heuristic routing), or
+ * prompted. Label a thread obagent/inbox to queue it (obagent classifies the type), or
  * obagent/inbox/receipt / obagent/inbox/document to queue AND pin its type. Keeping
  * the id in a script property (not a code const) keeps this deploy-specific value
  * out of the public repo and survives re-pasting the code.
@@ -35,28 +36,22 @@
 const FOLDER_ID_PROP  = 'CONSUME_FOLDER_ID';   // script property: id of the Drive consume/ folder (parent of the per-type subdirs)
 const LABEL_DONE      = 'obagent/ingested';    // added when a thread is done (audit trail)
 
-// Queue labels — apply any to enqueue a thread. Plain obagent/inbox routes by the
-// heuristic (ROUTING_RULES below); the nested obagent/inbox/receipt and
-// obagent/inbox/document ALSO pin the type. The search matches any of them, and
-// dequeue strips whichever are present. (Gmail's `label:` is exact — a child label is
-// NOT matched by label:obagent/inbox — so each is listed explicitly.)
+// Queue labels — apply any to enqueue a thread. Plain obagent/inbox drops to the
+// consume/ root (obagent classifies the type); the nested obagent/inbox/receipt and
+// obagent/inbox/document ALSO pin the type to consume/<Type>/. The search matches any
+// of them, and dequeue strips whichever are present. (Gmail's `label:` is exact — a
+// child label is NOT matched by label:obagent/inbox — so each is listed explicitly.)
 const QUEUE_LABELS = ['obagent/inbox', 'obagent/inbox/receipt', 'obagent/inbox/document'];
 const SEARCH_QUERY = QUEUE_LABELS.map(function (l) { return 'label:' + l; }).join(' OR ');
 
-// A nested queue label pins the type, overriding the heuristic. The type must match
-// obagent's vault subdir. (Labels are thread-level → applies to the whole thread.)
+// A nested queue label pins the type → consume/<Type>/. The type must match obagent's
+// vault subdir. Unpinned mail lands in the consume/ root, where obagent classifies it
+// (OCR-based) — far more accurate than a subject/sender regex, so there's no heuristic
+// here. (Labels are thread-level → a pin applies to the whole thread.)
 const LABEL_TYPES = [
   { label: 'obagent/inbox/receipt',  type: 'Receipts'  },
   { label: 'obagent/inbox/document', type: 'Documents' },
 ];
-
-// Fallback auto-routing (plain obagent/inbox, no type label): a message whose
-// "<from> <subject>" matches the receipt pattern goes to consume/Receipts/; everything
-// else falls through to DEFAULT_TYPE (consume/Documents/). Edit freely.
-const ROUTING_RULES = [
-  { type: 'Receipts', pattern: /receipt|invoice|order (confirmation|#)|your order/i },
-];
-const DEFAULT_TYPE = 'Documents';
 
 const MAX_THREADS    = 25;   // per run — bounds work under the ~6-min execution cap
 const MAX_IDS        = 400;  // processed-message-id ring buffer (PropertiesService caps a value at 9 KB)
@@ -95,7 +90,7 @@ function run_() {
         const id = message.getId();
         if (processed.has(id)) continue;        // primary dedup — already exported
 
-        exportMessage_(message, consumeFolder, forcedType); // body PDF + attachments → consume/<Type>/
+        exportMessage_(message, consumeFolder, forcedType); // body PDF + attachments → consume/<Type>/ (pinned) or root
         processed.add(id);
         saveProcessed_(processed);              // persist incrementally: a crash only risks the in-flight message
         exported++;
@@ -113,8 +108,9 @@ function run_() {
 
 // ── Per-message export ───────────────────────────────────────────────────────
 function exportMessage_(message, consumeFolder, forcedType) {
-  const prefix = filenamePrefix_(message);                                 // "2026-06-28 0930 - ACME invoice"
-  const folder = subfolder_(consumeFolder, typeFor_(message, forcedType)); // consume/Receipts, consume/Documents, ...
+  const prefix = filenamePrefix_(message);   // "2026-06-28 0930 - ACME invoice"
+  // Pinned type → consume/<Type>/; unpinned → consume/ root (obagent classifies by OCR).
+  const folder = forcedType ? subfolder_(consumeFolder, forcedType) : consumeFolder;
 
   // Body → PDF (basic fidelity; the real document is usually the attachment, but
   // for many receipts the body IS the receipt). Always produced — body-PDF dedup
@@ -137,17 +133,6 @@ function exportMessage_(message, consumeFolder, forcedType) {
 }
 
 // ── Routing ──────────────────────────────────────────────────────────────────
-// A pinning thread label (forcedType) wins; otherwise match the message's
-// "<from> <subject>" against ROUTING_RULES, then fall back to DEFAULT_TYPE.
-function typeFor_(message, forcedType) {
-  if (forcedType) return forcedType;
-  const hay = (message.getFrom() || '') + ' ' + (message.getSubject() || '');
-  for (const rule of ROUTING_RULES) {
-    if (rule.pattern.test(hay)) return rule.type;
-  }
-  return DEFAULT_TYPE;
-}
-
 // The type pinned by a thread's label (obagent/inbox/receipt → Receipts,
 // obagent/inbox/document → Documents), or null if neither is present.
 function forcedTypeFor_(thread) {

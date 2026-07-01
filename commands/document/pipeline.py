@@ -64,6 +64,11 @@ class DocumentFields(Fields[Literal["title", "date", "tags", "people", "summary"
 class DocumentPipeline(Pipeline):
     fields_class = DocumentFields
     _known_names: list[str] = []
+    classify_description = (
+        "Any other document: letters, forms, tax filings, contracts, notices, "
+        "IDs, etc. The catch-all when it is not clearly a receipt or a bank "
+        "statement."
+    )
 
     @property
     @override

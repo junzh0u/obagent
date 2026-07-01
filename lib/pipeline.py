@@ -15,6 +15,10 @@ class Pipeline(ABC):
 
     fields_class: type[Fields]
 
+    #: One-line description of this type for the smart-inbox classifier prompt
+    #: (see ``commands/classify.py``). Empty = excluded from classification.
+    classify_description: ClassVar[str] = ""
+
     def __init__(self):
         Pipeline._registry.append(self)
 

@@ -1,3 +1,5 @@
+import hashlib
+import shutil
 import subprocess
 import time
 from collections.abc import Iterable
@@ -7,13 +9,25 @@ import click
 from mistralai.client import Mistral
 from openai import OpenAI
 
+from commands.classify import classify_document
 from commands.ingest import ingest_source, resolve_sources
 from commands.llm import extract_fields
 from commands.ocr import run_ocr
 from commands.render import index_existing_notes, render_note
-from lib.constants import LLM_MODEL, OCR_MODEL
+from lib.constants import (
+    ASSETS_DIR,
+    CLASSIFY_MODEL,
+    LLM_MODEL,
+    OCR_MODEL,
+    SUPPORTED_EXTENSIONS,
+)
 from lib.pipeline import Pipeline
-from lib.utils import interruptible
+from lib.utils import interruptible, newest_file
+
+# Loose files in the consume root are OCR'd + classified into a neutral staging
+# asset dir here (same filesystem as the type dirs → the post-classify relocate is
+# an atomic rename), then moved to vault/{Type}/. Transient: cleared each pass.
+STAGING_PATH = ".obagent/staging"
 
 
 def _consume_path(
@@ -71,6 +85,112 @@ def _consume_path(
         except Exception as e:
             click.secho(f"  Warning: note rendering failed: {e}", fg="red")
         consumed += 1
+    return consumed, skipped
+
+
+def _default_pipeline() -> Pipeline:
+    """The catch-all pipeline (Documents) — classification's fallback."""
+    for pipeline in Pipeline._registry:
+        if pipeline.default_path == "Documents":
+            return pipeline
+    return Pipeline._registry[-1]
+
+
+def _root_loose_sources(input_dir: Path) -> list[Path]:
+    """Supported files sitting directly in the consume root (depth-1).
+
+    Files inside the per-type subdirs are handled by the per-type loop; only
+    loose root files are candidates for classification.
+    """
+    return sorted(
+        f
+        for f in input_dir.iterdir()
+        if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
+    )
+
+
+def _classify_and_consume_root(
+    vault: Path,
+    sources: Iterable[Path],
+    *,
+    mistral_client: Mistral,
+    openai_client: OpenAI,
+    ocr_model: str,
+    llm_model: str,
+    classify_model: str,
+    keep_original: bool,
+    overwrite: bool,
+) -> tuple[int, int]:
+    """OCR + LLM-classify loose root files, then run the matched type's llm→render.
+
+    Each file is copied into a neutral staging asset dir, OCR'd once, classified,
+    then the asset is relocated to ``vault/{Type}/`` (so llm/render skip OCR). The
+    root original is removed only after a successful relocate — an OCR/classify
+    failure cleans staging and leaves the file for the next pass.
+    """
+    default_pipeline = _default_pipeline()
+    type_paths = [p.default_path for p in Pipeline._registry]
+    staging_root = vault / STAGING_PATH
+    consumed = 0
+    skipped = 0
+    shutil.rmtree(staging_root, ignore_errors=True)  # clear any crashed-run leftovers
+    try:
+        for source in interruptible(sources):
+            click.secho(f"Classify: {source}", bold=True)
+            sha = hashlib.sha256(source.read_bytes()).hexdigest()
+            if any((vault / t / ASSETS_DIR / sha).exists() for t in type_paths):
+                click.secho(f"  Already consumed ({sha}), skipping", fg="yellow")
+                if not keep_original:
+                    source.unlink()
+                skipped += 1
+                continue
+            staging = ingest_source(
+                source, vault, STAGING_PATH, keep_original=True, overwrite=True
+            )
+            if staging is None:  # unreachable with overwrite=True
+                continue
+            try:
+                run_ocr(staging, mistral_client, model=ocr_model, overwrite=overwrite)
+                txt = newest_file(staging / "ocr", "*.txt")
+                ocr_text = txt.read_text() if txt else ""
+                pipeline = classify_document(
+                    ocr_text,
+                    openai_client,
+                    default_pipeline=default_pipeline,
+                    model=classify_model,
+                )
+            except Exception as e:
+                # Leave the root original in place for a clean retry next pass.
+                raise click.ClickException(
+                    f"Classify failed for {source.name}: {e}"
+                ) from e
+            final = vault / pipeline.default_path / ASSETS_DIR / sha
+            final.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(staging), str(final))
+            click.secho(f"  Classified as {pipeline.default_path}", fg="green")
+            if not keep_original:
+                source.unlink()  # committed to the vault — host delete drains Drive
+            pipeline.prepare_context(vault)
+            try:
+                extract_fields(
+                    final,
+                    openai_client,
+                    pipeline.default_path,
+                    model=llm_model,
+                    overwrite=overwrite,
+                    pipeline=pipeline,
+                )
+            except Exception as e:
+                raise click.ClickException(f"Field extraction failed: {e}") from e
+            try:
+                render_note(
+                    final, overwrite=overwrite, note_index=None, pipeline=pipeline
+                )
+            except Exception as e:
+                click.secho(f"  Warning: note rendering failed: {e}", fg="red")
+            consumed += 1
+    finally:
+        shutil.rmtree(staging_root, ignore_errors=True)  # leave nothing behind
     return consumed, skipped
 
 
@@ -250,6 +370,18 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
     type=click.Path(file_okay=False, path_type=Path),
     help="Inbox root; per-type subdirs (Documents/, Receipts/, ...) are appended.",
 )
+@click.option(
+    "--classify/--no-classify",
+    default=True,
+    show_default=True,
+    help="Also classify loose files in the inbox root (OCR + LLM type detection).",
+)
+@click.option(
+    "--classify-model",
+    default=CLASSIFY_MODEL,
+    show_default=True,
+    help="OpenAI model for smart-inbox type classification.",
+)
 @click.pass_context
 def consume_all(
     ctx,
@@ -262,8 +394,14 @@ def consume_all(
     min_age,
     prehook,
     input_dir,
+    classify,
+    classify_model,
 ):
-    """Consume source files for every document type from --input-dir/{type}/."""
+    """Consume source files for every document type from --input-dir/{type}/.
+
+    Loose files directly in --input-dir (not in a type subdir) are classified by
+    type (OCR + LLM) and routed automatically, unless --no-classify is given.
+    """
     if prehook:
         click.secho("\n=== Prehook ===", bold=True)
         click.secho(f"$ {prehook}", fg="cyan")
@@ -299,3 +437,22 @@ def consume_all(
                 overwrite=overwrite,
             )
             _print_summary(consumed, skipped)
+
+        if classify:
+            click.secho("\n=== Unsorted (classify) ===", bold=True)
+            root_sources = _filter_stable(_root_loose_sources(input_dir), min_age)
+            if not root_sources:
+                click.secho("  No loose files in the inbox root.", fg="yellow")
+            else:
+                consumed, skipped = _classify_and_consume_root(
+                    vault,
+                    root_sources,
+                    mistral_client=mistral_client,
+                    openai_client=openai_client,
+                    ocr_model=ocr_model,
+                    llm_model=llm_model,
+                    classify_model=classify_model,
+                    keep_original=keep_original,
+                    overwrite=overwrite,
+                )
+                _print_summary(consumed, skipped)

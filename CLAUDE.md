@@ -30,7 +30,7 @@
 
 Each document type (receipt, bank_statement, document) defines:
 - A **Fields** subclass (`dict[Literal[...], str]`) that owns field behavior: postprocess, defaults, title formatting
-- A **Pipeline** subclass that owns orchestration: LLM prompt, `fields_class` reference
+- A **Pipeline** subclass that owns orchestration: LLM prompt, `fields_class` reference, and a `classify_description` (one-liner used by the smart-inbox classifier — see Consume specifics)
 
 `Fields.__init__` automatically calls `postprocess()` then `apply_defaults()`, so construction is all that's needed.
 
@@ -72,6 +72,7 @@ DIR/
 - The per-type command keeps its existing positional `PATHS` (variadic — multiple files/dirs OK).
 - **`obagent consume`** (top-level only) accepts `--prehook CMD` (env var: `OBAGENT_CONSUME_PREHOOK`). The shell command runs before the per-type loop and before API clients are opened; a non-zero exit aborts with `Prehook failed`. Useful for populating `$OBAGENT_CONSUME` from an outside source (email sync, scanner upload, etc.).
 - **`--min-age N`** (both consume entry points) skips files modified within the last N seconds — a stateless quiescence gate (mtime-based) so a slow scanner→inbox upload isn't grabbed mid-write. Default 0 (off).
+- **Smart inbox** (`obagent consume` only, default on; `--no-classify` to disable): files sitting **loose in the inbox root** (depth-1, not in a type subdir) are auto-routed. Each is copied into a neutral staging asset (`.obagent/staging`), OCR'd once, then `classify_document` (`commands/classify.py`, model `CLASSIFY_MODEL`, `--classify-model`) asks the LLM which registered type it is — from each `Pipeline.classify_description`, defaulting to Documents. The asset is then relocated to `vault/{Type}/` and llm→render run **without re-OCR** (the OCR moved with it). sha dedup runs across all type dirs *before* OCR; the root original is unlinked only after a successful relocate (OCR/classify failure leaves it for retry). Recommend gitignoring `.obagent/staging/` in the vault (transient, cleared each pass).
 
 ### Export specifics
 
@@ -201,12 +202,12 @@ on the obagent side. Full design + one-time setup is in `plans/2026-06-29-email-
 - **`scripts/gmail-ingest.gs`** (Apps Script, paste-deployed, runs in Google with
   your own Gmail+Drive auth — no creds on the NAS): on a ~15-min trigger it finds
   threads labeled `obagent/inbox` or the nested `obagent/inbox/{receipt,document}`,
-  and for each not-yet-processed message routes it to a type (a nested
-  `obagent/inbox/receipt`|`/document` label pins it, else subject/sender
-  `ROUTING_RULES` → `Receipts`, default `Documents`), renders the body → PDF, pulls
-  every non-inline attachment, and writes them into `consume/<Type>/` on Drive. Then it
-  swaps labels (strips the queue label(s), adds `obagent/ingested`). Dedup is a
-  per-message processed-id set in `PropertiesService`
+  and for each not-yet-processed message renders the body → PDF and pulls every
+  non-inline attachment, writing them to Drive: a nested `obagent/inbox/receipt`|
+  `/document` label pins the type (`consume/<Type>/`), else they land in the `consume/`
+  root where **`obagent consume` classifies them** (OCR-based — no subject/sender regex
+  in the script). Then it swaps labels (strips the queue label(s), adds
+  `obagent/ingested`). Dedup is a per-message processed-id set in `PropertiesService`
   (not the labels — Gmail labels are thread-level); the `CONSUME_FOLDER_ID` script
   property holds the Drive `consume/` folder id (kept out of this repo).
 - **Drain:** the Drive `consume/` tree is two-way Cloud-Synced to the NAS consume dir
