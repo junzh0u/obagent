@@ -200,11 +200,13 @@ on the obagent side. Full design + one-time setup is in `plans/2026-06-29-email-
 
 - **`scripts/gmail-ingest.gs`** (Apps Script, paste-deployed, runs in Google with
   your own Gmail+Drive auth — no creds on the NAS): on a ~15-min trigger it finds
-  threads labeled `obagent/inbox`, and for each not-yet-processed message routes it
-  to a type (subject/sender `ROUTING_RULES` → `Receipts`, default `Documents`),
-  renders the body → PDF, pulls every non-inline attachment, and
-  writes them into `consume/<Type>/` on Drive. Then it swaps labels (`-obagent/inbox
-  +obagent/ingested`). Dedup is a per-message processed-id set in `PropertiesService`
+  threads labeled `obagent/inbox` or the nested `obagent/inbox/{receipt,document}`,
+  and for each not-yet-processed message routes it to a type (a nested
+  `obagent/inbox/receipt`|`/document` label pins it, else subject/sender
+  `ROUTING_RULES` → `Receipts`, default `Documents`), renders the body → PDF, pulls
+  every non-inline attachment, and writes them into `consume/<Type>/` on Drive. Then it
+  swaps labels (strips the queue label(s), adds `obagent/ingested`). Dedup is a
+  per-message processed-id set in `PropertiesService`
   (not the labels — Gmail labels are thread-level); the `CONSUME_FOLDER_ID` script
   property holds the Drive `consume/` folder id (kept out of this repo).
 - **Drain:** the Drive `consume/` tree is two-way Cloud-Synced to the NAS consume dir
