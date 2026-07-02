@@ -99,6 +99,13 @@ function run_() {
       // obagent/inbox on, so the next run retries and the id-set skips what's done.)
       dequeue_(thread);
     } catch (err) {
+      // A daily quota (e.g. the body-PDF conversion service) fails every remaining
+      // thread identically — abort the run instead of logging each one. The thread
+      // keeps obagent/inbox, so draining resumes once the quota resets.
+      if (/invoked too many times for one day/i.test(String(err))) {
+        console.error('daily quota exhausted (' + err + ') — aborting run');
+        break;
+      }
       // One bad thread must not stall the batch. It keeps obagent/inbox and retries.
       console.error('thread "' + safeSubject_(thread) + '" failed: ' + err);
     }
