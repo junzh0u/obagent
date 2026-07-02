@@ -679,3 +679,56 @@ def test_notion_id_preserved_across_rename(runner, vault):
     assert new_md.exists()
     assert not old_md.exists()
     assert "notion_id: page-xyz" in new_md.read_text()
+
+
+def test_case_variant_titles_merge_into_one_note(runner, vault):
+    """Two receipts whose titles differ only in case share one note file.
+
+    Prevents Costco.md / costco.md forking into two files that would collide on
+    a case-insensitive export target.
+    """
+    _setup_entry_with_llm(
+        vault, sha="shaCap", merchant="Costco", date="2024-01-01", total="$5.00"
+    )
+    _setup_entry_with_llm(
+        vault, sha="shalow", merchant="costco", date="2024-01-01", total="$5.00"
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        [],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    mds = sorted((vault / "papers").glob("*.md"))
+    assert len(mds) == 1, [m.name for m in mds]
+    content = mds[0].read_text()
+    assert "![[_assets_/shaCap/src/original.pdf#height]]" in content
+    assert "![[_assets_/shalow/src/original.pdf#height]]" in content
+
+
+def test_recasing_own_note_renames_in_place(runner, vault):
+    """A pure case change to a note's own title renames the file (no self-merge)."""
+    _setup_entry_with_llm(
+        vault, sha="shaRC", merchant="ignored", date="2024-02-02", total="$9.00"
+    )
+    old_md = vault / "papers" / "2024-02-02 - costco - $9.00.md"
+    old_md.write_text(
+        "---\nmerchant: Costco\ndate: 2024-02-02\ntotal: $9.00\n"
+        "consumed_at: 2024-06-01T12:00:00+00:00\n---\n"
+        "![[_assets_/shaRC/src/original.pdf#height]]\n"
+    )
+
+    result = runner.invoke(
+        receipt_pipeline.render_command,
+        ["shaRC"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    new_md = vault / "papers" / "2024-02-02 - Costco - $9.00.md"
+    assert new_md.exists()
+    assert not old_md.exists()
+    mds = sorted((vault / "papers").glob("*.md"))
+    assert len(mds) == 1, [m.name for m in mds]

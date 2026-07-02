@@ -110,12 +110,48 @@ RenderStatus = Literal[
 ]
 
 
+def _resolve_md_path(
+    path_dir: Path,
+    safe_title: str,
+    own_names: set[str],
+    dir_index: dict[str, Path] | None = None,
+) -> Path:
+    """Return the note path for ``safe_title``, adopting an existing note whose
+    stem differs only by case.
+
+    Two titles that differ only in case (e.g. ``Costco`` / ``costco``) are
+    distinct files on the Linux vault but collide on a case-insensitive export
+    target (Google Drive, macOS). Merging the newcomer into the existing file
+    keeps a single note, so the collision never reaches the target. A case
+    variant of the note's *own* current file (``own_names``) is ignored, so a
+    deliberate re-casing still renames in place rather than merging with itself.
+
+    ``dir_index`` (casefolded stem → path), when supplied by a batch caller,
+    replaces a per-note directory scan; a stale entry (renamed/deleted mid-batch)
+    self-heals via the ``exists()`` guard. Without it, fall back to one glob.
+    """
+    exact = path_dir / f"{safe_title}.md"
+    if exact.exists():
+        return exact
+    fold = safe_title.casefold()
+    if dir_index is not None:
+        cand = dir_index.get(fold)
+        if cand is not None and cand.name not in own_names and cand.exists():
+            return cand
+        return exact
+    for md in sorted(path_dir.glob("*.md")):
+        if md.name not in own_names and md.stem.casefold() == fold:
+            return md
+    return exact
+
+
 def render_note(
     target_dir: Path,
     *,
     overwrite: bool = False,
     overwrite_fields: str | None = None,
     note_index: dict[str, tuple[dict[str, str] | None, list[Path]]] | None = None,
+    dir_index: dict[str, Path] | None = None,
     pipeline: Pipeline,
     log_header: bool = False,
 ) -> tuple[Path | None, RenderStatus]:
@@ -190,7 +226,9 @@ def render_note(
 
     safe_title = fields.make_title()
 
-    md_path = path_dir / f"{safe_title}.md"
+    md_path = _resolve_md_path(
+        path_dir, safe_title, {p.name for p in old_md_paths}, dir_index
+    )
 
     src = source_file(target_dir)
     src_name = src.name if src else "original.pdf"
@@ -233,9 +271,17 @@ def render_note(
             md_path.write_text(new_content)
             _emit(f"Updated: {safe_title}", fg="green")
             return md_path, "updated"
-        # Title changed — delete old, create at new path
+        # Title changed — remove the old note. If the new path is already
+        # occupied (e.g. a case-variant of another note adopted above), merge
+        # this sha's embed into it rather than clobbering; else create it fresh.
         old_md.unlink()
-        md_path.write_text(content)
+        if md_path.exists():
+            if target_dir.name not in md_path.read_text():
+                with md_path.open("a") as f:
+                    f.write(embed)
+                    f.write(meta_embed)
+        else:
+            md_path.write_text(content)
         _emit(f"Renamed: {old_md.name} -> {md_path.name}", fg="green")
         return md_path, "renamed"
 
@@ -267,6 +313,9 @@ def _render_entries(
 ) -> None:
     """Shared render loop used by commands and post-rename hooks."""
     note_index = index_existing_notes(path_dir)
+    # Live casefolded stem -> path map, so render_note resolves case collisions
+    # without a per-note directory scan. Updated as notes are written below.
+    dir_index = {p.stem.casefold(): p for p in sorted(path_dir.glob("*.md"))}
     rendered: set[Path] = set()
     stats: defaultdict[str, int] = defaultdict(int)
     for target_dir in entries:
@@ -276,12 +325,14 @@ def _render_entries(
                 overwrite=overwrite,
                 overwrite_fields=overwrite_fields,
                 note_index=note_index,
+                dir_index=dir_index,
                 pipeline=pipeline,
                 log_header=log_header,
             )
             stats[status] += 1
             if md_path:
                 rendered.add(md_path)
+                dir_index[md_path.stem.casefold()] = md_path
         except Exception as e:
             if log_header:
                 click.secho(f"Render: {target_dir}", bold=True)
