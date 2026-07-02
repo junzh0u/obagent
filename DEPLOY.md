@@ -41,10 +41,15 @@ arch-mismatched binaries):
 ```sh
 git clone <your-obagent-remote> /volume1/paperless/obagent
 cd /volume1/paperless/obagent
-uv tool install . --compile-bytecode              # `obagent` -> ~/.local/bin
+sh scripts/install.sh                             # `obagent` -> ~/.local/bin
 obagent --help                                    # smoke test
 ```
-Update later with `git pull && uv tool install . --compile-bytecode --force --reinstall`.
+Update later with a bare `git pull` — `scripts/run.sh` reinstalls the binary at
+the start of the next pass whenever the checkout's HEAD has moved (its `sync
+binary` step), so the installed `obagent` never lags the code. To update
+immediately without waiting for a pass, run `sh scripts/install.sh` yourself
+(it reinstalls and records the commit, so the next pass skips the redundant
+rebuild).
 
 ## 3. Clone the vault repo
 ```sh
@@ -163,7 +168,12 @@ Cloud Sync pulls down. See `plans/2026-06-29-email-ingest.md`.
 ## Updating later
 ```sh
 cd /volume1/paperless/obagent && git pull --ff-only
-uv tool install . --compile-bytecode --force --reinstall
+```
+`run.sh` reinstalls the binary on the next pass when HEAD has moved (its `sync
+binary` step, keyed on a stamp in `.git/`), so `git pull` alone is enough. To
+apply the update immediately instead of waiting for a pass, also run:
+```sh
+sh scripts/install.sh
 ```
 
 ## Troubleshooting

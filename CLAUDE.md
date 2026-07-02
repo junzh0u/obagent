@@ -23,7 +23,7 @@
 - `commands/export.py` — shared `export` subcommand (registered on `document`, `receipt`, and `bank_statement`); also exposes the top-level `obagent export` aggregator
 - `commands/{bank,merchant,people}.py` — top-level name-management groups built on `lib/name_store.py`
 - `commands/notion/` — Notion sync: `sync.py` (the `obagent notion sync` command + the two-way merge engine) and `backfill.py` (the one-time link, run as a one-off — not a CLI command)
-- `scripts/` — deployment scripts: `run.sh` (one pass), `publish.sh` (export + git push), `gmail-ingest.gs` (email feeder) (see Deployment)
+- `scripts/` — deployment scripts: `install.sh` (install binary + stamp commit), `run.sh` (one pass), `publish.sh` (export + git push), `gmail-ingest.gs` (email feeder) (see Deployment)
 - `tests/` — unit and integration tests with shared fixtures in `conftest.py`
 
 ## Architecture
@@ -80,6 +80,30 @@ DIR/
 - **Multi-embed notes**: first source uses the bare note stem, extras get a `-{sha12}` suffix.
 - **Dangling cleanup**: scoped to the chosen export root. Removes any file under top-level / `YYYY/YYYY-MM/` / `undated/` of that root that wasn't written this run, then prunes empty managed dirs. Other folders inside the parent dir (e.g. sibling type subdirs) are untouched.
 - **Summary counters**: `exported`, `unchanged`, `removed`, `missing` (source file referenced by a note not found on disk).
+
+## Case collisions
+
+Note filenames come from `make_title()` with case preserved, so two titles that
+differ only in case (e.g. `Costco` / `costco`) are distinct files on the Linux
+vault but **collide on a case-insensitive export target** (Google Drive, macOS).
+
+- **Prevention (render):** `render._resolve_md_path` resolves a new note's path
+  case-insensitively — a title that casefold-matches an existing note is merged
+  into it (embed appended) instead of forking a second file. A case-variant of
+  the note's *own* current file is excluded, so a deliberate re-casing still
+  renames in place. `_render_entries` builds a live `dir_index` (casefolded stem
+  → path) once and threads it through, so this costs no per-note directory scan;
+  single-file callers (consume) fall back to one glob. `notion/sync.write_back`
+  routes its title-rename through the same helper, so a Notion-side edit never
+  renames into a case-variant either.
+- **Backstop (`obagent check`):** `render` only guards notes it writes on *this*
+  machine — a cross-machine git merge can still land two case-variants. `obagent
+  check` (`commands/check.py`) scans every type dir for casefold-colliding stems,
+  reports them, and exits non-zero (run.sh runs it warn-only each pass). `obagent
+  check --apply` merges each group into one canonical note — the linked one
+  (`notion_id`), else first by name — moving the others' embeds in and deleting
+  them; a group whose notes carry *different* `notion_id`s is skipped as
+  ambiguous.
 
 ## Name Management (People, Banks & Merchants)
 
@@ -166,11 +190,17 @@ Runs **natively on a Synology NAS** (no Docker): `uv` provides a standalone Pyth
 on the host, so the NAS needs no system Python, and a DSM **Task Scheduler** job runs
 one pass on an interval. Step-by-step NAS setup is in **`DEPLOY.md`**.
 
-- **Install the CLI:** `uv tool install .` puts `obagent` on `~/.local/bin` (same as
-  `just install`); update with `git pull && uv tool install . --force --reinstall`.
+- **Install the CLI:** `scripts/install.sh` runs `uv tool install .` (→ `obagent`
+  on `~/.local/bin`) and stamps the installed commit under `.git/`; `just install`
+  wraps it (adds zsh completions). Update with a bare `git pull` — `run.sh`'s
+  `sync binary` step reinstalls on the next pass when HEAD moved (keyed on that
+  stamp), so a forgotten manual reinstall can't leave the pass on stale code.
 - **The pass lives in the repo; the env wiring in the operator's dotfiles.**
-  - `scripts/run.sh` — one pass: `consume --min-age` → `obagent notion sync` →
-    `publish.sh`, with per-step error isolation + a `flock` no-overlap guard.
+  - `scripts/run.sh` — one pass: `sync binary` → `consume --min-age` →
+    `obagent notion sync` → `obagent check` (warn-only) → `publish.sh`, with
+    per-step error isolation + a `flock` no-overlap guard.
+  - `scripts/install.sh` — install/refresh the binary + record its commit; the
+    single install primitive shared by `just install` and `run.sh`'s guard.
   - `scripts/publish.sh` — `obagent export` (→ Drive via Cloud Sync) + a **guarded
     fast-forward** (`git fetch` then `merge --ff-only`; integrates remote commits,
     aborts cleanly on divergence — never rebases/merges) + a plain machine `git commit`
