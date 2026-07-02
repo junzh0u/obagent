@@ -2,6 +2,7 @@ import click
 
 from commands.bank import bank
 from commands.bank_statement import bank_statement
+from commands.check import check
 from commands.consume import consume_all
 from commands.document import document
 from commands.export import export_all
@@ -36,6 +37,7 @@ cli.add_command(notion)
 cli.add_command(consume_all, "consume")
 cli.add_command(export_all, "export")
 cli.add_command(render_all, "render")
+cli.add_command(check)
 
 if __name__ == "__main__":
     cli()
