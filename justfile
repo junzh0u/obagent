@@ -5,7 +5,7 @@ setup:
 
 # Install obagent CLI and zsh completions
 install:
-    uv tool install . --compile-bytecode --force --reinstall
+    sh scripts/install.sh
     mkdir -p ~/.local/share/zsh/site-functions
     uv run python gen_zsh_completion.py > ~/.local/share/zsh/site-functions/_obagent
     @echo "Installed. Restart your shell to enable completions."
