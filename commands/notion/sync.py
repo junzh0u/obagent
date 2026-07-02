@@ -40,6 +40,7 @@ from commands.notion.backfill import (
 )
 from commands.receipt.pipeline import ReceiptFields
 from commands.remove import remove_entry
+from commands.render import _resolve_md_path
 from lib import notion_fieldmap as fm
 from lib.notion_api import NotionClient
 
@@ -111,7 +112,14 @@ def write_back(note: VaultNote, field_updates: dict[str, str], type_name: str) -
     )
     note.path.write_text(content)
     if field_updates.keys() & TITLE_FIELDS.get(type_name, set()):
-        new_path = note.path.with_name(fields.make_title() + ".md")
+        # Resolve case-insensitively so a Notion-side title edit never renames
+        # into a case-variant of another note (which would collide on a
+        # case-insensitive export target). If the target is already occupied
+        # (incl. a case-variant), leave the note in place — its content is
+        # already updated; `obagent check` reconciles any leftover.
+        new_path = _resolve_md_path(
+            note.path.parent, fields.make_title(), {note.path.name}
+        )
         if new_path != note.path and not new_path.exists():
             note.path.rename(new_path)
             return new_path

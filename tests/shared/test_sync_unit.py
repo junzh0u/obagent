@@ -201,6 +201,38 @@ def test_write_back_receipt_adopt_total_renames(tmp_path):
     assert "![[_assets_/abc/src/original.pdf#height]]" in text  # embeds preserved
 
 
+def test_write_back_does_not_rename_into_case_variant(tmp_path):
+    """A title edit that would collide (case-only) with a sibling note does not
+    rename into it — no case-colliding file is created."""
+    d = tmp_path / "Receipts"
+    d.mkdir()
+    # Sibling already occupies the capitalized casing.
+    sibling = d / "2025-10-12 - Holiday Inn - CNY 230.40.md"
+    sibling.write_text(
+        "---\nmerchant: Holiday Inn\ndate: 2025-10-12\ntotal: CNY 230.40\n"
+        "consumed_at: 2026-01-01T00:00:00+00:00\nnotion_id: pg-sib\n---\n"
+        "![[_assets_/sib/src/original.pdf#height]]\n"
+    )
+    own = d / "2025-10-12 - holiday inn - CNY 230.40.md"
+    own.write_text(
+        "---\nmerchant: holiday inn\ndate: 2025-10-12\ntotal: CNY 230.40\n"
+        "consumed_at: 2026-01-01T00:00:00+00:00\nnotion_id: pg-own\n---\n"
+        "![[_assets_/own/src/original.pdf#height]]\n"
+    )
+    note = next(n for n in bf.gather_vault(d, "receipt") if n.path == own)
+
+    result = sync.write_back(note, {"merchant": "Holiday Inn"}, "receipt")
+
+    # Stayed in place; content updated; no third (colliding) file created.
+    assert result == own
+    assert own.exists() and sibling.exists()
+    assert "merchant: Holiday Inn" in own.read_text()
+    assert sorted(p.name for p in d.glob("*.md")) == [
+        "2025-10-12 - Holiday Inn - CNY 230.40.md",
+        "2025-10-12 - holiday inn - CNY 230.40.md",
+    ]
+
+
 def test_sync_command_invokes_run_sync(runner, monkeypatch):
     called = {}
 
