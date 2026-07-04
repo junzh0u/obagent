@@ -1,4 +1,6 @@
 import json
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -8,6 +10,21 @@ from click.testing import CliRunner
 from lib.constants import OCR_MODEL
 
 BOTH_KEYS = ["--mistral-api-key", "test-key", "--openai-api-key", "test-oai-key"]
+
+
+def _fs_is_case_insensitive() -> bool:
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / "CaseProbe").touch()
+        return (Path(d) / "caseprobe").exists()
+
+
+# Case-variant files cannot coexist on a case-insensitive filesystem (macOS APFS),
+# so tests that build a vault containing both `Costco.md` and `costco.md` only run
+# where the tmp filesystem distinguishes case (the Linux NAS, CI).
+needs_case_sensitive_fs = pytest.mark.skipif(
+    _fs_is_case_insensitive(),
+    reason="requires a case-sensitive filesystem (case-variant files cannot coexist)",
+)
 
 
 @pytest.fixture

@@ -3,6 +3,7 @@ from collections import defaultdict
 from commands.notion import backfill as bf
 from commands.notion import sync
 from lib.notion_api import NotionClient
+from tests.conftest import needs_case_sensitive_fs
 
 R = "receipt"
 USD12 = {"Total": {"number": 12.0}, "Non-USD Total": {"rich_text": []}}
@@ -201,6 +202,7 @@ def test_write_back_receipt_adopt_total_renames(tmp_path):
     assert "![[_assets_/abc/src/original.pdf#height]]" in text  # embeds preserved
 
 
+@needs_case_sensitive_fs
 def test_write_back_does_not_rename_into_case_variant(tmp_path):
     """A title edit that would collide (case-only) with a sibling note does not
     rename into it — no case-colliding file is created."""

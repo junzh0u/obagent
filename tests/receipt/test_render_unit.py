@@ -727,8 +727,7 @@ def test_recasing_own_note_renames_in_place(runner, vault):
     )
 
     assert result.exit_code == 0
-    new_md = vault / "papers" / "2024-02-02 - Costco - $9.00.md"
-    assert new_md.exists()
-    assert not old_md.exists()
+    # Compare real on-disk names — on a case-insensitive filesystem the old
+    # path still "exists" (it resolves to the renamed file), fooling exists().
     mds = sorted((vault / "papers").glob("*.md"))
-    assert len(mds) == 1, [m.name for m in mds]
+    assert [m.name for m in mds] == ["2024-02-02 - Costco - $9.00.md"]

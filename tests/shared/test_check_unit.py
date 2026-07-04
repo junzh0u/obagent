@@ -1,4 +1,5 @@
 from commands.check import check
+from tests.conftest import needs_case_sensitive_fs
 
 
 def _note(vault, name, sha, notion_id=""):
@@ -22,6 +23,7 @@ def test_no_collisions(runner, vault):
     assert "No case collisions." in result.output
 
 
+@needs_case_sensitive_fs
 def test_collision_reported(runner, vault):
     _note(vault, "2024-01-01 - Costco - $5.00", "sha1")
     _note(vault, "2024-01-01 - costco - $5.00", "sha2")
@@ -35,6 +37,7 @@ def test_collision_reported(runner, vault):
     assert len(list((vault / "Receipts").glob("*.md"))) == 2
 
 
+@needs_case_sensitive_fs
 def test_apply_merges_into_linked_note(runner, vault):
     _note(vault, "2024-01-01 - costco - $5.00", "sha_low")
     _note(vault, "2024-01-01 - Costco - $5.00", "sha_cap", notion_id="page-123")
@@ -51,6 +54,7 @@ def test_apply_merges_into_linked_note(runner, vault):
     assert "![[_assets_/sha_low/src/original.pdf#height]]" in content
 
 
+@needs_case_sensitive_fs
 def test_apply_canonical_is_first_by_name_when_unlinked(runner, vault):
     _note(vault, "2024-01-01 - costco - $5.00", "sha_low")
     _note(vault, "2024-01-01 - Costco - $5.00", "sha_cap")
@@ -63,6 +67,7 @@ def test_apply_canonical_is_first_by_name_when_unlinked(runner, vault):
     assert [m.name for m in mds] == ["2024-01-01 - Costco - $5.00.md"]
 
 
+@needs_case_sensitive_fs
 def test_apply_skips_notion_id_conflict(runner, vault):
     _note(vault, "2024-01-01 - Costco - $5.00", "sha_a", notion_id="page-A")
     _note(vault, "2024-01-01 - costco - $5.00", "sha_b", notion_id="page-B")
