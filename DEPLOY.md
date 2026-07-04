@@ -160,10 +160,13 @@ Drive-synced inbox that scans, phone uploads, and email ingest all share. The
 `--min-age 60` gate protects against grabbing a file mid-upload/sync.
 
 ## 11. (Optional) Email ingest
-To also feed Gmail into this inbox, deploy `scripts/gmail-ingest.gs` as an Apps Script
-(set its `CONSUME_FOLDER_ID` to the Drive `consume/` folder id, ~15-min trigger). It
-drops body PDFs + attachments into Drive `consume/{Receipts,Documents}/`, which this same
-Cloud Sync pulls down. See `plans/2026-06-29-email-ingest.md`.
+To also feed Gmail into this inbox, run `scripts/gmail-ingest/deploy.sh` (clasp —
+creates the `obagent-ingest` Apps Script project and pushes the code; re-run to push
+updates). Then in the Apps Script editor set the `CONSUME_FOLDER_ID` script property
+to the Drive `consume/` folder id and run `install()` once (creates the labels + the
+15-min trigger). It drops body PDFs + attachments into Drive
+`consume/{Receipts,Documents}/`, which this same Cloud Sync pulls down. See
+`plans/2026-06-29-email-ingest.md`.
 
 ## Updating later
 ```sh

@@ -1,5 +1,5 @@
 /**
- * gmail-ingest.gs — feed labeled Gmail into the obagent pipeline, via Drive.
+ * obagent-ingest — feed labeled Gmail into the obagent pipeline, via Drive.
  *
  * Runs as a time-driven Apps Script (script.google.com), authorized with your
  * own Gmail + Drive scopes — so there are NO credentials anywhere on the NAS.
@@ -23,13 +23,16 @@
  * messages already exported. The label swap only keeps each search() batch small.
  * See plans/2026-06-29-email-ingest.md → "Dedup — robust design".
  *
- * SETUP: paste into a new Apps Script project, set the CONSUME_FOLDER_ID script
- * property (Project Settings → Script Properties) to your Drive consume/ folder id,
- * add a time-driven trigger on ingestEmail() (~every 15 min), authorize when
- * prompted. Label a thread obagent/inbox to queue it (obagent classifies the type), or
+ * SETUP: `./deploy.sh` (clasp — creates the Apps Script project and pushes this
+ * code; re-run anytime to push updates). Then in the Apps Script editor:
+ *   1. set the CONSUME_FOLDER_ID script property (Project Settings → Script
+ *      Properties) to your Drive consume/ folder id
+ *   2. run install() once — grants auth, creates the labels, installs the
+ *      15-minute trigger
+ * Label a thread obagent/inbox to queue it (obagent classifies the type), or
  * obagent/inbox/receipt / obagent/inbox/document to queue AND pin its type. Keeping
  * the id in a script property (not a code const) keeps this deploy-specific value
- * out of the public repo and survives re-pasting the code.
+ * out of the public repo and survives redeploys.
  */
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -42,7 +45,7 @@ const LABEL_DONE      = 'obagent/ingested';    // added when a thread is done (a
 // of them, and dequeue strips whichever are present. (Gmail's `label:` is exact — a
 // child label is NOT matched by label:obagent/inbox — so each is listed explicitly.)
 const QUEUE_LABELS = ['obagent/inbox', 'obagent/inbox/receipt', 'obagent/inbox/document'];
-const SEARCH_QUERY = QUEUE_LABELS.map(function (l) { return 'label:' + l; }).join(' OR ');
+const SEARCH_QUERY = QUEUE_LABELS.map((l) => `label:${l}`).join(' OR ');
 
 // A nested queue label pins the type → consume/<Type>/. The type must match obagent's
 // vault subdir. Unpinned mail lands in the consume/ root, where obagent classifies it
@@ -58,7 +61,7 @@ const MAX_IDS        = 400;  // processed-message-id ring buffer (PropertiesServ
 const PROP_KEY       = 'PROCESSED_IDS';
 const SUBJECT_MAXLEN = 120;  // cap the subject portion of a filename
 
-// ── Entry point — set the time-driven trigger on THIS function ───────────────
+// ── Entry point — install() points the time-driven trigger at THIS function ──
 function ingestEmail() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(0)) {
@@ -75,7 +78,7 @@ function ingestEmail() {
 function run_() {
   const folderId = PropertiesService.getScriptProperties().getProperty(FOLDER_ID_PROP);
   if (!folderId) {
-    throw new Error('Set the ' + FOLDER_ID_PROP + ' script property (Project Settings → '
+    throw new Error(`Set the ${FOLDER_ID_PROP} script property (Project Settings → `
       + 'Script Properties) to the Drive consume/ folder id.');
   }
   const consumeFolder = DriveApp.getFolderById(folderId);
@@ -103,14 +106,14 @@ function run_() {
       // thread identically — abort the run instead of logging each one. The thread
       // keeps obagent/inbox, so draining resumes once the quota resets.
       if (/invoked too many times for one day/i.test(String(err))) {
-        console.error('daily quota exhausted (' + err + ') — aborting run');
+        console.error(`daily quota exhausted (${err}) — aborting run`);
         break;
       }
       // One bad thread must not stall the batch. It keeps obagent/inbox and retries.
-      console.error('thread "' + safeSubject_(thread) + '" failed: ' + err);
+      console.error(`thread "${safeSubject_(thread)}" failed: ${err}`);
     }
   }
-  console.log('done — ' + exported + ' message(s) exported from ' + threads.length + ' thread(s)');
+  console.log(`done — ${exported} message(s) exported from ${threads.length} thread(s)`);
 }
 
 // ── Per-message export ───────────────────────────────────────────────────────
@@ -124,9 +127,9 @@ function exportMessage_(message, consumeFolder, forcedType) {
   // rests entirely on the id-set since getAs() is not byte-stable, so obagent's
   // sha backstop can't catch a re-render.
   const html = message.getBody() || '';
-  const bodyPdf = Utilities.newBlob(html, 'text/html', prefix + '.html')
+  const bodyPdf = Utilities.newBlob(html, 'text/html', `${prefix}.html`)
     .getAs('application/pdf')
-    .setName(prefix + '.pdf');
+    .setName(`${prefix}.pdf`);
   folder.createFile(bodyPdf);
 
   // Attachments — exclude inline images (signatures, logos) so they don't each
@@ -134,8 +137,7 @@ function exportMessage_(message, consumeFolder, forcedType) {
   // must stay a .jpg for OCR — do NOT force .pdf).
   const attachments = message.getAttachments({ includeInlineImages: false });
   for (const att of attachments) {
-    const name = prefix + ' - ' + sanitize_(att.getName());
-    folder.createFile(att.copyBlob().setName(name));
+    folder.createFile(att.copyBlob().setName(`${prefix} - ${sanitize_(att.getName())}`));
   }
 }
 
@@ -143,11 +145,9 @@ function exportMessage_(message, consumeFolder, forcedType) {
 // The type pinned by a thread's label (obagent/inbox/receipt → Receipts,
 // obagent/inbox/document → Documents), or null if neither is present.
 function forcedTypeFor_(thread) {
-  const names = thread.getLabels().map(function (l) { return l.getName(); });
-  for (const rule of LABEL_TYPES) {
-    if (names.indexOf(rule.label) !== -1) return rule.type;
-  }
-  return null;
+  const names = thread.getLabels().map((l) => l.getName());
+  const rule = LABEL_TYPES.find((r) => names.includes(r.label));
+  return rule ? rule.type : null;
 }
 
 function subfolder_(parent, name) {
@@ -160,7 +160,7 @@ function filenamePrefix_(message) {
   const stamp = Utilities.formatDate(message.getDate(), Session.getScriptTimeZone(), 'yyyy-MM-dd HHmm');
   let subject = sanitize_(message.getSubject() || '(no subject)');
   if (subject.length > SUBJECT_MAXLEN) subject = subject.slice(0, SUBJECT_MAXLEN).trim();
-  return stamp + ' - ' + subject;
+  return `${stamp} - ${subject}`;
 }
 
 function sanitize_(name) {
@@ -175,18 +175,23 @@ function safeSubject_(thread) {
   catch (e) { return '(unknown)'; }
 }
 
-// ── Label dequeue ────────────────────────────────────────────────────────────
+// ── Labels ───────────────────────────────────────────────────────────────────
 // Strip every queue label present (obagent/inbox and the nested type labels) so the
 // thread leaves the search, and add the audit label. A pinning label is consumed
 // here — re-queueing a reply as a receipt means re-applying obagent/inbox/receipt.
 function dequeue_(thread) {
-  let done = GmailApp.getUserLabelByName(LABEL_DONE);
-  if (!done) done = GmailApp.createLabel(LABEL_DONE);
   for (const name of QUEUE_LABELS) {
     const lbl = GmailApp.getUserLabelByName(name);
     if (lbl) thread.removeLabel(lbl);
   }
-  thread.addLabel(done);
+  thread.addLabel(getOrCreateLabel_(LABEL_DONE));
+}
+
+function getOrCreateLabel_(name) {
+  const label = GmailApp.getUserLabelByName(name);
+  if (label) return label;
+  console.log(`creating Gmail label ${name}`);
+  return GmailApp.createLabel(name);
 }
 
 // ── Processed-id set (PropertiesService) ─────────────────────────────────────
@@ -201,4 +206,16 @@ function saveProcessed_(set) {
   let ids = Array.from(set);
   if (ids.length > MAX_IDS) ids = ids.slice(-MAX_IDS); // ring buffer: keep the most recent
   PropertiesService.getScriptProperties().setProperty(PROP_KEY, JSON.stringify(ids));
+}
+
+// ── One-time install — run from the editor after the first deploy ────────────
+// Grants auth on first run, pre-creates every label (so they're ready to apply
+// in Gmail), and (re)creates the 15-minute time-driven trigger. Idempotent.
+function install() {
+  for (const name of [...QUEUE_LABELS, LABEL_DONE]) getOrCreateLabel_(name);
+  for (const trigger of ScriptApp.getProjectTriggers()) {
+    if (trigger.getHandlerFunction() === 'ingestEmail') ScriptApp.deleteTrigger(trigger);
+  }
+  ScriptApp.newTrigger('ingestEmail').timeBased().everyMinutes(15).create();
+  console.log('labels + 15-min trigger installed');
 }
