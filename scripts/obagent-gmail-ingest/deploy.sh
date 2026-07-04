@@ -30,7 +30,7 @@ if [[ -f .clasp.json ]]; then
     first_deploy=false
 else
     echo "Creating Apps Script project"
-    $clasp create --type standalone --title obagent-ingest
+    $clasp create --type standalone --title obagent-gmail-ingest
     first_deploy=true
 fi
 

@@ -1,5 +1,5 @@
 /**
- * obagent-ingest — feed labeled Gmail into the obagent pipeline, via Drive.
+ * obagent-gmail-ingest — feed labeled Gmail into the obagent pipeline, via Drive.
  *
  * Runs as a time-driven Apps Script (script.google.com), authorized with your
  * own Gmail + Drive scopes — so there are NO credentials anywhere on the NAS.

@@ -23,7 +23,7 @@
 - `commands/export.py` — shared `export` subcommand (registered on `document`, `receipt`, and `bank_statement`); also exposes the top-level `obagent export` aggregator
 - `commands/{bank,merchant,people}.py` — top-level name-management groups built on `lib/name_store.py`
 - `commands/notion/` — Notion sync: `sync.py` (the `obagent notion sync` command + the two-way merge engine) and `backfill.py` (the one-time link, run as a one-off — not a CLI command)
-- `scripts/` — deployment scripts: `install.sh` (install binary + stamp commit), `run.sh` (one pass), `publish.sh` (export + git push), `gmail-ingest/` (email feeder, clasp-deployed Apps Script) (see Deployment)
+- `scripts/` — deployment scripts: `install.sh` (install binary + stamp commit), `run.sh` (one pass), `publish.sh` (export + git push), `obagent-gmail-ingest/` (email feeder, clasp-deployed Apps Script) (see Deployment)
 - `tests/` — unit and integration tests with shared fixtures in `conftest.py`
 
 ## Architecture
@@ -212,7 +212,7 @@ one pass on an interval. Step-by-step NAS setup is in **`DEPLOY.md`**.
     + a **gitignored** secrets file (API keys + Notion DS ids), then `exec`s
     `scripts/run.sh`. DSM runs jobs with a bare env, so the wrapper (not run.sh) owns
     env setup; the pass updates with `git pull`.
-- `scripts/` also holds `gmail-ingest/` (the email feeder, below).
+- `scripts/` also holds `obagent-gmail-ingest/` (the email feeder, below).
 
 **Why native, not Docker:** Synology **Cloud Sync** drains the consume inbox (and
 removes stale exports) from Google Drive only when the delete happens **on the host** —
@@ -229,7 +229,7 @@ change. It reuses the **Drive consume inbox**: the script drops files into the s
 `consume/{type}/` tree obagent already ingests, so there is no email-specific wiring
 on the obagent side. Full design + one-time setup is in `plans/2026-06-29-email-ingest.md`.
 
-- **`scripts/gmail-ingest/`** (Apps Script project `obagent-ingest`, deployed with
+- **`scripts/obagent-gmail-ingest/`** (Apps Script project `obagent-gmail-ingest`, deployed with
   clasp via its `deploy.sh`; `install()` run once from the editor creates the labels
   + 15-min trigger; runs in Google with your own Gmail+Drive auth — no creds on the
   NAS): on that trigger it finds

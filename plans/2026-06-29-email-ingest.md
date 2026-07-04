@@ -5,10 +5,10 @@ no code change. A late revision (see next section) simplified the original desig
 read the revision as the source of truth; the sections below it are preserved as
 design history and rationale.
 
-**Update (2026-07-03):** the script moved to `scripts/gmail-ingest/Code.js`, now a
-clasp project (`obagent-ingest`) deployed with `scripts/gmail-ingest/deploy.sh`
-instead of paste-deploy, with an `install()` function that creates the labels + the
-15-min trigger. "Paste into a new Apps Script project" steps below are superseded.
+**Update (2026-07-03):** the script moved to `scripts/obagent-gmail-ingest/Code.js`,
+now a clasp project (`obagent-gmail-ingest`) deployed with its `deploy.sh` instead of
+paste-deploy, with an `install()` function that creates the labels + the 15-min
+trigger. "Paste into a new Apps Script project" steps below are superseded.
 
 ## Revision (2026-06-29) — as built, simpler than planned
 

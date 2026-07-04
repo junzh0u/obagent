@@ -221,7 +221,7 @@ consume inbox and removes stale exports from Google Drive only when the delete h
 ## Email ingest
 
 Optionally feed selected incoming Gmail into the vault. A small **Apps Script**
-(`scripts/gmail-ingest/`, deployed with clasp) watches a Gmail label, renders each message body to a
+(`scripts/obagent-gmail-ingest/`, deployed with clasp) watches a Gmail label, renders each message body to a
 PDF, pulls every attachment, and drops them into your Google Drive **consume** inbox —
 into `consume/{type}/` when the thread is pinned with an `obagent/inbox/{receipt,document}`
 label, otherwise into the `consume/` root for obagent's smart inbox to classify.
