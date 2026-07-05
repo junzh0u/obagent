@@ -10,7 +10,7 @@
  *      (non-inline) attachment, and writes them into Drive — a thread labeled
  *      obagent/inbox/receipt or obagent/inbox/document pins the type (consume/<Type>/);
  *      otherwise they land in the consume/ root, where obagent classifies them by OCR
- *   4. dequeues the thread (-obagent/inbox +obagent/ingested)
+ *   4. dequeues the thread (-obagent/inbox +obagent/ingested, archived)
  *
  * The consume folder is the Drive side of the NAS consume inbox (Synology Cloud
  * Sync, two-way). obagent's normal `consume` ingests it (a type subdir directly, or
@@ -177,14 +177,17 @@ function safeSubject_(thread) {
 
 // ── Labels ───────────────────────────────────────────────────────────────────
 // Strip every queue label present (obagent/inbox and the nested type labels) so the
-// thread leaves the search, and add the audit label. A pinning label is consumed
-// here — re-queueing a reply as a receipt means re-applying obagent/inbox/receipt.
+// thread leaves the search, add the audit label, and archive the thread — once
+// ingested it needs no inbox attention (still findable under obagent/ingested).
+// A pinning label is consumed here — re-queueing a reply as a receipt means
+// re-applying obagent/inbox/receipt.
 function dequeue_(thread) {
   for (const name of QUEUE_LABELS) {
     const lbl = GmailApp.getUserLabelByName(name);
     if (lbl) thread.removeLabel(lbl);
   }
   thread.addLabel(getOrCreateLabel_(LABEL_DONE));
+  thread.moveToArchive();
 }
 
 function getOrCreateLabel_(name) {
