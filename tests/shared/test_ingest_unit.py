@@ -190,7 +190,7 @@ def test_keep_original_and_overwrite_together(runner, vault, source_dir):
 def test_unsupported_files_are_ignored(runner, vault, source_dir):
     """Only supported files are ingested; other files are left untouched."""
     (source_dir / "notes.txt").write_text("not a pdf")
-    (source_dir / "image.png").write_bytes(b"png data")
+    (source_dir / "image.gif").write_bytes(b"gif data")
     pdf = source_dir / "real.pdf"
     pdf.write_bytes(b"pdf data")
 
@@ -202,7 +202,7 @@ def test_unsupported_files_are_ignored(runner, vault, source_dir):
 
     assert result.exit_code == 0
     assert (source_dir / "notes.txt").exists()
-    assert (source_dir / "image.png").exists()
+    assert (source_dir / "image.gif").exists()
     assert not pdf.exists()
     assert len(list((vault / "mixed").iterdir())) == 1
 

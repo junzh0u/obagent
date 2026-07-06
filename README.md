@@ -133,7 +133,7 @@ obagent receipt consume --keep-original ./inbox
 obagent receipt --path Invoices consume ./inbox
 
 # Round-trip with a shared root layout — drop scans into $OBAGENT_CONSUME/{type}/,
-# files exit at $OBAGENT_EXPORT/{type}/{YYYY}/{YYYY-MM}/{note}.{pdf,jpg,jpeg}.
+# files exit at $OBAGENT_EXPORT/{type}/{YYYY}/{YYYY-MM}/{note}.{pdf,jpg,jpeg,png,webp}.
 obagent document consume                  # consume $OBAGENT_CONSUME/Documents/
 obagent consume                           # consume every type in one go
 obagent document export                   # export to $OBAGENT_EXPORT/Documents/

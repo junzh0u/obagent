@@ -208,7 +208,7 @@ def test_unsupported_files_are_ignored(
     setup_mock_openai(mock_openai_cls)
 
     (source_dir / "notes.txt").write_text("not a pdf")
-    (source_dir / "image.png").write_bytes(b"png data")
+    (source_dir / "image.gif").write_bytes(b"gif data")
     pdf = source_dir / "real.pdf"
     pdf.write_bytes(b"pdf data")
 
@@ -228,7 +228,7 @@ def test_unsupported_files_are_ignored(
 
     assert result.exit_code == 0
     assert (source_dir / "notes.txt").exists()
-    assert (source_dir / "image.png").exists()
+    assert (source_dir / "image.gif").exists()
     assert not pdf.exists()
     assert len(list((vault / "mixed").iterdir())) == 2  # _assets_ dir + .md file
 

@@ -17,6 +17,13 @@ from lib.utils import interruptible, iter_entries, source_file
 MAX_RETRIES = 5
 INITIAL_BACKOFF = 2
 
+IMAGE_MIME_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+
 
 def _build_ocr_document(src_path: Path) -> DocumentURLChunk | ImageURLChunk:
     """Build the Mistral OCR document payload for a source file."""
@@ -26,8 +33,9 @@ def _build_ocr_document(src_path: Path) -> DocumentURLChunk | ImageURLChunk:
         return DocumentURLChunk(
             document_url=f"data:application/pdf;base64,{raw}",
         )
+    mime = IMAGE_MIME_TYPES.get(ext, "image/jpeg")
     return ImageURLChunk(
-        image_url=f"data:image/jpeg;base64,{raw}",
+        image_url=f"data:{mime};base64,{raw}",
     )
 
 

@@ -61,7 +61,7 @@ The natural round-trip layout (export root inverted into a consume root):
 
 ```
 DIR/
-├── Documents/         {YYYY/YYYY-MM,undated}/{note-stem}{.pdf|.jpg|.jpeg}
+├── Documents/         {YYYY/YYYY-MM,undated}/{note-stem}{.pdf|.jpg|.jpeg|.png|.webp}
 ├── Receipts/
 └── Bank Statements/
 ```

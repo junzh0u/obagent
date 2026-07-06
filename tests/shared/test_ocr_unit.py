@@ -301,6 +301,26 @@ def test_build_ocr_document_jpeg(tmp_path):
     assert doc.image_url.startswith("data:image/jpeg;base64,")
 
 
+def test_build_ocr_document_png(tmp_path):
+    """_build_ocr_document returns ImageURLChunk with a PNG mime for .png."""
+    png = tmp_path / "original.png"
+    png.write_bytes(b"png content")
+    doc = _build_ocr_document(png)
+    assert isinstance(doc, ImageURLChunk)
+    assert isinstance(doc.image_url, str)
+    assert doc.image_url.startswith("data:image/png;base64,")
+
+
+def test_build_ocr_document_webp(tmp_path):
+    """_build_ocr_document returns ImageURLChunk with a WebP mime for .webp."""
+    webp = tmp_path / "original.webp"
+    webp.write_bytes(b"webp content")
+    doc = _build_ocr_document(webp)
+    assert isinstance(doc, ImageURLChunk)
+    assert isinstance(doc.image_url, str)
+    assert doc.image_url.startswith("data:image/webp;base64,")
+
+
 @patch("commands.ocr.Mistral")
 def test_ocr_jpeg_uses_image_url(mock_mistral_cls, runner, vault):
     """OCR on a JPEG source uses image_url API format."""
