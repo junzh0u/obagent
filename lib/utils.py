@@ -52,6 +52,32 @@ def iter_entries(vault: Path, path: str) -> Iterator[Path]:
         yield from sorted(p for p in assets_dir.iterdir() if p.is_dir())
 
 
+def target_shas(path_dir: Path, target: str) -> list[str]:
+    """Resolve a CLI entry target to sha256 ids.
+
+    A target naming a note — an existing ``.md`` given as a path, or as a bare
+    filename inside ``path_dir`` — yields the note's embedded shas in embed
+    order (deduped); anything else is returned as-is, assumed to be a sha.
+    Raises for a ``.md`` target that doesn't exist or embeds no assets.
+    """
+    md = next(
+        (
+            p
+            for p in (Path(target), path_dir / target)
+            if p.suffix == ".md" and p.is_file()
+        ),
+        None,
+    )
+    if md is None:
+        if target.endswith(".md"):
+            raise click.UsageError(f"Note not found: {target}")
+        return [target]
+    shas = list(dict.fromkeys(SHA_RE.findall(md.read_text())))
+    if not shas:
+        raise click.UsageError(f"No asset embeds found in {md.name}")
+    return shas
+
+
 def newest_file(directory: Path, glob_pattern: str) -> Path | None:
     """Return the newest file (by mtime) matching glob_pattern in directory, or None."""
     newest = None

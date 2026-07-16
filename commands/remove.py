@@ -5,6 +5,7 @@ from typing import NamedTuple
 import click
 
 from lib.constants import ASSETS_DIR
+from lib.utils import target_shas
 
 
 class Removed(NamedTuple):
@@ -46,12 +47,17 @@ def remove_entry(path_dir: Path, sha256: str) -> Removed | None:
 
 
 @click.command()
-@click.argument("sha256", nargs=-1, required=True)
+@click.argument("targets", metavar="[SHA256|NOTE]...", nargs=-1, required=True)
 @click.pass_context
-def remove(ctx, sha256):
-    """Remove vault entries by their sha256 hashes."""
+def remove(ctx, targets):
+    """Remove vault entries by sha256 hash or note path.
+
+    A note target (a path to a ``.md``, or its bare filename inside the type
+    dir) removes every source it embeds — i.e. the whole note.
+    """
     path_dir = Path(ctx.obj["vault"]) / ctx.obj["path"]
-    for s in sha256:
+    shas = [s for t in targets for s in target_shas(path_dir, t)]
+    for s in dict.fromkeys(shas):
         result = remove_entry(path_dir, s)
         if result is None:
             click.secho(f"Entry not found: {s}", fg="red")

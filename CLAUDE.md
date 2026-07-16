@@ -19,7 +19,7 @@
   - `lib/notion_api.py` — Notion HTTP client (stdlib urllib): throttle, retry (429 / Cloudflare-WAF / 5xx / timeout), file upload, and data-source page/query wrappers. Pinned to API version `2025-09-03`.
   - `lib/notion_fieldmap.py` — vault frontmatter ↔ Notion property codecs, per type (see Notion sync)
 - `commands/{receipt,bank_statement,document}/pipeline.py` — concrete `Fields` + `Pipeline` per type
-- `commands/` — CLI command modules (consume, ingest, ocr, llm, render, scan, remove)
+- `commands/` — CLI command modules (consume, ingest, ocr, llm, render, scan, remove). `remove` takes a sha256 **or a note path/filename** (resolved to its embedded shas via `lib.utils.target_shas`)
 - `commands/export.py` — shared `export` subcommand (registered on `document`, `receipt`, and `bank_statement`); also exposes the top-level `obagent export` aggregator
 - `commands/{bank,merchant,people}.py` — top-level name-management groups built on `lib/name_store.py`
 - `commands/notion/` — Notion sync: `sync.py` (the `obagent notion sync` command + the two-way merge engine) and `backfill.py` (the one-time link, run as a one-off — not a CLI command)

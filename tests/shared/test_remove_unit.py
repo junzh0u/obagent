@@ -95,6 +95,73 @@ def test_remove_no_md_still_removes_dir(runner, vault):
     assert not target_dir.exists()
 
 
+def test_remove_by_note_path(runner, vault):
+    """A full path to the note removes it and its data dir, same as its sha."""
+    target_dir, md_path = _setup_entry(vault, sha="deadbeef")
+
+    result = runner.invoke(
+        remove,
+        [str(md_path)],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert not md_path.exists()
+    assert not target_dir.exists()
+
+
+def test_remove_by_note_filename(runner, vault):
+    """A bare note filename is resolved inside the type dir."""
+    target_dir, md_path = _setup_entry(vault, sha="deadbeef")
+
+    result = runner.invoke(
+        remove,
+        [md_path.name],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert not md_path.exists()
+    assert not target_dir.exists()
+
+
+def test_remove_by_note_removes_all_embedded_sources(runner, vault):
+    """A multi-embed note target removes every source it embeds."""
+    target_dir_a, _ = _setup_entry(vault, sha="sha_a")
+    target_dir_b, _ = _setup_entry(vault, sha="sha_b")
+    md_path = vault / "papers" / "2024-01-15 - ACME Store - $42.50.md"
+    md_path.write_text(
+        '---\nmerchant: "ACME Store"\ndate: "2024-01-15"\ntotal: "$42.50"\n---\n'
+        "![[_assets_/sha_a/src/original.pdf#height]]\n"
+        "![[_assets_/sha_b/src/original.pdf#height]]\n"
+    )
+
+    result = runner.invoke(
+        remove,
+        [md_path.name],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
+    assert not md_path.exists()
+    assert not target_dir_a.exists()
+    assert not target_dir_b.exists()
+
+
+def test_remove_missing_note_path_errors(runner, vault):
+    """A .md target that doesn't exist is an error, not a sha lookup."""
+    (vault / "papers" / "_assets_").mkdir(parents=True)
+
+    result = runner.invoke(
+        remove,
+        ["no-such-note.md"],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code != 0
+    assert "Note not found" in result.output
+
+
 def test_remove_entry_reports_and_removes(vault):
     """The pure helper removes the .md + data dir and reports what it touched."""
     target_dir, md_path = _setup_entry(vault, sha="deadbeef")
