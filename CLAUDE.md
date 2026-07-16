@@ -9,7 +9,7 @@
 
 ## Project Structure
 
-- `main.py` — CLI entry point, click group with subgroups per document type
+- `main.py` — CLI entry point, click group with subgroups per document type; `--vault` is validated by the `.obagent/` marker (walking up git-style when pointed inside the vault) and rejected otherwise — `mkdir <vault>/.obagent` bootstraps a new vault
 - `lib/` — shared infrastructure (not CLI commands)
   - `lib/fields.py` — `Fields[K]` ABC: dict-based field container with postprocess, defaults, title, and formatting
   - `lib/pipeline.py` — `Pipeline` ABC: orchestration (prompt, CLI command factories)

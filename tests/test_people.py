@@ -211,7 +211,7 @@ def test_remap_from_default_path(runner, vault):
     """Remap reads from vault/.obagent/people-aliases.json by default."""
     md = _write_md(vault, "docs/test.md", _make_fm("Zhou Jun", "Zhu Xiang"))
     mapping_dir = vault / ".obagent"
-    mapping_dir.mkdir(parents=True)
+    mapping_dir.mkdir(parents=True, exist_ok=True)
     (mapping_dir / "people-aliases.json").write_text(
         json.dumps({"Zhou Jun": "Jun Zhou", "Zhu Xiang": "Xiang Zhu"})
     )
@@ -355,7 +355,7 @@ def test_remove_offers_to_pin_remaining(runner, vault):
 def test_save_merges_with_existing(runner, vault):
     """Saving merges with existing aliases and keeps keys sorted."""
     aliases_dir = vault / ".obagent"
-    aliases_dir.mkdir(parents=True)
+    aliases_dir.mkdir(parents=True, exist_ok=True)
     (aliases_dir / "people-aliases.json").write_text(json.dumps({"Zara": "Zara Z"}))
     _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
 
@@ -423,7 +423,7 @@ def test_pin_interactive(runner, vault):
 def test_pin_merges_with_existing(runner, vault):
     """Pinning new names preserves existing pinned names."""
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "people-pinned.json").write_text(json.dumps(["Alice"]))
 
     result = runner.invoke(people, ["pin", "Bob"], obj={"vault": str(vault)})
@@ -462,7 +462,7 @@ def test_pin_offers_to_remove_unpinned(runner, vault):
 def test_unpin_removes_names(runner, vault):
     """Unpin via args removes names from the pinned list."""
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "people-pinned.json").write_text(
         json.dumps(["Alice", "Bob", "Carol"])
     )
@@ -478,7 +478,7 @@ def test_unpin_removes_names(runner, vault):
 def test_unpin_interactive(runner, vault):
     """Unpin with no args shows interactive checkbox."""
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "people-pinned.json").write_text(json.dumps(["Alice", "Bob"]))
 
     with _mock_checkbox(["Alice"]), _mock_confirm(False):
@@ -493,7 +493,7 @@ def test_unpin_removes_from_notes(runner, vault):
     """Interactive unpin with confirm also removes names from vault notes."""
     md = _write_md(vault, "docs/a.md", _make_fm("Alice", "Bob"))
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "people-pinned.json").write_text(json.dumps(["Alice", "Bob"]))
 
     # Select Bob to unpin, confirm remove from notes, decline alias save
@@ -539,7 +539,7 @@ def test_rename_interactive_excludes_pinned(runner, vault):
     """Interactive rename excludes pinned names from candidates."""
     _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "people-pinned.json").write_text(json.dumps(["Alice"]))
 
     with (
@@ -560,7 +560,7 @@ def test_rename_interactive_excludes_alias_destinations(runner, vault):
     """Alias destination names are implicitly pinned and excluded from rename."""
     _write_md(vault, "docs/test.md", _make_fm("Alice", "Bob"))
     aliases_dir = vault / ".obagent"
-    aliases_dir.mkdir(parents=True)
+    aliases_dir.mkdir(parents=True, exist_ok=True)
     (aliases_dir / "people-aliases.json").write_text(json.dumps({"Old Alice": "Alice"}))
 
     with (

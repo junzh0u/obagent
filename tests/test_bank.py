@@ -202,7 +202,7 @@ def test_remap_from_default_path(runner, vault):
     """Remap from the default bank-aliases.json."""
     md = _write_md(vault, "stmts/test.md", _make_fm("Chase"))
     aliases_dir = vault / ".obagent"
-    aliases_dir.mkdir(parents=True)
+    aliases_dir.mkdir(parents=True, exist_ok=True)
     (aliases_dir / "bank-aliases.json").write_text(json.dumps({"Chase": "JPMorgan"}))
 
     result = runner.invoke(bank, ["remap"], obj={"vault": str(vault)})
@@ -224,7 +224,7 @@ def test_remap_no_matches(runner, vault):
     """Zero updates when no bank names match the mapping."""
     _write_md(vault, "stmts/test.md", _make_fm("Wells Fargo"))
     aliases_dir = vault / ".obagent"
-    aliases_dir.mkdir(parents=True)
+    aliases_dir.mkdir(parents=True, exist_ok=True)
     (aliases_dir / "bank-aliases.json").write_text(json.dumps({"Chase": "JPMorgan"}))
 
     result = runner.invoke(bank, ["remap"], obj={"vault": str(vault)})
@@ -237,7 +237,7 @@ def test_save_merges_with_existing(runner, vault):
     """Saving merges new mapping with existing aliases."""
     _write_md(vault, "stmts/test.md", _make_fm("Chase"))
     aliases_dir = vault / ".obagent"
-    aliases_dir.mkdir(parents=True)
+    aliases_dir.mkdir(parents=True, exist_ok=True)
     (aliases_dir / "bank-aliases.json").write_text(
         json.dumps({"BofA": "Bank of America"})
     )
@@ -318,7 +318,7 @@ def test_pin_interactive(runner, vault):
 def test_pin_merges_with_existing(runner, vault):
     """Pinning new names preserves existing pinned names."""
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "bank-pinned.json").write_text(json.dumps(["Chase"]))
 
     result = runner.invoke(bank, ["pin", "Citi"], obj={"vault": str(vault)})
@@ -331,7 +331,7 @@ def test_pin_merges_with_existing(runner, vault):
 def test_unpin_removes_names(runner, vault):
     """Unpin via args removes names from the pinned list."""
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "bank-pinned.json").write_text(json.dumps(["Chase", "Citi"]))
 
     result = runner.invoke(bank, ["unpin", "Citi"], obj={"vault": str(vault)})
@@ -345,7 +345,7 @@ def test_unpin_removes_names(runner, vault):
 def test_unpin_interactive(runner, vault):
     """Interactive unpin uses checkbox prompt."""
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "bank-pinned.json").write_text(json.dumps(["Chase", "Citi"]))
 
     with _mock_checkbox(["Citi"]):
@@ -362,7 +362,7 @@ def test_rename_interactive_excludes_pinned(runner, vault):
     _write_md(vault, "stmts/a.md", _make_fm("Chase"))
     _write_md(vault, "stmts/b.md", _make_fm("Citi"))
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "bank-pinned.json").write_text(json.dumps(["Chase"]))
 
     with _mock_select("Citi") as mock_sel, _mock_text("Citibank"), _mock_confirm(None):
@@ -381,7 +381,7 @@ def test_rename_interactive_excludes_alias_destinations(runner, vault):
     _write_md(vault, "stmts/a.md", _make_fm("Chase"))
     _write_md(vault, "stmts/b.md", _make_fm("Citi"))
     aliases_dir = vault / ".obagent"
-    aliases_dir.mkdir(parents=True)
+    aliases_dir.mkdir(parents=True, exist_ok=True)
     (aliases_dir / "bank-aliases.json").write_text(json.dumps({"JPM": "Chase"}))
 
     with _mock_select("Citi") as mock_sel, _mock_text("Citibank"), _mock_confirm(None):

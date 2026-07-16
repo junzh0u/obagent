@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import click
 
 from commands.bank import bank
@@ -13,6 +15,27 @@ from commands.receipt import receipt
 from commands.render import render_all
 
 
+def _vault_root(value: str) -> str:
+    """Resolve --vault to the vault root, requiring the ``.obagent/`` marker.
+
+    Walks up git-style, so pointing inside the vault (e.g. at ``Receipts/``)
+    resolves to the root instead of silently half-working against a directory
+    that has no assets. A directory with no marker anywhere above it is
+    rejected — for a brand-new vault, creating ``.obagent/`` is the opt-in.
+    """
+    p = Path(value).resolve()
+    root = next((q for q in (p, *p.parents) if (q / ".obagent").is_dir()), None)
+    if root is None:
+        raise click.UsageError(
+            f"{value} is not an obagent vault: no .obagent/ directory found "
+            "there or in any parent. For a new vault, initialize it with: "
+            f"mkdir '{value}/.obagent'"
+        )
+    if root != p:
+        click.secho(f"note: using vault root {root} ({p} is inside it)", fg="yellow")
+    return str(root)
+
+
 @click.group()
 @click.option(
     "--vault",
@@ -24,7 +47,7 @@ from commands.render import render_all
 @click.pass_context
 def cli(ctx, vault):
     ctx.ensure_object(dict)
-    ctx.obj["vault"] = vault
+    ctx.obj["vault"] = _vault_root(vault)
 
 
 cli.add_command(receipt)

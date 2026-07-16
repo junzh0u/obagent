@@ -35,7 +35,7 @@ def runner():
 @pytest.fixture
 def vault(tmp_path):
     d = tmp_path / "vault"
-    d.mkdir()
+    (d / ".obagent").mkdir(parents=True)  # the vault marker `main.cli` requires
     return d
 
 

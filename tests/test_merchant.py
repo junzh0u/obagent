@@ -206,7 +206,7 @@ def test_remap_from_default_path(runner, vault):
     """Remap from the default merchant-aliases.json."""
     md = _write_md(vault, "receipts/test.md", _make_fm("Starbucks"))
     aliases_dir = vault / ".obagent"
-    aliases_dir.mkdir(parents=True)
+    aliases_dir.mkdir(parents=True, exist_ok=True)
     (aliases_dir / "merchant-aliases.json").write_text(
         json.dumps({"Starbucks": "SBUX"})
     )
@@ -230,7 +230,7 @@ def test_save_merges_with_existing(runner, vault):
     """Saving merges new mapping with existing aliases."""
     _write_md(vault, "receipts/test.md", _make_fm("Starbucks"))
     aliases_dir = vault / ".obagent"
-    aliases_dir.mkdir(parents=True)
+    aliases_dir.mkdir(parents=True, exist_ok=True)
     (aliases_dir / "merchant-aliases.json").write_text(
         json.dumps({"CVS": "CVS Pharmacy"})
     )
@@ -302,7 +302,7 @@ def test_pin_interactive(runner, vault):
 def test_pin_merges_with_existing(runner, vault):
     """Pinning new names preserves existing pinned names."""
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "merchant-pinned.json").write_text(json.dumps(["Starbucks"]))
 
     result = runner.invoke(merchant, ["pin", "Target"], obj={"vault": str(vault)})
@@ -315,7 +315,7 @@ def test_pin_merges_with_existing(runner, vault):
 def test_unpin_removes_names(runner, vault):
     """Unpin via args removes names from the pinned list."""
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "merchant-pinned.json").write_text(
         json.dumps(["Starbucks", "Target"])
     )
@@ -331,7 +331,7 @@ def test_unpin_removes_names(runner, vault):
 def test_unpin_interactive(runner, vault):
     """Interactive unpin uses checkbox prompt."""
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "merchant-pinned.json").write_text(
         json.dumps(["Starbucks", "Target"])
     )
@@ -350,7 +350,7 @@ def test_rename_interactive_excludes_pinned(runner, vault):
     _write_md(vault, "receipts/a.md", _make_fm("Starbucks"))
     _write_md(vault, "receipts/b.md", _make_fm("Target"))
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "merchant-pinned.json").write_text(json.dumps(["Starbucks"]))
 
     with (
@@ -373,7 +373,7 @@ def test_rename_interactive_excludes_alias_destinations(runner, vault):
     _write_md(vault, "receipts/a.md", _make_fm("Starbucks"))
     _write_md(vault, "receipts/b.md", _make_fm("Target"))
     aliases_dir = vault / ".obagent"
-    aliases_dir.mkdir(parents=True)
+    aliases_dir.mkdir(parents=True, exist_ok=True)
     (aliases_dir / "merchant-aliases.json").write_text(
         json.dumps({"SBUX": "Starbucks"})
     )
@@ -465,7 +465,7 @@ def test_auto_rename_filters_pinned_from_rename(runner, vault):
     _write_md(vault, "receipts/a.md", _make_fm("Starbucks"))
     _write_md(vault, "receipts/b.md", _make_fm("SBUX"))
     pinned_dir = vault / ".obagent"
-    pinned_dir.mkdir(parents=True)
+    pinned_dir.mkdir(parents=True, exist_ok=True)
     (pinned_dir / "merchant-pinned.json").write_text(json.dumps(["Starbucks"]))
 
     # LLM suggests renaming both ways but pinned should be filtered

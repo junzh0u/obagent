@@ -78,7 +78,9 @@ def test_scan_no_side_effects(runner, vault, source_dir):
 
     assert result.exit_code == 0
     assert pdf.exists(), "source PDF should not be moved"
-    assert not list(vault.iterdir()), "vault should remain empty"
+    assert not [p for p in vault.iterdir() if p.name != ".obagent"], (
+        "vault should remain empty"
+    )
 
 
 def test_scan_empty_dir(runner, vault, source_dir):

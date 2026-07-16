@@ -98,7 +98,7 @@ def test_no_pdfs_does_nothing(runner, vault, source_dir):
 
     assert result.exit_code == 0
     assert result.output == ""
-    assert list(vault.iterdir()) == []
+    assert [p for p in vault.iterdir() if p.name != ".obagent"] == []
 
 
 def test_keep_original_preserves_source(runner, vault, source_dir):
