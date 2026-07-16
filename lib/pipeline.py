@@ -64,6 +64,10 @@ class Pipeline(ABC):
     def help_render(self) -> str:
         return f"Render Obsidian notes from LLM-extracted {self.name} metadata."
 
+    @property
+    def help_set(self) -> str:
+        return f"Set one {self.name} field to a literal value and re-render its note."
+
     @cached_property
     def consume_command(self) -> click.Command:
         from commands.consume import make_consume_command
@@ -87,3 +91,9 @@ class Pipeline(ABC):
         from commands.render import make_render_command
 
         return make_render_command(pipeline=self)
+
+    @cached_property
+    def set_command(self) -> click.Command:
+        from commands.set_field import make_set_command
+
+        return make_set_command(pipeline=self)
