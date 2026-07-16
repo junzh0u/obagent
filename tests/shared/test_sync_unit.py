@@ -571,6 +571,46 @@ def test_sync_no_file_push_when_in_sync(tmp_path):
     assert client.uploaded == []
 
 
+def test_sync_dry_run_counters_mirror_real_pass(tmp_path):
+    """A dry-run reports would_update_notion exactly where the real pass reports
+    notion_updated, so a preview is directly comparable to the run."""
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_receipt(rec, "R", "a" * 64, "pg-1", front=dict(FRONT, merchant="Renamed"))
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})  # vault moved, Notion still at base
+    page = _row_with_files("pg-1", "a" * 64, ["R.pdf"])  # files in sync
+
+    dry_client = PruneClient({"rds": [page]})
+    dry = sync.run_sync(dry_client, tmp_path, {R: "rds"}, dry_run=True)
+    assert dry.get("would_update_notion") == 1
+    assert "would_change" not in dry  # the old aggregate counter is gone
+    assert "would_update_vault" not in dry and "would_push_files" not in dry
+    assert dry_client.updated == []
+
+    client = PruneClient({"rds": [page]})
+    real = sync.run_sync(client, tmp_path, {R: "rds"})
+    assert real.get("notion_updated") == 1
+    assert "vault_updated" not in real and "files_pushed" not in real
+
+
+def test_sync_dry_run_reports_vault_adopt(tmp_path):
+    """A Notion-side edit previews as would_update_vault (mirror of vault_updated)."""
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    note_path = _linked_receipt(rec, "R", "a" * 64, "pg-1")
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})  # Notion moved, vault still at base
+    page = _row_with_files("pg-1", "a" * 64, ["R.pdf"])
+    page["properties"]["Merchant"] = _rt("Edited In Notion")
+
+    stats = sync.run_sync(
+        PruneClient({"rds": [page]}), tmp_path, {R: "rds"}, dry_run=True
+    )
+
+    assert stats.get("would_update_vault") == 1
+    assert "would_update_notion" not in stats
+    assert "Edited In Notion" not in note_path.read_text()  # nothing written
+
+
 def test_sync_dry_run_reports_file_push(tmp_path):
     rec = tmp_path / "Receipts"
     rec.mkdir()

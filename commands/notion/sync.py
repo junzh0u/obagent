@@ -494,15 +494,18 @@ def run_sync(
                 flush=True,
             )
             stats["conflicts"] += 1
+        # Dry-run counters mirror the real pass one-for-one (would_update_vault /
+        # vault_updated, ...), so a preview is directly comparable to the run.
         if dry_run:
             if vu:
                 print(f"  -> vault {note.path.name[:34]!r}: {vu}", flush=True)
+                stats["would_update_vault"] += 1
             if nu:
                 print(f"  -> notion {note.path.name[:34]!r}: {list(nu)}", flush=True)
+                stats["would_update_notion"] += 1
             if file_drift:
                 print(f"  -> files {note.path.name[:34]!r}: {len(note.shas)} source(s)")
                 stats["would_push_files"] += 1
-            stats["would_change"] += 1
             continue
         if vu:
             write_back(note, vu, t)
