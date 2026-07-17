@@ -17,6 +17,11 @@
 #   NOTION_TOKEN, MISTRAL_API_KEY, OPENAI_API_KEY
 # Optional:
 #   OBAGENT_MIN_AGE       seconds a scan must be untouched before consuming (default 60)
+#   OBAGENT_PASS_LOG      pass-history file for scheduled runs: one line per clean
+#                         pass, full output for failed ones (trimmed to the last
+#                         ~4000 lines). Defaults to <OBAGENT_EXPORT>/../logs/
+#                         obagent-pass-history.log — inside the Cloud-Synced tree,
+#                         so a remote monitor can read it from Google Drive.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
@@ -115,19 +120,49 @@ if command -v flock >/dev/null 2>&1; then
     flock -n 9 || { printf '%s  skipped — another run in progress\n' "$(ts)"; exit 0; }
 fi
 
-pass_start=$(date +%s)
-printf '\n%s──────── %s ────────%s\n' "$C_B" "$(ts)" "$C_0"
-step "code pull" ff_pull "$REPO"
-step "sync binary" sync_binary
-step "vault pull" ff_pull "$VAULT"
-step "consume (min-age ${MIN_AGE}s)" obagent --vault "$VAULT" consume --min-age "$MIN_AGE"
-step "notion sync" obagent --vault "$VAULT" notion sync
-step "case-collision check" check_vault
-step "publish" sh "$HERE/publish.sh"
+run_pass() {
+    pass_start=$(date +%s)
+    printf '\n%s──────── %s ────────%s\n' "$C_B" "$(ts)" "$C_0"
+    step "code pull" ff_pull "$REPO"
+    step "sync binary" sync_binary
+    step "vault pull" ff_pull "$VAULT"
+    step "consume (min-age ${MIN_AGE}s)" obagent --vault "$VAULT" consume --min-age "$MIN_AGE"
+    step "notion sync" obagent --vault "$VAULT" notion sync
+    step "case-collision check" check_vault
+    step "publish" sh "$HERE/publish.sh"
 
-el=$(( $(date +%s) - pass_start ))
-if [ -n "$FAILED" ]; then
-    printf '  %s✗ pass FAILED: %s (%ss)%s\n' "$C_R" "$FAILED" "$el" "$C_0"
-    exit 1
+    el=$(( $(date +%s) - pass_start ))
+    if [ -n "$FAILED" ]; then
+        printf '  %s✗ pass FAILED: %s (%ss)%s\n' "$C_R" "$FAILED" "$el" "$C_0"
+        return 1
+    fi
+    printf '  %s✓ pass complete (%ss)%s\n' "$C_G" "$el" "$C_0"
+    return 0
+}
+
+# Pass history: scheduled (non-tty) runs also record themselves to $PASS_LOG —
+# a clean pass appends one summary line, a failed pass appends its full output —
+# so failures are diagnosable after DSM's per-run logs rotate away. The file
+# lives in the Cloud-Synced tree, giving an off-NAS monitor a way to see pass
+# health (a stale file means the schedule itself died). Interactive runs skip
+# it: the operator is watching, and the output would carry color codes.
+PASS_LOG="${OBAGENT_PASS_LOG:-${OBAGENT_EXPORT:+${OBAGENT_EXPORT%/}/../logs/obagent-pass-history.log}}"
+if [ -z "${PASS_LOG:-}" ] || [ -t 1 ]; then
+    run_pass
+    exit $?
 fi
-printf '  %s✓ pass complete (%ss)%s\n' "$C_G" "$el" "$C_0"
+
+mkdir -p "$(dirname "$PASS_LOG")"
+pass_out="$(mktemp)"; pass_rcf="$(mktemp)"  # names must not collide with step()'s locals
+{ run_pass; echo $? >"$pass_rcf"; } 2>&1 | tee "$pass_out"
+rc=$(cat "$pass_rcf")
+if [ "$rc" -eq 0 ]; then
+    printf '%s %s\n' "$(ts)" "$(tail -n 1 "$pass_out")" >>"$PASS_LOG"
+else
+    cat "$pass_out" >>"$PASS_LOG"
+fi
+rm -f "$pass_out" "$pass_rcf"
+if [ "$(wc -l <"$PASS_LOG")" -gt 5000 ]; then
+    tail -n 4000 "$PASS_LOG" >"$PASS_LOG.trim" && mv "$PASS_LOG.trim" "$PASS_LOG"
+fi
+exit "$rc"

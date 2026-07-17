@@ -16,3 +16,6 @@ wheels/
 
 # Scratch reference (Notion upload core; lifted into lib/notion_api.py)
 reference_importer.py
+
+# One-shot notification-test flag (scripts/inspect.sh; self-clearing)
+.inspect-test-notification

@@ -202,7 +202,17 @@ one pass on an interval. Step-by-step NAS setup is in **`DEPLOY.md`**.
   - `scripts/run.sh` — one pass: `code pull` (ff-only self-update) → `sync binary`
     → `vault pull` (ff-only) → `consume --min-age` → `obagent notion sync` →
     `obagent check` (warn-only) → `publish.sh`, with per-step error isolation +
-    a `flock` no-overlap guard.
+    a `flock` no-overlap guard. Scheduled (non-tty) runs also append a **pass
+    history** to `$OBAGENT_PASS_LOG` (default `$OBAGENT_EXPORT/../logs/
+    obagent-pass-history.log`, inside the Cloud-Synced tree): one line per clean
+    pass, full output per failed pass, trimmed to ~4000 lines.
+  - `scripts/inspect.sh` — daily health check over that pass history: healthy →
+    exit 0 silently; failed passes or a stale log (schedule died) → headless
+    `claude -p` diagnoses, attempts a **trivial safe fix** (permissions, stale
+    lock — never data deletion or code changes) and verifies with one pass, then
+    exits non-zero either way so the report always goes out. Runs as its own
+    daily DSM task with "email run details on abnormal termination", so the
+    report arrives as a Synology notification email (DEPLOY.md §12).
   - `scripts/install.sh` — install/refresh the binary + record its commit; the
     single install primitive shared by `just install` and `run.sh`'s guard.
   - `scripts/publish.sh` — `obagent export` (→ Drive via Cloud Sync) + a **guarded
