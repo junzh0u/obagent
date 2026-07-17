@@ -44,12 +44,12 @@ cd /volume1/paperless/obagent
 sh scripts/install.sh                             # `obagent` -> ~/.local/bin
 obagent --help                                    # smoke test
 ```
-Update later with a bare `git pull` — `scripts/run.sh` reinstalls the binary at
-the start of the next pass whenever the checkout's HEAD has moved (its `sync
-binary` step), so the installed `obagent` never lags the code. To update
-immediately without waiting for a pass, run `sh scripts/install.sh` yourself
-(it reinstalls and records the commit, so the next pass skips the redundant
-rebuild).
+Updates are hands-off: each pass of `scripts/run.sh` fast-forwards this
+checkout from its upstream (its `code pull` step) and reinstalls the binary
+whenever HEAD moved (its `sync binary` step), so the installed `obagent` never
+lags the remote. To apply an update immediately without waiting for a pass,
+run `git pull --ff-only && sh scripts/install.sh` yourself (install.sh records
+the commit, so the next pass skips the redundant rebuild).
 
 ## 3. Clone the vault repo
 ```sh
@@ -132,10 +132,11 @@ source <your secrets>   # -> API keys + Notion DS ids (gitignored)
 exec sh /volume1/paperless/obagent/scripts/run.sh
 ```
 `scripts/run.sh` runs one guarded pass (a `flock` lockfile prevents overlap):
-`obagent consume --min-age` → `obagent notion sync` → `scripts/publish.sh` (`obagent
-export` → Drive, then a guarded `git fetch && merge --ff-only`, a machine `git commit`
-of the vault changes, and `git push` to every remote). Keeping the pass in the repo
-means it updates with `git pull`; the dotfiles wrapper only owns env setup.
+code pull (ff-only self-update) → binary reinstall (when HEAD moved) → vault pull
+(ff-only) → `obagent consume --min-age` → `obagent notion sync` → `scripts/publish.sh`
+(`obagent export` → Drive, then a guarded `git fetch && merge --ff-only`, a machine
+`git commit` of the vault changes, and `git push` to every remote). Keeping the pass
+in the repo means it self-updates each pass; the dotfiles wrapper only owns env setup.
 
 Then DSM → **Control Panel → Task Scheduler → Create → Scheduled Task → User-defined
 script**: **User** = you (the deployment owner), **Schedule** = repeat every ~5 min,
@@ -169,14 +170,12 @@ to the Drive `consume/` folder id and run `install()` once (creates the labels +
 `plans/2026-06-29-email-ingest.md`.
 
 ## Updating later
+Nothing to do: each pass fast-forwards this checkout from its upstream (`code
+pull` step) and reinstalls the binary when HEAD has moved (`sync binary` step,
+keyed on a stamp in `.git/`) — push to the remote and the NAS picks it up on
+the next pass. To apply an update immediately instead of waiting:
 ```sh
-cd /volume1/paperless/obagent && git pull --ff-only
-```
-`run.sh` reinstalls the binary on the next pass when HEAD has moved (its `sync
-binary` step, keyed on a stamp in `.git/`), so `git pull` alone is enough. To
-apply the update immediately instead of waiting for a pass, also run:
-```sh
-sh scripts/install.sh
+cd /volume1/paperless/obagent && git pull --ff-only && sh scripts/install.sh
 ```
 
 ## Troubleshooting

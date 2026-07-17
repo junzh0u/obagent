@@ -194,13 +194,15 @@ one pass on an interval. Step-by-step NAS setup is in **`DEPLOY.md`**.
 
 - **Install the CLI:** `scripts/install.sh` runs `uv tool install .` (→ `obagent`
   on `~/.local/bin`) and stamps the installed commit under `.git/`; `just install`
-  wraps it (adds zsh completions). Update with a bare `git pull` — `run.sh`'s
-  `sync binary` step reinstalls on the next pass when HEAD moved (keyed on that
-  stamp), so a forgotten manual reinstall can't leave the pass on stale code.
+  wraps it (adds zsh completions). Updates are hands-off — `run.sh`'s `code pull`
+  step fast-forwards the checkout each pass and `sync binary` reinstalls when HEAD
+  moved (keyed on that stamp), so a forgotten manual pull or reinstall can't leave
+  the pass on stale code.
 - **The pass lives in the repo; the env wiring in the operator's dotfiles.**
-  - `scripts/run.sh` — one pass: `sync binary` → `consume --min-age` →
-    `obagent notion sync` → `obagent check` (warn-only) → `publish.sh`, with
-    per-step error isolation + a `flock` no-overlap guard.
+  - `scripts/run.sh` — one pass: `code pull` (ff-only self-update) → `sync binary`
+    → `vault pull` (ff-only) → `consume --min-age` → `obagent notion sync` →
+    `obagent check` (warn-only) → `publish.sh`, with per-step error isolation +
+    a `flock` no-overlap guard.
   - `scripts/install.sh` — install/refresh the binary + record its commit; the
     single install primitive shared by `just install` and `run.sh`'s guard.
   - `scripts/publish.sh` — `obagent export` (→ Drive via Cloud Sync) + a **guarded

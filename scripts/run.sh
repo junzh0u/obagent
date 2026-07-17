@@ -1,6 +1,7 @@
 #!/bin/sh
-# One pass of the paperless pipeline: pull the vault (ff-only) -> ingest new scans
-# -> reconcile with Notion -> publish. Run on a schedule (Synology Task Scheduler),
+# One pass of the paperless pipeline: self-update the code repo (ff-only) +
+# reinstall the binary -> pull the vault (ff-only) -> ingest new scans ->
+# reconcile with Notion -> publish. Run on a schedule (Synology Task Scheduler),
 # typically via a thin dotfiles wrapper that sets up the env first (see DEPLOY.md
 # "entry script").
 #
@@ -54,12 +55,6 @@ step() {  # step LABEL CMD...
     fi
 }
 
-# Pick up remote vault changes before processing, fast-forward ONLY (guarded — like
-# publish.sh; never rebases/merges, so a divergence can't leave the repo mid-merge).
-# So consume/notion-sync act on the latest notes (e.g. edits from a laptop/phone) and
-# the end-of-pass push stays a clean fast-forward. Soft: an offline fetch or a non-ff
-# divergence logs and continues on local state (publish re-checks the ff at the end,
-# and a diverged push fails loudly there).
 # Warn-only vault integrity check: flag any case-colliding note filenames (e.g.
 # Costco.md / costco.md) that would collide on the case-insensitive Drive export.
 # `render` prevents these locally, but a cross-machine git merge can still land
@@ -74,10 +69,10 @@ check_vault() {
     return "$rc"
 }
 
-# Keep the installed `obagent` in lockstep with this checkout, so a bare
-# `git pull` of the code repo is enough — no separate `uv tool install` to
-# forget (which would silently run stale code). Reinstalls only when HEAD moved
-# (a no-op otherwise, keyed on the stamp scripts/install.sh writes under .git/).
+# Keep the installed `obagent` in lockstep with this checkout — no separate
+# `uv tool install` to forget (which would silently run stale code). The
+# code-pull step moves HEAD, and this reinstalls only when it did (a no-op
+# otherwise, keyed on the stamp scripts/install.sh writes under .git/).
 # The install + stamp live in scripts/install.sh so a manual `just install`
 # satisfies this guard too. Soft: a missing uv, non-git checkout, or failed
 # install logs and continues on whatever binary is on PATH — other steps run.
@@ -93,10 +88,20 @@ sync_binary() {
     fi
 }
 
-pull_vault() {
-    up=$(git -C "$VAULT" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null) || return 0
-    git -C "$VAULT" fetch --quiet || { echo "fetch failed (offline?), continuing on local state"; return 0; }
-    git -C "$VAULT" merge --ff-only "$up" >/dev/null 2>&1 \
+# Fast-forward-only pull of a git checkout (guarded — like publish.sh; never
+# rebases/merges, so a divergence can't leave the repo mid-merge). Used for both
+# the code repo (so the pass self-updates; sync_binary then reinstalls the moved
+# HEAD in the same pass) and the vault (so consume/notion-sync act on the latest
+# notes — e.g. edits from a laptop/phone — and the end-of-pass push stays a clean
+# fast-forward; publish re-checks the ff at the end, and a diverged push fails
+# loudly there). Soft: no upstream, an offline fetch, or a non-ff divergence logs
+# and continues on current state. Updating this script mid-run is safe: git
+# replaces files by rename, so the running shell keeps reading the old inode;
+# scripts invoked later in the pass (publish.sh) run the new version.
+ff_pull() {  # ff_pull DIR
+    up=$(git -C "$1" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null) || return 0
+    git -C "$1" fetch --quiet || { echo "fetch failed (offline?), continuing on local state"; return 0; }
+    git -C "$1" merge --ff-only "$up" >/dev/null 2>&1 \
         || echo "'$up' not fast-forwardable; continuing on local state"
     return 0
 }
@@ -112,8 +117,9 @@ fi
 
 pass_start=$(date +%s)
 printf '\n%s──────── %s ────────%s\n' "$C_B" "$(ts)" "$C_0"
+step "code pull" ff_pull "$REPO"
 step "sync binary" sync_binary
-step "vault pull" pull_vault
+step "vault pull" ff_pull "$VAULT"
 step "consume (min-age ${MIN_AGE}s)" obagent --vault "$VAULT" consume --min-age "$MIN_AGE"
 step "notion sync" obagent --vault "$VAULT" notion sync
 step "case-collision check" check_vault
