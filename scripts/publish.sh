@@ -18,7 +18,11 @@ set -u
 
 VAULT="${OBAGENT_VAULT:?OBAGENT_VAULT not set}"
 
-obagent --vault "$VAULT" export || { echo "publish: export failed" >&2; exit 1; }
+# A failing export (per-file errors exit non-zero) must not block the vault
+# commit/push below — the vault is the source of truth and export is a derived
+# view. Remember the failure and propagate it in the final exit code instead.
+export_rc=0
+obagent --vault "$VAULT" export || { echo "publish: export had failures" >&2; export_rc=1; }
 
 # Integrate remote commits first, guarded: fast-forward ONLY. If the branch has
 # diverged (or local edits would be clobbered), --ff-only aborts cleanly with no
@@ -46,7 +50,7 @@ if ! git -C "$VAULT" diff --cached --quiet; then
 fi
 
 # --quiet: success is silent (no transfer spam); errors still surface on stderr.
-rc=0
+rc="$export_rc"
 for r in $(git -C "$VAULT" remote); do
     git -C "$VAULT" push --quiet "$r" || { echo "publish: push '$r' failed" >&2; rc=1; }
 done

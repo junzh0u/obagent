@@ -1,4 +1,7 @@
+import os
 from pathlib import Path
+
+import pytest
 
 import commands.bank_statement.pipeline  # noqa: F401 — triggers Pipeline registration
 import commands.document.pipeline  # noqa: F401
@@ -131,3 +134,22 @@ def test_rerun_is_idempotent_across_all_types(runner, vault, tmp_path):
     assert "1 unchanged" in second.output
     for type_path in ("Documents", "Receipts", "Bank Statements"):
         assert f"=== {type_path} ===" in second.output
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="permission checks are bypassed as root")
+def test_failure_in_one_type_still_exports_the_others(runner, vault, tmp_path):
+    """An unreadable source in one type fails that file; other types export."""
+    bad_src = _setup_entry(vault, "Documents", "sha-d", src_bytes=b"locked")
+    _setup_entry(vault, "Receipts", "sha-r", src_bytes=b"receipt")
+    _write_note(vault, "Documents", "2024-01-15 - Locked", ["sha-d"])
+    _write_note(vault, "Receipts", "2024-02-20 - Coffee", ["sha-r"])
+    bad_src.chmod(0)
+    out = tmp_path / "out"
+
+    result = _invoke(runner, vault, out)
+
+    assert result.exit_code == 1, result.output
+    assert "Failed: 2024-01-15 - Locked.md" in result.output
+    assert (
+        out / "Receipts" / "2024" / "2024-02" / "2024-02-20 - Coffee.pdf"
+    ).read_bytes() == b"receipt"

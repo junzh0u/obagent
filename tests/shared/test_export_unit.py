@@ -1,8 +1,13 @@
+import os
 from pathlib import Path
 
 import pytest
 
 from commands.export import export
+
+not_root = pytest.mark.skipif(
+    os.geteuid() == 0, reason="permission checks are bypassed as root"
+)
 
 # Run every test against both real type subdirs to confirm the same command
 # works whether the parent group sets path="Documents" or path="Receipts".
@@ -342,6 +347,73 @@ def test_no_output_dir_and_no_env_var_raises_usage_error(
     assert result.exit_code != 0
     assert "OBAGENT_EXPORT" in result.output
     assert "--output-dir" in result.output
+
+
+@not_root
+@pytest.mark.parametrize("path", TYPES)
+def test_unreadable_source_is_counted_not_fatal(runner, vault, tmp_path, path):
+    """One unreadable source fails that file only; the rest still exports."""
+    bad_src = _setup_entry(vault, path, "sha-bad", src_bytes=b"locked")
+    _setup_entry(vault, path, "sha-good", src_bytes=b"fine")
+    _write_note(vault, path, "2024-01-01 - Locked", ["sha-bad"])
+    _write_note(vault, path, "2024-02-02 - Fine", ["sha-good"])
+    bad_src.chmod(0)
+    out = tmp_path / "out"
+
+    result = _invoke(runner, vault, path, out)
+
+    assert result.exit_code == 1, result.output
+    assert "Failed: 2024-01-01 - Locked.md" in result.output
+    assert "1 failed" in result.output
+    assert (
+        out / path / "2024" / "2024-02" / "2024-02-02 - Fine.pdf"
+    ).read_bytes() == b"fine"
+    assert not (out / path / "2024" / "2024-01" / "2024-01-01 - Locked.pdf").exists()
+
+
+@not_root
+@pytest.mark.parametrize("path", TYPES)
+def test_failed_overwrite_keeps_existing_destination(runner, vault, tmp_path, path):
+    """An unwritable stale destination fails the copy but survives the cleanup."""
+    _setup_entry(vault, path, "sha1", src_bytes=b"fresh-content")
+    _write_note(vault, path, "2024-04-04 - Note", ["sha1"])
+    out = tmp_path / "out"
+    bucket = out / path / "2024" / "2024-04"
+    bucket.mkdir(parents=True)
+    dest = bucket / "2024-04-04 - Note.pdf"
+    dest.write_bytes(b"stale")  # different size -> overwrite needed
+    dest.chmod(0o444)
+
+    result = _invoke(runner, vault, path, out)
+
+    assert result.exit_code == 1, result.output
+    assert "Failed: 2024-04-04 - Note.md" in result.output
+    assert dest.read_bytes() == b"stale"  # old copy kept, not swept as dangling
+
+
+@not_root
+@pytest.mark.parametrize("path", TYPES)
+def test_failed_removal_is_counted_not_fatal(runner, vault, tmp_path, path):
+    """A dangling file that cannot be unlinked is reported, not a crash."""
+    _setup_entry(vault, path, "sha1", src_bytes=b"current")
+    _write_note(vault, path, "2024-07-07 - Keep Me", ["sha1"])
+    out = tmp_path / "out"
+    stale_dir = out / path / "2023" / "2023-12"
+    stale_dir.mkdir(parents=True)
+    stale = stale_dir / "2023-12-31 - Stale.pdf"
+    stale.write_bytes(b"old")
+    stale_dir.chmod(0o555)  # unlink needs write on the parent dir
+
+    try:
+        result = _invoke(runner, vault, path, out)
+    finally:
+        stale_dir.chmod(0o755)
+
+    assert result.exit_code == 1, result.output
+    assert "Failed to remove" in result.output
+    assert "1 failed" in result.output
+    assert stale.exists()
+    assert (out / path / "2024" / "2024-07" / "2024-07-07 - Keep Me.pdf").exists()
 
 
 def test_cross_type_isolation(runner, vault, tmp_path):

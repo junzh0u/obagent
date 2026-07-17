@@ -79,7 +79,7 @@ DIR/
 - **Idempotent**: a destination file with matching size + integer-second mtime is left alone (counted as `unchanged`); otherwise `shutil.copy2` overwrites it. `shutil.copy2` preserves mtime, so re-runs against an unchanged vault perform no I/O.
 - **Multi-embed notes**: first source uses the bare note stem, extras get a `-{sha12}` suffix.
 - **Dangling cleanup**: scoped to the chosen export root. Removes any file under top-level / `YYYY/YYYY-MM/` / `undated/` of that root that wasn't written this run, then prunes empty managed dirs. Other folders inside the parent dir (e.g. sibling type subdirs) are untouched.
-- **Summary counters**: `exported`, `unchanged`, `removed`, `missing` (source file referenced by a note not found on disk).
+- **Summary counters**: `exported`, `unchanged`, `removed`, `missing` (source file referenced by a note not found on disk), `failed` (per-file copy/remove `OSError` — reported and counted, never aborts the rest of the export; the command exits non-zero when any occurred, and `publish.sh` still commits/pushes the vault before propagating the failure).
 
 ## Case collisions
 

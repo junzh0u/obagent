@@ -82,8 +82,14 @@ def _prune_empty_managed_dirs(output_dir: Path) -> None:
                 entry.rmdir()
 
 
-def _export_path(vault: Path, vault_path: str, export_root: Path) -> None:
-    """Export sources from vault/vault_path/ into export_root/."""
+def _export_path(vault: Path, vault_path: str, export_root: Path) -> int:
+    """Export sources from vault/vault_path/ into export_root/.
+
+    Returns the number of files that failed to copy or remove. A per-file
+    OSError (unreadable source, unwritable destination) is reported and
+    counted, not raised — one bad file must not abort the rest of the export
+    (or the vault commit/push that follows it in publish).
+    """
     path_dir = vault / vault_path
 
     export_root.mkdir(parents=True, exist_ok=True)
@@ -91,6 +97,7 @@ def _export_path(vault: Path, vault_path: str, export_root: Path) -> None:
     exported = 0
     unchanged = 0
     missing = 0
+    failed = 0
     written: set[Path] = set()
     for md in interruptible(sorted(path_dir.glob("*.md"))):
         text = md.read_text()
@@ -113,11 +120,18 @@ def _export_path(vault: Path, vault_path: str, export_root: Path) -> None:
             dest_dir = _bucket_dir(export_root, md.stem)
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = dest_dir / f"{stem}{suffix}"
-            if dest.exists() and _same_size_and_mtime(src, dest):
-                written.add(dest)
-                unchanged += 1
+            try:
+                if dest.exists() and _same_size_and_mtime(src, dest):
+                    written.add(dest)
+                    unchanged += 1
+                    continue
+                shutil.copy2(src, dest)
+            except OSError as e:
+                click.secho(f"  Failed: {md.name} ({sha[:12]}…): {e}", fg="red")
+                failed += 1
+                if dest.exists():  # keep a prior copy safe from dangling cleanup
+                    written.add(dest)
                 continue
-            shutil.copy2(src, dest)
             written.add(dest)
             rel = dest.relative_to(export_root)
             click.secho(f"  Exported: {rel}", fg="green")
@@ -127,7 +141,12 @@ def _export_path(vault: Path, vault_path: str, export_root: Path) -> None:
     for existing in sorted(_iter_managed_files(export_root)):
         if existing not in written:
             rel = existing.relative_to(export_root)
-            existing.unlink()
+            try:
+                existing.unlink()
+            except OSError as e:
+                click.secho(f"  Failed to remove: {rel}: {e}", fg="red")
+                failed += 1
+                continue
             click.secho(f"  Removed: {rel}", fg="green")
             removed += 1
     _prune_empty_managed_dirs(export_root)
@@ -141,8 +160,11 @@ def _export_path(vault: Path, vault_path: str, export_root: Path) -> None:
         parts.append(f"{removed} removed")
     if missing:
         parts.append(f"{missing} missing")
+    if failed:
+        parts.append(click.style(f"{failed} failed", fg="red"))
     if parts:
         click.secho(", ".join(parts), bold=True)
+    return failed
 
 
 def _resolve_export_root(
@@ -177,7 +199,8 @@ def export(ctx, output_dir: Path | None, dest: Path | None):
     vault = Path(ctx.obj["vault"])
     path = ctx.obj["path"]
     export_root = _resolve_export_root(output_dir, dest, path)
-    _export_path(vault, path, export_root)
+    if _export_path(vault, path, export_root):
+        raise SystemExit(1)
 
 
 @click.command("export")
@@ -192,7 +215,10 @@ def export(ctx, output_dir: Path | None, dest: Path | None):
 def export_all(ctx, output_dir: Path):
     """Export source files for every document type under --output-dir/{type}/."""
     vault = Path(ctx.obj["vault"])
+    failed = 0
     for pipeline in Pipeline._registry:
         path = pipeline.default_path
         click.secho(f"\n=== {path} ===", bold=True)
-        _export_path(vault, path, output_dir / path)
+        failed += _export_path(vault, path, output_dir / path)
+    if failed:
+        raise SystemExit(1)
