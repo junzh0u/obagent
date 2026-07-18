@@ -11,10 +11,11 @@
 #     never data deletion or code changes) and verify with one pass, then print
 #     the report and exit 1 — the report goes out whether or not it auto-fixed
 #
-# Pair this with a daily DSM Task Scheduler job with "Send run details by
-# email: only when the script terminates abnormally" — the non-zero exit turns
-# the printed report into a Synology notification email, so a quiet day sends
-# nothing and an email always means something needs attention.
+# Runs daily as a deep inspector delegated from the dotfiles task-watchdog
+# (bin/junz-rs2423/task-watchdog, its own DSM Task Scheduler job) rather than
+# via a dedicated DSM task: the watchdog merges this report into its alert and
+# owns the notification email (same contract — non-zero exit means the report
+# must reach the operator, exit 0 means all quiet).
 #
 # Env (same wrapper as run.sh provides these):
 #   OBAGENT_EXPORT / OBAGENT_PASS_LOG   locate the pass-history log (same
@@ -32,9 +33,9 @@ WINDOW_H="${OBAGENT_INSPECT_WINDOW_HOURS:-24}"
 STALE_MIN="${OBAGENT_INSPECT_STALE_MINUTES:-30}"
 
 # One-shot end-to-end test of the notification channel: `touch` the flag file,
-# then run the DSM task once (Task Scheduler -> Run). The script skips the
-# inspection and exits 1 immediately, so the task's email-on-abnormal setting
-# fires with this message as the body. The flag self-clears.
+# then run the Task Watchdog DSM task once (Task Scheduler -> Run). The script
+# skips the inspection and exits 1 immediately, so the watchdog reports a
+# failing deep inspection and its email carries this message. Self-clears.
 TEST_FLAG="$REPO/.inspect-test-notification"
 if [ -f "$TEST_FLAG" ]; then
     rm -f "$TEST_FLAG"
