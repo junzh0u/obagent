@@ -50,8 +50,21 @@ if ! git -C "$VAULT" diff --cached --quiet; then
 fi
 
 # --quiet: success is silent (no transfer spam); errors still surface on stderr.
+# Push failures retry with backoff: GitLab's SSH frontend intermittently drops
+# or rejects connections ("closed by remote host", spurious "Permission denied
+# (publickey)") — a blip every few hundred passes, each one an alert email.
 rc="$export_rc"
 for r in $(git -C "$VAULT" remote); do
-    git -C "$VAULT" push --quiet "$r" || { echo "publish: push '$r' failed" >&2; rc=1; }
+    attempt=1
+    until git -C "$VAULT" push --quiet "$r"; do
+        if [ "$attempt" -ge 3 ]; then
+            echo "publish: push '$r' failed after $attempt attempts" >&2
+            rc=1
+            break
+        fi
+        echo "publish: push '$r' failed (attempt $attempt/3), retrying" >&2
+        sleep $((attempt * 10))
+        attempt=$((attempt + 1))
+    done
 done
 exit "$rc"
