@@ -12,7 +12,6 @@ post_setup() {
   3. Label threads obagent/inbox to queue them (obagent/inbox/receipt or /document pins the type)
 EOF
 }
-done_note="Done. Code updated; trigger and script properties unchanged."
 
 # ── clasp deploy core (runner → login → create-on-first-run → push) ──
 pre_push
@@ -57,5 +56,5 @@ if $first_deploy; then
     post_setup
     $clasp open-script
 else
-    echo $done_note
+    echo "Done. Code updated; triggers and any script properties unchanged."
 fi
