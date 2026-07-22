@@ -1,8 +1,21 @@
 #!/usr/bin/env zsh
 setopt err_exit pipe_fail
+cd "${0:A:h}"
 
-script_dir="${0:A:h}"
-cd "$script_dir"
+# ── per-project config ──
+project_title=obagent-gmail-ingest
+pre_push() { : }
+post_setup() {
+    cat <<'EOF'
+  1. Project Settings -> Script properties -> add CONSUME_FOLDER_ID (Drive consume/ folder id)
+  2. Run the install() function once (grants auth, creates the labels + the 15-min trigger)
+  3. Label threads obagent/inbox to queue them (obagent/inbox/receipt or /document pins the type)
+EOF
+}
+done_note="Done. Code updated; trigger and script properties unchanged."
+
+# ── clasp deploy core (runner → login → create-on-first-run → push) ──
+pre_push
 
 # Pick a clasp runner: PATH install, else ad hoc via bunx/npx
 if (( $+commands[clasp] )); then
@@ -23,14 +36,14 @@ if [[ ! -f ~/.clasprc.json ]]; then
 fi
 
 # First deploy: create the Apps Script project (writes .clasp.json, gitignored).
-# To adopt an existing project (e.g. the old paste-deployed one) instead, write
-# .clasp.json with its scriptId first: {"scriptId": "<id>"} — then this push
-# updates it in place, keeping its trigger and script properties.
+# To adopt an existing project instead, write .clasp.json with its scriptId
+# first — {"scriptId": "<id>"} — and this push updates it in place, keeping
+# its trigger and script properties.
 if [[ -f .clasp.json ]]; then
     first_deploy=false
 else
     echo "Creating Apps Script project"
-    $clasp create --type standalone --title obagent-gmail-ingest
+    $clasp create --type standalone --title $project_title
     # clasp create overwrites the local manifest with the remote default — restore ours
     git checkout -- appsscript.json
     first_deploy=true
@@ -40,13 +53,9 @@ fi
 $clasp push -f
 
 if $first_deploy; then
-    cat <<EOF
-Pushed. Finish setup in the Apps Script editor (opening now):
-  1. Project Settings -> Script properties -> add CONSUME_FOLDER_ID (Drive consume/ folder id)
-  2. Run the install() function once (grants auth, creates the labels + the 15-min trigger)
-  3. Label threads obagent/inbox to queue them (obagent/inbox/receipt or /document pins the type)
-EOF
+    echo "Pushed. Finish setup in the Apps Script editor (opening now):"
+    post_setup
     $clasp open-script
 else
-    echo "Done. Code updated; trigger and script properties unchanged."
+    echo $done_note
 fi
