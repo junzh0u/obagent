@@ -18,8 +18,9 @@
 # must reach the operator, exit 0 means all quiet).
 #
 # Env (same wrapper as run.sh provides these):
-#   OBAGENT_EXPORT / OBAGENT_PASS_LOG   locate the pass-history log (same
-#                                       derivation as run.sh)
+#   OBAGENT_PASS_LOG                    pass-history log; same default as run.sh
+#                                       ($XDG_STATE_HOME|~/.local/state)/obagent/
+#                                       pass-history.log
 # Optional:
 #   OBAGENT_INSPECT_WINDOW_HOURS        how far back to look (default 24)
 #   OBAGENT_INSPECT_STALE_MINUTES       log mtime older than this means the
@@ -28,7 +29,7 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 
-PASS_LOG="${OBAGENT_PASS_LOG:-${OBAGENT_EXPORT:+${OBAGENT_EXPORT%/}/../logs/obagent-pass-history.log}}"
+PASS_LOG="${OBAGENT_PASS_LOG:-${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}/obagent/pass-history.log}"
 WINDOW_H="${OBAGENT_INSPECT_WINDOW_HOURS:-24}"
 STALE_MIN="${OBAGENT_INSPECT_STALE_MINUTES:-30}"
 
@@ -49,9 +50,7 @@ add_problem() { problems="${problems}  - $1
 "; }
 
 recent=""
-if [ -z "${PASS_LOG:-}" ]; then
-    add_problem "no pass-history log configured (OBAGENT_PASS_LOG / OBAGENT_EXPORT unset)"
-elif [ ! -f "$PASS_LOG" ]; then
+if [ ! -f "$PASS_LOG" ]; then
     add_problem "pass-history log missing at $PASS_LOG — the pass schedule may not be running at all"
 else
     age_min=$(( ($(date +%s) - $(stat -c %Y "$PASS_LOG")) / 60 ))

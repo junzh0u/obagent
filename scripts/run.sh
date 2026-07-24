@@ -19,9 +19,15 @@
 #   OBAGENT_MIN_AGE       seconds a scan must be untouched before consuming (default 60)
 #   OBAGENT_PASS_LOG      pass-history file for scheduled runs: one line per clean
 #                         pass, full output for failed ones (trimmed to the last
-#                         ~4000 lines). Defaults to <OBAGENT_EXPORT>/../logs/
-#                         obagent-pass-history.log — inside the Cloud-Synced tree,
-#                         so a remote monitor can read it from Google Drive.
+#                         ~4000 lines). Defaults to $XDG_STATE_HOME (or
+#                         ~/.local/state)/obagent/pass-history.log — machine-local
+#                         state, deliberately outside the Cloud-Synced tree.
+#   OBAGENT_STATUS_DIR    where to mirror the latest outcome for off-NAS eyes:
+#                         obagent-last-success.log + obagent-last-failure.log,
+#                         each the full output of that pass, overwritten every
+#                         time one occurs. Defaults to <OBAGENT_EXPORT>/../logs —
+#                         inside the Cloud-Synced tree, so Drive shows pass
+#                         health; empty disables the snapshots.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
@@ -142,15 +148,37 @@ run_pass() {
 
 # Pass history: scheduled (non-tty) runs also record themselves to $PASS_LOG —
 # a clean pass appends one summary line, a failed pass appends its full output —
-# so failures are diagnosable after DSM's per-run logs rotate away. The file
-# lives in the Cloud-Synced tree, giving an off-NAS monitor a way to see pass
-# health (a stale file means the schedule itself died). Interactive runs skip
-# it: the operator is watching, and the output would carry color codes.
-PASS_LOG="${OBAGENT_PASS_LOG:-${OBAGENT_EXPORT:+${OBAGENT_EXPORT%/}/../logs/obagent-pass-history.log}}"
+# so failures are diagnosable after DSM's per-run logs rotate away. It is
+# machine-local state (XDG state dir), not vault or Drive content: inspect.sh
+# reads it on the same host, and syncing a file rewritten every 5 min to Drive
+# only churned Cloud Sync. Interactive runs skip it: the operator is watching,
+# and the output would carry color codes.
+PASS_LOG="${OBAGENT_PASS_LOG:-${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}/obagent/pass-history.log}"
 if [ -z "${PASS_LOG:-}" ] || [ -t 1 ]; then
     run_pass
     exit $?
 fi
+
+# Status snapshots: the history above is local, but the *latest* outcome is also
+# mirrored into the Cloud-Synced tree so pass health is readable from Drive
+# without shelling into the NAS. Two files, each holding one pass's full output
+# and overwritten rather than appended — that's what keeps Cloud Sync churn
+# trivial (a kilobyte rewritten, not a re-upload of the whole history):
+# obagent-last-success.log for the most recent clean pass — its own mtime is the
+# "schedule is alive" signal — and obagent-last-failure.log for the most recent
+# failed one, kept until the next failure. Verbatim, however long: a pass that
+# prints thousands of lines is exactly the one worth reading in full.
+# Best-effort: an unwritable or unmounted Drive dir warns, it never fails the pass.
+STATUS_DIR="${OBAGENT_STATUS_DIR:-${OBAGENT_EXPORT:+${OBAGENT_EXPORT%/}/../logs}}"
+snapshot() {  # snapshot NAME  (content on stdin)
+    [ -n "${STATUS_DIR:-}" ] || { cat >/dev/null; return 0; }
+    if mkdir -p "$STATUS_DIR" 2>/dev/null; then
+        cat >"$STATUS_DIR/$1" 2>/dev/null && return 0
+    else
+        cat >/dev/null
+    fi
+    echo "warning: could not write $STATUS_DIR/$1"
+}
 
 mkdir -p "$(dirname "$PASS_LOG")"
 pass_out="$(mktemp)"; pass_rcf="$(mktemp)"  # names must not collide with step()'s locals
@@ -158,8 +186,10 @@ pass_out="$(mktemp)"; pass_rcf="$(mktemp)"  # names must not collide with step()
 rc=$(cat "$pass_rcf")
 if [ "$rc" -eq 0 ]; then
     printf '%s %s\n' "$(ts)" "$(tail -n 1 "$pass_out")" >>"$PASS_LOG"
+    snapshot obagent-last-success.log <"$pass_out"
 else
     cat "$pass_out" >>"$PASS_LOG"
+    snapshot obagent-last-failure.log <"$pass_out"
 fi
 rm -f "$pass_out" "$pass_rcf"
 if [ "$(wc -l <"$PASS_LOG")" -gt 5000 ]; then

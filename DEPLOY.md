@@ -171,8 +171,11 @@ to the Drive `consume/` folder id and run `install()` once (creates the labels +
 
 ## 12. (Optional) Daily health inspection
 Scheduled runs of `run.sh` append a pass history to
-`$OBAGENT_EXPORT/../logs/obagent-pass-history.log` (one line per clean pass,
-full output per failed one; override with `OBAGENT_PASS_LOG`). `scripts/inspect.sh`
+`~/.local/state/obagent/pass-history.log` (machine-local state — one line per clean
+pass, full output per failed one; override with `OBAGENT_PASS_LOG`), and mirror the
+latest outcome to `$OBAGENT_EXPORT/../logs/obagent-last-{success,failure}.log`
+(full output of that pass, overwritten each time; `OBAGENT_STATUS_DIR` to move or
+disable them) so pass health is visible from Drive. `scripts/inspect.sh`
 reads it and exits 0 when healthy; on failed passes or a stale log (= the 5-min
 schedule itself died) it has Claude (headless `claude -p`) diagnose, attempt a
 trivial safe fix (permissions, stale lock — never data deletion or code changes)

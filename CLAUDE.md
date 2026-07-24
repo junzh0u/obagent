@@ -203,9 +203,15 @@ one pass on an interval. Step-by-step NAS setup is in **`DEPLOY.md`**.
     → `vault pull` (ff-only) → `consume --min-age` → `obagent notion sync` →
     `obagent check` (warn-only) → `publish.sh`, with per-step error isolation +
     a `flock` no-overlap guard. Scheduled (non-tty) runs also append a **pass
-    history** to `$OBAGENT_PASS_LOG` (default `$OBAGENT_EXPORT/../logs/
-    obagent-pass-history.log`, inside the Cloud-Synced tree): one line per clean
-    pass, full output per failed pass, trimmed to ~4000 lines.
+    history** to `$OBAGENT_PASS_LOG` (default `${XDG_STATE_HOME:-~/.local/state}/
+    obagent/pass-history.log` — machine-local state, deliberately *not* in the
+    vault or the Cloud-Synced tree; `inspect.sh` reads it on the same host): one
+    line per clean pass, full output per failed pass, trimmed to ~4000 lines.
+    The **latest** outcome is additionally mirrored to `$OBAGENT_STATUS_DIR`
+    (default `$OBAGENT_EXPORT/../logs`, i.e. Drive) as `obagent-last-success.log`
+    + `obagent-last-failure.log` — each the verbatim full output of that pass,
+    overwritten not appended, so pass health is readable off-NAS without syncing
+    the whole history. Best-effort: an unwritable dir warns.
   - `scripts/inspect.sh` — daily health check over that pass history: healthy →
     exit 0 silently; failed passes or a stale log (schedule died) → headless
     `claude -p` diagnoses, attempts a **trivial safe fix** (permissions, stale
