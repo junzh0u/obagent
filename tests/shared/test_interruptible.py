@@ -1,7 +1,7 @@
 import os
 import signal
 
-from lib.utils import interruptible
+from obagent.lib.utils import interruptible
 
 
 def test_normal_iteration():

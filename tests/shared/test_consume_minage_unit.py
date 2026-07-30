@@ -2,7 +2,7 @@ import os
 import time
 from pathlib import Path
 
-from commands.consume import _filter_stable
+from obagent.commands.consume import _filter_stable
 
 
 def test_filter_stable_skips_recent(tmp_path):

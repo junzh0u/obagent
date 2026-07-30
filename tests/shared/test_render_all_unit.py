@@ -1,10 +1,10 @@
 import json
 
-import commands.bank_statement.pipeline  # noqa: F401 — triggers Pipeline registration
-import commands.document.pipeline  # noqa: F401
-import commands.receipt.pipeline  # noqa: F401
+import obagent.commands.bank_statement.pipeline  # noqa: F401 — triggers Pipeline registration
+import obagent.commands.document.pipeline  # noqa: F401
+import obagent.commands.receipt.pipeline  # noqa: F401
 
-from commands.render import render_all
+from obagent.commands.render import render_all
 
 
 def _setup_entry(vault, path, sha, llm_data, src_filename="original.pdf"):

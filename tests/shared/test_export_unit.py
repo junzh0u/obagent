@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from commands.export import export
+from obagent.commands.export import export
 
 not_root = pytest.mark.skipif(
     os.geteuid() == 0, reason="permission checks are bypassed as root"

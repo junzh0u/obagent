@@ -1,4 +1,4 @@
-from commands.check import check
+from obagent.commands.check import check
 from tests.conftest import needs_case_sensitive_fs
 
 

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
-from lib.constants import OCR_MODEL
+from obagent.lib.constants import OCR_MODEL
 
 BOTH_KEYS = ["--mistral-api-key", "test-key", "--openai-api-key", "test-oai-key"]
 
@@ -35,7 +35,7 @@ def runner():
 @pytest.fixture
 def vault(tmp_path):
     d = tmp_path / "vault"
-    (d / ".obagent").mkdir(parents=True)  # the vault marker `main.cli` requires
+    (d / ".obagent").mkdir(parents=True)  # the vault marker `obagent.cli` requires
     return d
 
 

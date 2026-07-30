@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from commands.people import people
+from obagent.commands.people import people
 
 
 def _write_md(vault, rel_path, content):
@@ -26,7 +26,7 @@ def _make_fm(*names):
 def _mock_confirm(answer):
     """Return a patch that makes questionary.confirm().ask() return *answer*."""
     return patch(
-        "commands.people.questionary.confirm",
+        "obagent.commands.people.questionary.confirm",
         return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
     )
 
@@ -337,7 +337,7 @@ def test_remove_offers_to_pin_remaining(runner, vault):
     with (
         _mock_checkbox(["Alice"]),
         patch(
-            "commands.people.questionary.confirm",
+            "obagent.commands.people.questionary.confirm",
             side_effect=lambda *a, **kw: type(
                 "Q", (), {"ask": staticmethod(lambda: next(confirm_answers))}
             )(),
@@ -375,7 +375,7 @@ def test_save_merges_with_existing(runner, vault):
 def _mock_select(choice):
     """Return a patch that makes questionary.select().ask() return *choice*."""
     return patch(
-        "commands.people.questionary.select",
+        "obagent.commands.people.questionary.select",
         return_value=type("Q", (), {"ask": staticmethod(lambda: choice)})(),
     )
 
@@ -383,7 +383,7 @@ def _mock_select(choice):
 def _mock_text(value):
     """Return a patch that makes questionary.text().ask() return *value*."""
     return patch(
-        "lib.name_store.questionary.autocomplete",
+        "obagent.lib.name_store.questionary.autocomplete",
         return_value=type("Q", (), {"ask": staticmethod(lambda: value)})(),
     )
 
@@ -391,7 +391,7 @@ def _mock_text(value):
 def _mock_checkbox(choices):
     """Return a patch that makes questionary.checkbox().ask() return *choices*."""
     return patch(
-        "commands.people.questionary.checkbox",
+        "obagent.commands.people.questionary.checkbox",
         return_value=type("Q", (), {"ask": staticmethod(lambda: choices)})(),
     )
 
@@ -442,7 +442,7 @@ def test_pin_offers_to_remove_unpinned(runner, vault):
     with (
         _mock_checkbox(["Alice"]),
         patch(
-            "commands.people.questionary.confirm",
+            "obagent.commands.people.questionary.confirm",
             side_effect=lambda *a, **kw: type(
                 "Q", (), {"ask": staticmethod(lambda: next(confirm_answers))}
             )(),
@@ -501,7 +501,7 @@ def test_unpin_removes_from_notes(runner, vault):
     with (
         _mock_checkbox(["Bob"]),
         patch(
-            "commands.people.questionary.confirm",
+            "obagent.commands.people.questionary.confirm",
             side_effect=lambda *a, **kw: type(
                 "Q", (), {"ask": staticmethod(lambda: next(confirm_answers))}
             )(),
@@ -530,7 +530,7 @@ def test_rename_interactive(runner, vault):
 def _mock_name_store_select(choice):
     """Patch the select in lib.name_store (where make_rename_command calls it)."""
     return patch(
-        "lib.name_store.questionary.select",
+        "obagent.lib.name_store.questionary.select",
         return_value=type("Q", (), {"ask": staticmethod(lambda: choice)})(),
     )
 

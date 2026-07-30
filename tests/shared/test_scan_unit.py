@@ -1,6 +1,6 @@
 import hashlib
 
-from commands.scan import scan
+from obagent.commands.scan import scan
 
 
 def test_scan_shows_new_files(runner, vault, source_dir):

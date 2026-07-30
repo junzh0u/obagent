@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from commands.document.pipeline import document_pipeline
-from lib.constants import LLM_MODEL, OCR_MODEL
+from obagent.commands.document.pipeline import document_pipeline
+from obagent.lib.constants import LLM_MODEL, OCR_MODEL
 
 from tests.conftest import BOTH_KEYS
 
@@ -13,12 +13,12 @@ def _setup_ctx_managers(mock_mistral, mock_openai):
         mock.return_value.__exit__ = lambda self, *args: False
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_calls_all_four_steps(
     mock_mistral,
     mock_openai,
@@ -58,12 +58,12 @@ def test_calls_all_four_steps(
     assert "1 files found: 1 consumed, 0 already in vault" in result.output
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_skips_when_ingest_returns_none(
     mock_mistral,
     mock_openai,

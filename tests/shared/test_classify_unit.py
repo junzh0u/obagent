@@ -3,12 +3,12 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import commands.bank_statement.pipeline  # noqa: F401 — register pipelines
-import commands.document.pipeline  # noqa: F401
-import commands.receipt.pipeline  # noqa: F401
+import obagent.commands.bank_statement.pipeline  # noqa: F401 — register pipelines
+import obagent.commands.document.pipeline  # noqa: F401
+import obagent.commands.receipt.pipeline  # noqa: F401
 
-from commands.classify import classify_document
-from commands.document.pipeline import document_pipeline
+from obagent.commands.classify import classify_document
+from obagent.commands.document.pipeline import document_pipeline
 
 
 def _client(answer):

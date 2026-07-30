@@ -1,8 +1,8 @@
 from collections import defaultdict
 
-from commands.notion import backfill as bf
-from commands.notion import sync
-from lib.notion_api import NotionClient
+from obagent.commands.notion import backfill as bf
+from obagent.commands.notion import sync
+from obagent.lib.notion_api import NotionClient
 from tests.conftest import needs_case_sensitive_fs
 
 R = "receipt"

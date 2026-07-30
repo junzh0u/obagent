@@ -6,9 +6,9 @@ import httpx
 from mistralai.client.errors import SDKError
 from mistralai.client.models.ocrrequest import DocumentURLChunk, ImageURLChunk
 
-from commands.ocr import _build_ocr_document, _ocr_with_retry
-from commands.receipt.pipeline import receipt_pipeline
-from lib.constants import OCR_MODEL
+from obagent.commands.ocr import _build_ocr_document, _ocr_with_retry
+from obagent.commands.receipt.pipeline import receipt_pipeline
+from obagent.lib.constants import OCR_MODEL
 from tests.conftest import setup_mock_mistral
 
 ocr = receipt_pipeline.ocr_command
@@ -23,7 +23,7 @@ def _make_sdk_error(status_code):
     return SDKError("API error", response)
 
 
-@patch("commands.ocr.Mistral")
+@patch("obagent.commands.ocr.Mistral")
 def test_ocr_results_saved_to_correct_paths(
     mock_mistral_cls, runner, vault, source_dir
 ):
@@ -49,7 +49,7 @@ def test_ocr_results_saved_to_correct_paths(
     assert (ocr_dir / f"{OCR_MODEL}.txt").exists()
 
 
-@patch("commands.ocr.Mistral")
+@patch("obagent.commands.ocr.Mistral")
 def test_ocr_text_contains_concatenated_markdown(mock_mistral_cls, runner, vault):
     """OCR text file contains page markdowns separated by double newlines."""
     setup_mock_mistral(mock_mistral_cls)
@@ -69,7 +69,7 @@ def test_ocr_text_contains_concatenated_markdown(mock_mistral_cls, runner, vault
     assert txt == "# Page 1\n\nHello world\n\n# Page 2\n\nGoodbye world"
 
 
-@patch("commands.ocr.Mistral")
+@patch("obagent.commands.ocr.Mistral")
 def test_ocr_json_contains_model_dump(mock_mistral_cls, runner, vault):
     """OCR JSON file contains valid JSON from model_dump()."""
     mock_client = setup_mock_mistral(mock_mistral_cls)
@@ -93,7 +93,7 @@ def test_ocr_json_contains_model_dump(mock_mistral_cls, runner, vault):
     assert len(data["pages"]) == 2
 
 
-@patch("commands.ocr.Mistral")
+@patch("obagent.commands.ocr.Mistral")
 def test_ocr_skip_existing(mock_mistral_cls, runner, vault):
     """OCR is skipped when output already exists."""
     setup_mock_mistral(mock_mistral_cls)
@@ -118,7 +118,7 @@ def test_ocr_skip_existing(mock_mistral_cls, runner, vault):
     assert (ocr_dir / f"{OCR_MODEL}.txt").read_text() == "existing ocr text"
 
 
-@patch("commands.ocr.Mistral")
+@patch("obagent.commands.ocr.Mistral")
 def test_ocr_overwrite_reruns(mock_mistral_cls, runner, vault):
     """With --overwrite, OCR is re-run even if output exists."""
     setup_mock_mistral(mock_mistral_cls)
@@ -147,7 +147,7 @@ def test_ocr_overwrite_reruns(mock_mistral_cls, runner, vault):
     assert "old" not in data
 
 
-@patch("commands.ocr.Mistral")
+@patch("obagent.commands.ocr.Mistral")
 def test_ocr_single_sha256(mock_mistral_cls, runner, vault):
     """When sha256 argument is given, only that entry is OCR'd."""
     setup_mock_mistral(mock_mistral_cls)
@@ -171,7 +171,7 @@ def test_ocr_single_sha256(mock_mistral_cls, runner, vault):
     assert not (other / "ocr").exists()
 
 
-@patch("commands.ocr.Mistral")
+@patch("obagent.commands.ocr.Mistral")
 def test_ocr_custom_model(mock_mistral_cls, runner, vault):
     """--ocr-model saves files under the custom model name and calls API with it."""
     mock_client = setup_mock_mistral(mock_mistral_cls)
@@ -195,7 +195,7 @@ def test_ocr_custom_model(mock_mistral_cls, runner, vault):
     assert call_kwargs.kwargs["model"] == "custom-model"
 
 
-@patch("commands.ocr.time.sleep")
+@patch("obagent.commands.ocr.time.sleep")
 def test_ocr_retries_on_429(mock_sleep):
     """_ocr_with_retry retries on 429 with exponential backoff."""
     client = MagicMock()
@@ -216,7 +216,7 @@ def test_ocr_retries_on_429(mock_sleep):
     assert mock_sleep.call_args_list[1].args[0] == 4
 
 
-@patch("commands.ocr.time.sleep")
+@patch("obagent.commands.ocr.time.sleep")
 def test_ocr_raises_after_max_retries(mock_sleep):
     """_ocr_with_retry raises after exhausting retries on 429."""
     client = MagicMock()
@@ -233,7 +233,7 @@ def test_ocr_raises_after_max_retries(mock_sleep):
     assert client.ocr.process.call_count == 3  # initial + 2 retries
 
 
-@patch("commands.ocr.time.sleep")
+@patch("obagent.commands.ocr.time.sleep")
 def test_ocr_retries_on_5xx(mock_sleep):
     """_ocr_with_retry retries on any 5xx server error with exponential backoff."""
     for status in (500, 502, 503):
@@ -254,7 +254,7 @@ def test_ocr_retries_on_5xx(mock_sleep):
         assert mock_sleep.call_args_list[0].args[0] == 2
 
 
-@patch("commands.ocr.time.sleep")
+@patch("obagent.commands.ocr.time.sleep")
 def test_ocr_does_not_retry_non_retryable(mock_sleep):
     """_ocr_with_retry does not retry on non-retryable 4xx errors."""
     client = MagicMock()
@@ -321,7 +321,7 @@ def test_build_ocr_document_webp(tmp_path):
     assert doc.image_url.startswith("data:image/webp;base64,")
 
 
-@patch("commands.ocr.Mistral")
+@patch("obagent.commands.ocr.Mistral")
 def test_ocr_jpeg_uses_image_url(mock_mistral_cls, runner, vault):
     """OCR on a JPEG source uses image_url API format."""
     mock_client = setup_mock_mistral(mock_mistral_cls)

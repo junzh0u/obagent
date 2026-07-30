@@ -1,6 +1,6 @@
 import json
 
-from commands.receipt.pipeline import receipt_pipeline
+from obagent.commands.receipt.pipeline import receipt_pipeline
 
 set_cmd = receipt_pipeline.set_command
 

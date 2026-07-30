@@ -3,13 +3,13 @@ from unittest.mock import patch
 
 import pytest
 
-import commands.bank_statement.pipeline  # noqa: F401 — triggers Pipeline registration
-import commands.document.pipeline  # noqa: F401
-import commands.receipt.pipeline  # noqa: F401
+import obagent.commands.bank_statement.pipeline  # noqa: F401 — triggers Pipeline registration
+import obagent.commands.document.pipeline  # noqa: F401
+import obagent.commands.receipt.pipeline  # noqa: F401
 
-from commands.bank_statement.pipeline import bank_statement_pipeline
-from commands.document.pipeline import document_pipeline
-from commands.receipt.pipeline import receipt_pipeline
+from obagent.commands.bank_statement.pipeline import bank_statement_pipeline
+from obagent.commands.document.pipeline import document_pipeline
+from obagent.commands.receipt.pipeline import receipt_pipeline
 
 from tests.conftest import BOTH_KEYS
 
@@ -29,12 +29,12 @@ CASES = [
 
 
 @pytest.mark.parametrize("pipeline,path", CASES)
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_env_var_supplies_input_dir_when_paths_omitted(
     mock_mistral,
     mock_openai,
@@ -72,12 +72,12 @@ def test_env_var_supplies_input_dir_when_paths_omitted(
 
 
 @pytest.mark.parametrize("pipeline,path", CASES)
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_positional_paths_win_over_env_var(
     mock_mistral,
     mock_openai,
@@ -137,8 +137,8 @@ def test_no_paths_and_no_env_var_raises_usage_error(
 
 
 @pytest.mark.parametrize("pipeline,path", CASES)
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_env_var_inbox_missing_subdir_is_soft_skip(
     mock_mistral,
     mock_openai,

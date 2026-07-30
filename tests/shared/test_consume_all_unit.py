@@ -1,11 +1,11 @@
 from pathlib import Path
 from unittest.mock import patch
 
-import commands.bank_statement.pipeline  # noqa: F401 — triggers Pipeline registration
-import commands.document.pipeline  # noqa: F401
-import commands.receipt.pipeline  # noqa: F401
+import obagent.commands.bank_statement.pipeline  # noqa: F401 — triggers Pipeline registration
+import obagent.commands.document.pipeline  # noqa: F401
+import obagent.commands.receipt.pipeline  # noqa: F401
 
-from commands.consume import consume_all
+from obagent.commands.consume import consume_all
 
 from tests.conftest import BOTH_KEYS
 
@@ -26,12 +26,12 @@ def _ingest_returns_target(call_count: list[int], vault: Path):
     return _side_effect
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_consumes_every_type_from_input_dir(
     mock_mistral,
     mock_openai,
@@ -66,12 +66,12 @@ def test_consumes_every_type_from_input_dir(
     assert consumed_dirs == {"Documents", "Receipts", "Bank Statements"}
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_prints_section_header_per_type(
     mock_mistral,
     mock_openai,
@@ -102,12 +102,12 @@ def test_prints_section_header_per_type(
     assert "=== Bank Statements ===" in result.output
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_missing_type_inbox_is_soft_skip(
     mock_mistral,
     mock_openai,
@@ -146,12 +146,12 @@ def test_missing_type_inbox_is_soft_skip(
     assert "Bank Statements" in result.output
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_env_var_supplies_input_dir(
     mock_mistral,
     mock_openai,
@@ -190,12 +190,12 @@ def test_missing_input_dir_and_env_var_errors(runner, vault, monkeypatch):
     assert "--input-dir" in result.output
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_prehook_runs_before_consume(
     mock_mistral,
     mock_openai,
@@ -233,8 +233,8 @@ def test_prehook_runs_before_consume(
     assert consumed_sources == {inbox / "Documents" / "scan.pdf"}
 
 
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_prehook_failure_aborts_consume(
     mock_mistral, mock_openai, runner, vault, tmp_path
 ):
@@ -257,12 +257,12 @@ def test_prehook_failure_aborts_consume(
     mock_openai.assert_not_called()
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_prehook_env_var_default(
     mock_mistral,
     mock_openai,

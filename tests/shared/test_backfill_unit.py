@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from commands.notion import backfill as bf
-from lib.notion_api import NotionClient
+from obagent.commands.notion import backfill as bf
+from obagent.lib.notion_api import NotionClient
 
 
 def _rich(s):

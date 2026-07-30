@@ -1,6 +1,6 @@
 import json
 
-from commands.bank_statement.pipeline import (
+from obagent.commands.bank_statement.pipeline import (
     BankStatementFields,
     bank_statement_pipeline,
 )

@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from commands.receipt.pipeline import receipt_pipeline
-from lib.constants import LLM_MODEL, OCR_MODEL
+from obagent.commands.receipt.pipeline import receipt_pipeline
+from obagent.lib.constants import LLM_MODEL, OCR_MODEL
 
 from tests.conftest import BOTH_KEYS
 
@@ -13,12 +13,12 @@ def _setup_ctx_managers(mock_mistral, mock_openai):
         mock.return_value.__exit__ = lambda self, *args: False
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_calls_all_four_steps(
     mock_mistral,
     mock_openai,
@@ -66,12 +66,12 @@ def test_calls_all_four_steps(
     assert "1 files found: 1 consumed, 0 already in vault" in result.output
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_skips_ocr_llm_render_when_ingest_returns_none(
     mock_mistral,
     mock_openai,
@@ -103,12 +103,12 @@ def test_skips_ocr_llm_render_when_ingest_returns_none(
     assert "1 files found: 0 consumed, 1 already in vault" in result.output
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_aborts_on_ocr_exception(
     mock_mistral,
     mock_openai,
@@ -140,12 +140,12 @@ def test_aborts_on_ocr_exception(
     mock_render.assert_not_called()
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_aborts_on_llm_exception(
     mock_mistral,
     mock_openai,
@@ -176,12 +176,12 @@ def test_aborts_on_llm_exception(
     mock_render.assert_not_called()
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_handles_render_exception(
     mock_mistral,
     mock_openai,
@@ -212,12 +212,12 @@ def test_handles_render_exception(
     mock_llm.assert_called_once()
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_forwards_flags(
     mock_mistral,
     mock_openai,
@@ -274,12 +274,12 @@ def test_forwards_flags(
     )
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_processes_multiple_files(
     mock_mistral,
     mock_openai,
@@ -313,12 +313,12 @@ def test_processes_multiple_files(
     assert "3 files found: 3 consumed, 0 already in vault" in result.output
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.ingest_source")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.ingest_source")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_no_files_does_nothing(
     mock_mistral,
     mock_openai,

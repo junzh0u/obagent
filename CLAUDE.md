@@ -3,13 +3,17 @@
 ## Project Setup
 
 - Python 3.14, managed with **uv**
-- Build backend: hatchling
+- Build backend: `uv_build` (uv's own). No `[tool.uv.build-backend]` section is needed — the
+  src layout and the `obagent` module name are both its defaults.
 - CLI framework: click
-- Entry point: `obagent` → `main:cli`
+- Entry point: `obagent` → `obagent.cli:cli`
 
 ## Project Structure
 
-- `main.py` — CLI entry point, click group with subgroups per document type; `--vault` is validated by the `.obagent/` marker (walking up git-style when pointed inside the vault) and rejected otherwise — `mkdir <vault>/.obagent` bootstraps a new vault
+Everything importable lives under `src/obagent/`, so the wheel installs exactly one top-level
+package. Paths below are relative to that root.
+
+- `cli.py` — CLI entry point, click group with subgroups per document type; `--vault` is validated by the `.obagent/` marker (walking up git-style when pointed inside the vault) and rejected otherwise — `mkdir <vault>/.obagent` bootstraps a new vault
 - `lib/` — shared infrastructure (not CLI commands)
   - `lib/fields.py` — `Fields[K]` ABC: dict-based field container with postprocess, defaults, title, and formatting
   - `lib/pipeline.py` — `Pipeline` ABC: orchestration (prompt, CLI command factories)
@@ -19,7 +23,7 @@
   - `lib/notion_api.py` — Notion HTTP client (stdlib urllib): throttle, retry (429 / Cloudflare-WAF / 5xx / timeout), file upload, and data-source page/query wrappers. Pinned to API version `2025-09-03`.
   - `lib/notion_fieldmap.py` — vault frontmatter ↔ Notion property codecs, per type (see Notion sync)
 - `commands/{receipt,bank_statement,document}/pipeline.py` — concrete `Fields` + `Pipeline` per type
-- `commands/` — CLI command modules (consume, ingest, ocr, llm, render, scan, remove, set_field). `remove` and `set` take a sha256 **or a note path/filename** (resolved to its embedded shas via `lib.utils.target_shas`); `set` writes one field into the entry's LLM JSON (so the fix survives re-renders) and re-renders with `--overwrite-fields` semantics
+- `commands/` — CLI command modules (consume, ingest, ocr, llm, render, scan, remove, set_field). `remove` and `set` take a sha256 **or a note path/filename** (resolved to its embedded shas via `obagent.lib.utils.target_shas`); `set` writes one field into the entry's LLM JSON (so the fix survives re-renders) and re-renders with `--overwrite-fields` semantics
 - `commands/export.py` — shared `export` subcommand (registered on `document`, `receipt`, and `bank_statement`); also exposes the top-level `obagent export` aggregator
 - `commands/{bank,merchant,people}.py` — top-level name-management groups built on `lib/name_store.py`
 - `commands/notion/` — Notion sync: `sync.py` (the `obagent notion sync` command + the two-way merge engine) and `backfill.py` (the one-time link, run as a one-off — not a CLI command)
@@ -184,7 +188,7 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
   migration that enables the per-file two-way sync). Idempotent (an already-linked,
   already-canonical row is untouched); `--dry-run` reports without writing.
 - **Boundary:** Notion code is one-directional — `lib`/pipeline/render never import
-  it; only `commands/notion` + `main` do.
+  it; only `commands/notion` + `cli` do.
 
 ## Deployment
 

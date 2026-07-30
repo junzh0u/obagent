@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from commands.ingest import ingest
+from obagent.commands.ingest import ingest
 
 
 def test_sha256_is_correct(runner, vault, source_dir):

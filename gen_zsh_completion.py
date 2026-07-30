@@ -2,7 +2,7 @@
 
 import click
 
-from main import cli
+from obagent.cli import cli
 
 
 def _escape(text):

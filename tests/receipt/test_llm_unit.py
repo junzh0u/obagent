@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
-from commands.receipt.pipeline import _clean_total, receipt_pipeline
-from lib.constants import LLM_MODEL
+from obagent.commands.receipt.pipeline import _clean_total, receipt_pipeline
+from obagent.lib.constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai
 
@@ -23,7 +23,7 @@ def _setup_entry_with_ocr(vault, sha="abc123", ocr_filename="default-ocr.txt"):
     return target_dir
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_json_created(mock_openai_cls, runner, vault):
     """llm/<LLM_MODEL>.json is created with correct fields."""
     setup_mock_openai(
@@ -48,7 +48,7 @@ def test_llm_json_created(mock_openai_cls, runner, vault):
     assert "Extracted:" in result.output
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_json_includes_prompt(mock_openai_cls, runner, vault):
     """llm/<LLM_MODEL>.json includes the prompt used for extraction."""
     setup_mock_openai(
@@ -73,7 +73,7 @@ def test_llm_json_includes_prompt(mock_openai_cls, runner, vault):
     assert "# Page 1" not in data["prompt"]
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_uses_openai_gpt5_mini(mock_openai_cls, runner, vault):
     """Field extraction calls OpenAI with correct model and OCR text."""
     mock_openai_client = setup_mock_openai(mock_openai_cls)
@@ -98,7 +98,7 @@ def test_llm_uses_openai_gpt5_mini(mock_openai_cls, runner, vault):
     assert "# Page 1" in prompt
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_skip_existing_json(mock_openai_cls, runner, vault):
     """LLM extraction is skipped when llm/<LLM_MODEL>.json already exists."""
     setup_mock_openai(mock_openai_cls)
@@ -118,7 +118,7 @@ def test_llm_skip_existing_json(mock_openai_cls, runner, vault):
     mock_openai_cls.return_value.chat.completions.create.assert_not_called()
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_overwrite_reruns(mock_openai_cls, runner, vault):
     """With --overwrite, LLM is re-run even when json exists."""
     setup_mock_openai(
@@ -141,7 +141,7 @@ def test_llm_overwrite_reruns(mock_openai_cls, runner, vault):
     assert "Extracted:" in result.output
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_custom_model(mock_openai_cls, runner, vault):
     """--llm-model saves json under the custom model name."""
     mock_client = setup_mock_openai(
@@ -162,7 +162,7 @@ def test_llm_custom_model(mock_openai_cls, runner, vault):
     assert call_kwargs.kwargs["model"] == "custom-model"
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_single_sha256(mock_openai_cls, runner, vault):
     """When sha256 argument is given, only that entry is processed."""
     setup_mock_openai(mock_openai_cls)
@@ -182,7 +182,7 @@ def test_llm_single_sha256(mock_openai_cls, runner, vault):
     assert not (vault / "papers" / "_assets_" / "other" / "llm").exists()
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_picks_newest_ocr_txt(mock_openai_cls, runner, vault):
     """When multiple OCR txt files exist, the newest by mtime is used."""
     setup_mock_openai(mock_openai_cls)
@@ -212,7 +212,7 @@ def test_llm_picks_newest_ocr_txt(mock_openai_cls, runner, vault):
     assert "old ocr content" not in prompt
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_migrate_re_extracts_when_fields_missing(mock_openai_cls, runner, vault):
     """--migrate re-runs LLM when existing JSON is missing a field."""
     setup_mock_openai(
@@ -239,7 +239,7 @@ def test_migrate_re_extracts_when_fields_missing(mock_openai_cls, runner, vault)
     assert fields["total"] == "$5.75"
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_migrate_skips_when_all_fields_present(mock_openai_cls, runner, vault):
     """--migrate skips entries that already have all expected fields."""
     setup_mock_openai(mock_openai_cls)
@@ -261,7 +261,7 @@ def test_migrate_skips_when_all_fields_present(mock_openai_cls, runner, vault):
     mock_openai_cls.return_value.chat.completions.create.assert_not_called()
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_migrate_implies_continue(mock_openai_cls, runner, vault):
     """--migrate renders after extraction without needing --continue."""
     setup_mock_openai(

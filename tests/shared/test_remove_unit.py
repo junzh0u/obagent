@@ -1,6 +1,6 @@
 import json
 
-from commands.remove import remove, remove_entry
+from obagent.commands.remove import remove, remove_entry
 
 
 def _setup_entry(vault, sha="abc123", **fields):

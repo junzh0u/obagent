@@ -1,6 +1,6 @@
 import json
 
-from commands.document.pipeline import DocumentFields, document_pipeline
+from obagent.commands.document.pipeline import DocumentFields, document_pipeline
 
 
 def _setup_entry_with_llm(

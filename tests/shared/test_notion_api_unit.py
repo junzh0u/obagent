@@ -4,8 +4,8 @@ import urllib.error
 
 import pytest
 
-from lib import notion_api
-from lib.notion_api import NotionClient, NotionError, truncate_u16, u16len
+from obagent.lib import notion_api
+from obagent.lib.notion_api import NotionClient, NotionError, truncate_u16, u16len
 
 
 @pytest.fixture(autouse=True)

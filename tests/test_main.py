@@ -1,4 +1,4 @@
-from main import cli
+from obagent.cli import cli
 
 
 def test_cli_rejects_non_vault_dir(runner, tmp_path):

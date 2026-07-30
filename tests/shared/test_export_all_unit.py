@@ -3,11 +3,11 @@ from pathlib import Path
 
 import pytest
 
-import commands.bank_statement.pipeline  # noqa: F401 — triggers Pipeline registration
-import commands.document.pipeline  # noqa: F401
-import commands.receipt.pipeline  # noqa: F401
+import obagent.commands.bank_statement.pipeline  # noqa: F401 — triggers Pipeline registration
+import obagent.commands.document.pipeline  # noqa: F401
+import obagent.commands.receipt.pipeline  # noqa: F401
 
-from commands.export import export_all
+from obagent.commands.export import export_all
 
 
 def _setup_entry(

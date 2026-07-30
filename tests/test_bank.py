@@ -1,8 +1,8 @@
 import json
 from unittest.mock import patch
 
-from commands.bank import bank
-from commands.bank_statement.pipeline import BankStatementFields
+from obagent.commands.bank import bank
+from obagent.commands.bank_statement.pipeline import BankStatementFields
 
 
 def _write_md(vault, rel_path, content):
@@ -26,28 +26,28 @@ def _make_fm(bank_name):
 
 def _mock_confirm(answer):
     return patch(
-        "lib.name_store.questionary.confirm",
+        "obagent.lib.name_store.questionary.confirm",
         return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
     )
 
 
 def _mock_select(answer):
     return patch(
-        "lib.name_store.questionary.select",
+        "obagent.lib.name_store.questionary.select",
         return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
     )
 
 
 def _mock_text(answer):
     return patch(
-        "lib.name_store.questionary.autocomplete",
+        "obagent.lib.name_store.questionary.autocomplete",
         return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
     )
 
 
 def _mock_checkbox(answer):
     return patch(
-        "lib.name_store.questionary.checkbox",
+        "obagent.lib.name_store.questionary.checkbox",
         return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
     )
 

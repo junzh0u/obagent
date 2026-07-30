@@ -2,15 +2,15 @@ import hashlib
 import json
 from unittest.mock import patch
 
-from main import cli
+from obagent.cli import cli
 
-from lib.constants import LLM_MODEL
+from obagent.lib.constants import LLM_MODEL
 
 from tests.conftest import BOTH_KEYS, setup_mock_mistral, setup_mock_openai_doc
 
 
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_full_consume_via_cli(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):
@@ -64,8 +64,8 @@ def test_full_consume_via_cli(
     assert f"![[_assets_/{expected_hash}/src/metadata.json]]" in content
 
 
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_default_path_is_documents(
     mock_mistral_cls, mock_openai_cls, runner, vault, source_dir
 ):

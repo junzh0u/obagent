@@ -1,8 +1,8 @@
 import json
 from unittest.mock import patch
 
-from commands.document.pipeline import DocumentFields, document_pipeline
-from lib.constants import LLM_MODEL
+from obagent.commands.document.pipeline import DocumentFields, document_pipeline
+from obagent.lib.constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai_doc
 
@@ -19,7 +19,7 @@ def _setup_entry_with_ocr(vault, sha="abc123", ocr_filename="default-ocr.txt"):
     return target_dir
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_json_created(mock_openai_cls, runner, vault):
     """llm/<LLM_MODEL>.json is created with correct document fields."""
     setup_mock_openai_doc(
@@ -47,7 +47,7 @@ def test_llm_json_created(mock_openai_cls, runner, vault):
     assert "Extracted:" in result.output
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_prompt_content(mock_openai_cls, runner, vault):
     """Document prompt includes expected field names."""
     mock_client = setup_mock_openai_doc(mock_openai_cls)
@@ -85,7 +85,7 @@ def test_prompt_function():
 
 def test_prompt_includes_known_names():
     """Known names are included in the prompt after prepare_context."""
-    from commands.document.pipeline import DocumentPipeline
+    from obagent.commands.document.pipeline import DocumentPipeline
 
     p = DocumentPipeline.__new__(DocumentPipeline)
     p._known_names = ["Alice Smith", "Bob Jones"]
@@ -99,7 +99,7 @@ def test_prompt_uses_pinned_names(tmp_path):
     """prepare_context loads pinned names into the prompt."""
     import json
 
-    from commands.document.pipeline import DocumentPipeline
+    from obagent.commands.document.pipeline import DocumentPipeline
 
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -123,7 +123,7 @@ def test_prompt_without_known_names():
     assert "Known people names" not in prompt
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
     """--continue triggers render after successful LLM extraction."""
     setup_mock_openai_doc(
@@ -149,7 +149,7 @@ def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
     assert len(md_files) == 1
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_overwrite_selective_fields(mock_openai_cls, runner, vault):
     """--overwrite=tags only overwrites tags, preserving other fields."""
     setup_mock_openai_doc(
@@ -187,7 +187,7 @@ def test_overwrite_selective_fields(mock_openai_cls, runner, vault):
     assert fields["summary"] == "Old summary."
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_overwrite_all_replaces_everything(mock_openai_cls, runner, vault):
     """Bare --overwrite replaces all fields."""
     setup_mock_openai_doc(

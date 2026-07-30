@@ -3,13 +3,13 @@
 import hashlib
 from unittest.mock import patch
 
-import commands.bank_statement.pipeline  # noqa: F401 — register pipelines
-import commands.document.pipeline  # noqa: F401
-import commands.receipt.pipeline  # noqa: F401
+import obagent.commands.bank_statement.pipeline  # noqa: F401 — register pipelines
+import obagent.commands.document.pipeline  # noqa: F401
+import obagent.commands.receipt.pipeline  # noqa: F401
 
-from commands.consume import consume_all
-from commands.receipt.pipeline import receipt_pipeline
-from lib.constants import ASSETS_DIR
+from obagent.commands.consume import consume_all
+from obagent.commands.receipt.pipeline import receipt_pipeline
+from obagent.lib.constants import ASSETS_DIR
 
 from tests.conftest import BOTH_KEYS
 
@@ -28,12 +28,12 @@ def _invoke(inbox, vault, runner, extra=()):
     )
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.classify_document")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.classify_document")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_classifies_loose_root_file(
     mock_mistral,
     mock_openai,
@@ -70,12 +70,12 @@ def test_classifies_loose_root_file(
     assert "Classified as Receipts" in result.output
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.classify_document")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.classify_document")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_no_classify_flag_leaves_root_files(
     mock_mistral,
     mock_openai,
@@ -104,12 +104,12 @@ def test_no_classify_flag_leaves_root_files(
     mock_classify.assert_not_called()
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.classify_document")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.classify_document")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_already_consumed_root_file_is_skipped(
     mock_mistral,
     mock_openai,
@@ -142,12 +142,12 @@ def test_already_consumed_root_file_is_skipped(
     mock_classify.assert_not_called()
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.classify_document")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.classify_document")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_ocr_failure_isolates_the_file(
     mock_mistral,
     mock_openai,
@@ -179,12 +179,12 @@ def test_ocr_failure_isolates_the_file(
     mock_classify.assert_not_called()
 
 
-@patch("commands.consume.render_note")
-@patch("commands.consume.extract_fields")
-@patch("commands.consume.classify_document")
-@patch("commands.consume.run_ocr")
-@patch("commands.consume.OpenAI")
-@patch("commands.consume.Mistral")
+@patch("obagent.commands.consume.render_note")
+@patch("obagent.commands.consume.extract_fields")
+@patch("obagent.commands.consume.classify_document")
+@patch("obagent.commands.consume.run_ocr")
+@patch("obagent.commands.consume.OpenAI")
+@patch("obagent.commands.consume.Mistral")
 def test_one_bad_file_does_not_block_the_batch(
     mock_mistral,
     mock_openai,

@@ -1,4 +1,4 @@
-from lib import notion_fieldmap as fm
+from obagent.lib import notion_fieldmap as fm
 
 
 def _title(s):

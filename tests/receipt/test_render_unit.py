@@ -2,7 +2,7 @@ import json
 import os
 import time
 
-from commands.receipt.pipeline import receipt_pipeline
+from obagent.commands.receipt.pipeline import receipt_pipeline
 
 
 def _setup_entry_with_llm(

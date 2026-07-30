@@ -1,11 +1,11 @@
 import json
 from unittest.mock import patch
 
-from commands.bank_statement.pipeline import (
+from obagent.commands.bank_statement.pipeline import (
     BankStatementFields,
     bank_statement_pipeline,
 )
-from lib.constants import LLM_MODEL
+from obagent.lib.constants import LLM_MODEL
 
 from tests.conftest import setup_mock_openai_bs
 
@@ -22,7 +22,7 @@ def _setup_entry_with_ocr(vault, sha="abc123", ocr_filename="default-ocr.txt"):
     return target_dir
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_json_created(mock_openai_cls, runner, vault):
     """llm/<LLM_MODEL>.json is created with correct BS fields."""
     setup_mock_openai_bs(
@@ -54,7 +54,7 @@ def test_llm_json_created(mock_openai_cls, runner, vault):
     assert "Extracted:" in result.output
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_skip_existing_json(mock_openai_cls, runner, vault):
     """LLM extraction is skipped when llm/<LLM_MODEL>.json already exists."""
     setup_mock_openai_bs(mock_openai_cls)
@@ -74,7 +74,7 @@ def test_llm_skip_existing_json(mock_openai_cls, runner, vault):
     mock_openai_cls.return_value.chat.completions.create.assert_not_called()
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_overwrite_reruns(mock_openai_cls, runner, vault):
     """With --overwrite, LLM is re-run even when json exists."""
     setup_mock_openai_bs(
@@ -102,7 +102,7 @@ def test_llm_overwrite_reruns(mock_openai_cls, runner, vault):
     assert "Extracted:" in result.output
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_single_sha256(mock_openai_cls, runner, vault):
     """When sha256 argument is given, only that entry is processed."""
     setup_mock_openai_bs(mock_openai_cls)
@@ -122,7 +122,7 @@ def test_llm_single_sha256(mock_openai_cls, runner, vault):
     assert not (vault / "statements" / "_assets_" / "other" / "llm").exists()
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_llm_prompt_content(mock_openai_cls, runner, vault):
     """BS prompt includes expected field names."""
     mock_client = setup_mock_openai_bs(mock_openai_cls)
@@ -158,7 +158,7 @@ def test_prompt_function():
     assert '"Bank Statements"' in prompt
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
     """--continue triggers render after successful LLM extraction."""
     setup_mock_openai_bs(
@@ -186,7 +186,7 @@ def test_continue_renders_after_llm(mock_openai_cls, runner, vault):
     assert len(md_files) == 1
 
 
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.llm.OpenAI")
 def test_no_continue_skips_render(mock_openai_cls, runner, vault):
     """Without --continue, no markdown note is rendered."""
     setup_mock_openai_bs(mock_openai_cls)
@@ -207,8 +207,8 @@ def test_no_continue_skips_render(mock_openai_cls, runner, vault):
     assert len(md_files) == 0
 
 
-@patch("commands.render.render_note", side_effect=RuntimeError("render boom"))
-@patch("commands.llm.OpenAI")
+@patch("obagent.commands.render.render_note", side_effect=RuntimeError("render boom"))
+@patch("obagent.commands.llm.OpenAI")
 def test_continue_render_failure_warns(mock_openai_cls, mock_render, runner, vault):
     """Render failure during --continue emits warning but doesn't abort."""
     setup_mock_openai_bs(mock_openai_cls)
