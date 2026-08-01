@@ -225,17 +225,24 @@ def read_sha(props: dict[str, Any]) -> set[str]:
     return set(_SHA_RE.findall(read_plain_text(props.get("Sha", {}))))
 
 
+def file_entry_sha12(name: str) -> str | None:
+    """The ``sha12`` encoded in one ``File`` entry name, or None if the name carries
+    no ``-<sha12>`` suffix (renamed / pre-migration)."""
+    m = _FILE_SHA12_RE.search(name)
+    return m.group(1) if m else None
+
+
 def read_file_sha12(props: dict[str, Any]) -> tuple[set[str], int]:
     """Recover the ``sha12``s encoded in the ``File`` entry names — the *live* Notion
     set. Returns ``(sha12s, unparseable)``; ``unparseable`` counts entries whose name
-    carries no ``-<sha12>`` suffix (renamed / pre-migration), which callers use to
-    skip the destructive Notion->vault direction."""
+    carries no ``-<sha12>`` suffix, which callers use to skip the destructive
+    Notion->vault direction."""
     shas: set[str] = set()
     unparseable = 0
     for f in (props.get("File") or {}).get("files", []):
-        m = _FILE_SHA12_RE.search(f.get("name", ""))
-        if m:
-            shas.add(m.group(1))
+        s12 = file_entry_sha12(f.get("name", ""))
+        if s12:
+            shas.add(s12)
         else:
             unparseable += 1
     return shas, unparseable

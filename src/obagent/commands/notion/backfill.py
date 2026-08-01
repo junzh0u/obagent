@@ -254,14 +254,23 @@ def _apply_vault(
     return note.path
 
 
+def _display_name(note_stem: str, suffix: str, sha: str, multi: bool) -> str:
+    """The Notion ``File`` display name for one source: the note stem, suffixed with
+    ``-<sha12>`` (kept intact past truncation) when the note is multi-file so each
+    entry maps back to a sha; a single-file note keeps the clean stem."""
+    if multi:
+        sfx = f"-{sha[:12]}"
+        room = FILE_NAME_LIMIT - len(suffix) - len(sfx)
+        return truncate_u16(note_stem, room) + sfx + suffix
+    return truncate_u16(note_stem, FILE_NAME_LIMIT - len(suffix)) + suffix
+
+
 def upload_sources(
     client: NotionClient, vault: Path, type_name: str, note: VaultNote
 ) -> list[tuple[str, str]]:
     """Upload the note's source file(s); return (upload_id, name) pairs for the
-    ``File`` property. A **multi-file** note suffixes every name with ``-<sha12>``
-    (kept intact past truncation) so the File entries map back to a sha for the
-    per-file two-way sync; a single-file note keeps the clean stem. A missing source
-    is warned and skipped, not fatal."""
+    ``File`` property, named by ``_display_name``. A missing source is warned and
+    skipped, not fatal."""
     base = vault / FOLDER[type_name] / ASSETS_DIR
     multi = len(note.shas) > 1
     pairs: list[tuple[str, str]] = []
@@ -272,13 +281,7 @@ def upload_sources(
                 f"  warning: no source for {sha[:12]} ({note.path.name!r})", flush=True
             )
             continue
-        if multi:
-            sfx = f"-{sha[:12]}"
-            room = FILE_NAME_LIMIT - len(src.suffix) - len(sfx)
-            stem = truncate_u16(note.path.stem, room) + sfx
-        else:
-            stem = truncate_u16(note.path.stem, FILE_NAME_LIMIT - len(src.suffix))
-        name = stem + src.suffix
+        name = _display_name(note.path.stem, src.suffix, sha, multi)
         pairs.append((client.upload_file(src, name), name))
     return pairs
 
@@ -293,21 +296,94 @@ def _file_drifted(note: VaultNote, props: dict) -> bool:
     return bool(unparseable) or notion12 != {s[:12] for s in note.shas}
 
 
-def needs_canonical(note: VaultNote, props: dict) -> bool:
+def _names_drifted(vault: Path, type_name: str, note: VaultNote, props: dict) -> bool:
+    """The row's live ``File`` display names differ from what ``upload_sources``
+    would produce now — the note was renamed since the files were pushed (or a
+    Notion-side File edit changed the set). Fail-safe: a missing source (its suffix
+    is unknowable) skips the check rather than force a re-push every pass."""
+    base = vault / FOLDER[type_name] / ASSETS_DIR
+    multi = len(note.shas) > 1
+    expected: set[str] = set()
+    for sha in note.shas:
+        src = source_file(base / sha)
+        if src is None:
+            return False
+        expected.add(_display_name(note.path.stem, src.suffix, sha, multi))
+    actual = {f.get("name", "") for f in (props.get("File") or {}).get("files", [])}
+    return actual != expected
+
+
+def needs_canonical(vault: Path, type_name: str, note: VaultNote, props: dict) -> bool:
     """True if the row's ``Sha`` or ``File`` no longer matches the note's sources
-    (upload-free check). Drives backfill's idempotency skip and the sync file push
-    (Sha-drift = vault changed its set; File-drift = a Notion-side File edit to
-    reassert). Shared with sync."""
-    return fm.read_sha(props) != set(note.shas) or _file_drifted(note, props)
+    or its current name (upload-free check). Drives backfill's idempotency skip and
+    the sync file push (Sha-drift = vault changed its set; name-drift = the note was
+    renamed; File-drift = a Notion-side File edit to reassert). Shared with sync."""
+    return (
+        fm.read_sha(props) != set(note.shas)
+        or _file_drifted(note, props)
+        or _names_drifted(vault, type_name, note, props)
+    )
+
+
+def _rename_props(
+    vault: Path, type_name: str, note: VaultNote, props: dict
+) -> dict | None:
+    """A ``File`` value that renames the row's live attachments **in place** — each
+    Notion-hosted entry passed back (URL retained, no re-upload) under the display
+    name ``upload_sources`` would use now. Valid only for a pure rename: same
+    ``Sha`` set, exactly one hosted (``type: file``) entry per sha — matched by the
+    ``-<sha12>`` name for multi-file notes — and every source suffix knowable.
+    Returns None otherwise (callers fall back to the re-upload path). The signed
+    URLs expire after an hour, so ``props`` must be from this pass's fetch."""
+    if not note.shas or fm.read_sha(props) != set(note.shas):
+        return None
+    entries = (props.get("File") or {}).get("files", [])
+    if len(entries) != len(note.shas):
+        return None
+    multi = len(note.shas) > 1
+    if multi:
+        sha_by12 = {s[:12]: s for s in note.shas}
+        mapped = []
+        for e in entries:
+            s12 = fm.file_entry_sha12(e.get("name", ""))
+            sha = sha_by12.pop(s12, "") if s12 else ""
+            if not sha:
+                return None
+            mapped.append((e, sha))
+    else:
+        mapped = [(entries[0], note.shas[0])]
+    base = vault / FOLDER[type_name] / ASSETS_DIR
+    files = []
+    for e, sha in mapped:
+        if e.get("type") != "file":
+            return None
+        src = source_file(base / sha)
+        if src is None:
+            return None
+        hosted = {k: v for k, v in e.get("file", {}).items() if k != "expiry_time"}
+        name = _display_name(note.path.stem, src.suffix, sha, multi)
+        files.append({"type": "file", "name": name, "file": hosted})
+    return {"File": {"files": files}}
 
 
 def canon_props(
-    client: NotionClient, vault: Path, type_name: str, note: VaultNote
+    client: NotionClient,
+    vault: Path,
+    type_name: str,
+    note: VaultNote,
+    props: dict | None = None,
 ) -> dict:
     """Property writes that make a row's ``Sha``/``File`` match the note's current
-    sources: restamp ``Sha`` and re-upload ``File`` (the *full* current set, so a
-    removed source drops off even when the note shrinks to a single file). Uploads —
-    callers must gate on ``not dry_run``. Shared by backfill and the sync push."""
+    sources: restamp ``Sha`` and refresh ``File``. Given the row's live ``props``,
+    a pure rename (display names drifted, sources unchanged) is done **in place**
+    via ``_rename_props``; anything else re-uploads the *full* current set (so a
+    removed source drops off even when the note shrinks to a single file). May
+    upload — callers must gate on ``not dry_run``. Shared by backfill and the
+    sync push."""
+    if props is not None:
+        renamed = _rename_props(vault, type_name, note, props)
+        if renamed is not None:
+            return {**fm.sha_property(note.shas), **renamed}
     return {
         **fm.sha_property(note.shas),
         **fm.file_property(upload_sources(client, vault, type_name, note)),
@@ -344,12 +420,14 @@ def run_backfill(
 
         # Already linked: only (re)canonicalize Sha/File if they've drifted.
         if note.notion_id:
-            if not needs_canonical(note, props):
+            if not needs_canonical(vault, type_name, note, props):
                 stats["already_linked"] += 1
             elif dry_run:
                 stats["would_canonicalize"] += 1
             else:
-                client.update_page(page_id, canon_props(client, vault, type_name, note))
+                client.update_page(
+                    page_id, canon_props(client, vault, type_name, note, props)
+                )
                 stats["canonicalized"] += 1
                 done += 1
             continue
@@ -369,11 +447,12 @@ def run_backfill(
             if nu:
                 stats["would_fix_notion"] += 1
             continue
-        # vault side: notion_id + adopted fields (+ rename)
-        _apply_vault(note, page_id, vu, type_name)
+        # vault side: notion_id + adopted fields (+ rename — keep note.path
+        # current so canon_props names the uploads after the new stem)
+        note.path = _apply_vault(note, page_id, vu, type_name)
         # notion side: Sha + sha-encoded File + Consumed At (+ artifact fixes)
         row_props = {
-            **canon_props(client, vault, type_name, note),
+            **canon_props(client, vault, type_name, note, props),
             **fm.consumed_at_property(note.frontmatter.get("consumed_at", "")),
             **nu,
         }

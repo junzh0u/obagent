@@ -524,6 +524,18 @@ def test_upload_sources_singlefile_keeps_clean_name(tmp_path):
 # -- stage 2: vault->Notion file push on Sha drift -------------------------
 
 
+def _file_entry(name):
+    """A File entry in the read shape Notion returns for a hosted file."""
+    return {
+        "type": "file",
+        "name": name,
+        "file": {
+            "url": f"https://files.notion.example/{name}",
+            "expiry_time": "2020-01-01T01:00:00.000Z",
+        },
+    }
+
+
 def _row_with_files(nid, sha_text, file_names):
     return {
         "id": nid,
@@ -531,7 +543,7 @@ def _row_with_files(nid, sha_text, file_names):
         "properties": {
             **_page(nid)["properties"],
             "Sha": _rt(sha_text),
-            "File": {"files": [{"name": n} for n in file_names]},
+            "File": {"files": [_file_entry(n) for n in file_names]},
         },
     }
 
@@ -626,6 +638,123 @@ def test_sync_dry_run_reports_file_push(tmp_path):
 
     assert stats.get("would_push_files") == 1
     assert client.uploaded == [] and client.updated == []
+
+
+# -- stage 2: file push on note rename (File names follow the note stem) ---
+
+
+def test_needs_canonical_true_when_note_renamed(tmp_path):
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_receipt(rec, "New Name", "a" * 64, "pg-1")
+    note = bf.gather_vault(rec, "receipt")[0]
+    props = _row_with_files("pg-1", "a" * 64, ["Old Name.pdf"])["properties"]
+    assert bf.needs_canonical(tmp_path, "receipt", note, props)
+
+
+def test_needs_canonical_skips_name_check_when_source_missing(tmp_path):
+    """Fail-safe: a missing source (unknowable suffix) skips the name check rather
+    than force a re-push every pass."""
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    (rec / "New Name.md").write_text(
+        f"---\nmerchant: X\ndate: 2026-06-27\ntotal: $0.00\nnotion_id: pg-1\n---\n"
+        f"![[_assets_/{'a' * 64}/src/original.pdf]]\n"
+    )
+    note = bf.gather_vault(rec, "receipt")[0]
+    props = _row_with_files("pg-1", "a" * 64, ["Old Name.pdf"])["properties"]
+    assert not bf.needs_canonical(tmp_path, "receipt", note, props)
+
+
+def test_sync_renames_files_in_place_when_note_renamed(tmp_path):
+    """A vault-side rename (title-field fix) renames the attachments in place —
+    the hosted file objects are passed back under the new stem, no re-upload."""
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_receipt(rec, "S", "a" * 64, "pg-1")
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})
+    page = _row_with_files("pg-1", "a" * 64, ["R.pdf"])  # stale pre-rename name
+    client = PruneClient({"rds": [page]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"})
+
+    assert stats.get("files_pushed") == 1
+    assert client.uploaded == []  # renamed in place, nothing re-uploaded
+    (pushed,) = [p for _pid, p in client.updated if "File" in p]
+    (entry,) = pushed["File"]["files"]
+    assert entry["name"] == "S.pdf"
+    assert entry["file"]["url"] == "https://files.notion.example/R.pdf"  # retained
+    assert "expiry_time" not in entry["file"]
+
+
+def test_sync_adopted_rename_updates_file_names_same_pass(tmp_path):
+    """A Notion-side title-field edit renames the note, and the File display names
+    follow the new stem in the same pass (drift is re-checked after write_back)."""
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_receipt(rec, "2026-06-27 - San Jose Library - $0.00", "a" * 64, "pg-1")
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})
+    page = _row_with_files(
+        "pg-1", "a" * 64, ["2026-06-27 - San Jose Library - $0.00.pdf"]
+    )
+    page["properties"]["Merchant"] = _rt("Renamed")
+    client = PruneClient({"rds": [page]})
+    stats = sync.run_sync(client, tmp_path, {R: "rds"})
+
+    assert stats.get("vault_updated") == 1
+    assert (rec / "2026-06-27 - Renamed - $0.00.md").exists()
+    assert stats.get("files_pushed") == 1
+    assert client.uploaded == []  # in-place rename here too
+    (pushed,) = [p for _pid, p in client.updated if "File" in p]
+    names = [f["name"] for f in pushed["File"]["files"]]
+    assert names == ["2026-06-27 - Renamed - $0.00.pdf"]
+
+
+def test_rename_props_multifile_maps_by_sha12(tmp_path):
+    """In-place rename maps each live entry to its sha via the -<sha12> name
+    suffix (order-independent) and keeps the hosted URL, dropping expiry_time."""
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    note = _multifile_note(rec, "New", ["a" * 64, "b" * 64])
+    props = _row_with_files(
+        "pg-1",
+        "\n".join(["a" * 64, "b" * 64]),
+        ["Old-bbbbbbbbbbbb.pdf", "Old-aaaaaaaaaaaa.pdf"],
+    )["properties"]
+    renamed = bf._rename_props(tmp_path, "receipt", note, props)
+
+    assert renamed is not None
+    by_name = {f["name"]: f for f in renamed["File"]["files"]}
+    assert set(by_name) == {"New-aaaaaaaaaaaa.pdf", "New-bbbbbbbbbbbb.pdf"}
+    assert (
+        by_name["New-aaaaaaaaaaaa.pdf"]["file"]["url"]
+        == "https://files.notion.example/Old-aaaaaaaaaaaa.pdf"
+    )
+    assert all("expiry_time" not in f["file"] for f in renamed["File"]["files"])
+
+
+def test_rename_props_falls_back_on_unmappable_entries(tmp_path):
+    """No in-place rename (-> re-upload path) when the live entries don't map 1:1
+    onto the note's shas: Sha drift, extra entries, unparseable multi-file names,
+    or a non-hosted entry."""
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    note = _multifile_note(rec, "New", ["a" * 64, "b" * 64])
+    good = ["Old-aaaaaaaaaaaa.pdf", "Old-bbbbbbbbbbbb.pdf"]
+    both = "\n".join(["a" * 64, "b" * 64])
+
+    sha_drift = _row_with_files("pg-1", "a" * 64, good)["properties"]
+    assert bf._rename_props(tmp_path, "receipt", note, sha_drift) is None
+    extra = _row_with_files("pg-1", both, [*good, "stray.pdf"])["properties"]
+    assert bf._rename_props(tmp_path, "receipt", note, extra) is None
+    unparseable = _row_with_files("pg-1", both, ["renamed.pdf", good[1]])["properties"]
+    assert bf._rename_props(tmp_path, "receipt", note, unparseable) is None
+    external = _row_with_files("pg-1", both, good)["properties"]
+    external["File"]["files"][0] = {
+        "type": "external",
+        "name": good[0],
+        "external": {"url": "https://elsewhere.example/x.pdf"},
+    }
+    assert bf._rename_props(tmp_path, "receipt", note, external) is None
 
 
 # -- stage 4: --prune Notion->vault per-file delete ------------------------

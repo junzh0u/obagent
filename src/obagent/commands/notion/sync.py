@@ -480,9 +480,11 @@ def run_sync(
                 vault, t, note, notion_props[nid], stats, dry_run=dry_run
             )
         # Stage 2: push File + Sha so Notion follows the vault — Sha-drift (the vault
-        # changed its set) or File-drift (reassert a Notion-side File edit; vault owns
-        # the files). A file-only change has no field diff, so check it alongside vu/nu.
-        file_drift = needs_canonical(note, notion_props[nid])
+        # changed its set), name-drift (the note was renamed, so the File display
+        # names are stale), or File-drift (reassert a Notion-side File edit; vault
+        # owns the files). A file-only change has no field diff, so check it
+        # alongside vu/nu.
+        file_drift = needs_canonical(vault, t, note, notion_props[nid])
         if not vu and not nu and not file_drift:
             shadow[nid] = sh
             stats["unchanged"] += 1
@@ -508,13 +510,20 @@ def run_sync(
                 stats["would_push_files"] += 1
             continue
         if vu:
-            write_back(note, vu, t)
+            # A title-field adoption renames the note — re-check with the new path
+            # so the File display names follow in this same pass.
+            note.path = write_back(note, vu, t)
             stats["vault_updated"] += 1
+            file_drift = file_drift or needs_canonical(
+                vault, t, note, notion_props[nid]
+            )
         if nu:
             client.update_page(nid, nu)
             stats["notion_updated"] += 1
         if file_drift:
-            client.update_page(nid, canon_props(client, vault, t, note))
+            client.update_page(
+                nid, canon_props(client, vault, t, note, notion_props[nid])
+            )
             stats["files_pushed"] += 1
         shadow[nid] = sh
     print(

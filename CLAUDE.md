@@ -148,7 +148,12 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
   base for file drift). Multi-file uploads are named `{stem}-<sha12>` so each `File`
   entry maps back to a sha. `sync` re-pushes `File`+`Sha` whenever the vault's sources
   change — `read_sha(props) != note.shas` (e.g. `remove <sha>` from a multi-file note,
-  a dropped source falls off); `backfill` canonicalizes the same way via `canon_props`.
+  a dropped source falls off) — or the **display names drift** from the note stem
+  (the note was renamed, incl. a rename adopted from a Notion-side title edit in the
+  same pass; fail-safe: a missing source skips the name check). A pure rename is
+  pushed **in place** — the hosted file objects are passed back with new names, no
+  re-upload (`_rename_props`); any other drift re-uploads the full set. `backfill`
+  canonicalizes the same way via `canon_props`.
   A file removed *in Notion* is reasserted from the vault on the next sync (the vault
   owns the files); under **`--prune`** it instead deletes that vault source
   (`_prune_notion_removed`), so per-file removal is two-way like row/note deletion.
