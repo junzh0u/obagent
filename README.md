@@ -68,8 +68,8 @@ just uninstall   # remove both
 Set API keys as environment variables or pass them as CLI flags:
 
 ```bash
-export MISTRAL_API_KEY=...
-export OPENAI_API_KEY=...
+export OBAGENT_MISTRAL_API_KEY=...
+export OBAGENT_OPENAI_API_KEY=...
 export OBAGENT_VAULT=/path/to/your/vault
 export OBAGENT_CONSUME=/path/to/inbox/dir            # default `--input-dir` for the consume commands
 export OBAGENT_CONSUME_PREHOOK='~/bin/fetch-scans.sh' # default `--prehook` for `obagent consume`
@@ -169,7 +169,7 @@ edit in either and changes flow both directions. The vault stays the source of t
 Notion is an editable mobile view.
 
 ```bash
-export NOTION_TOKEN=ntn_...
+export OBAGENT_NOTION_TOKEN=ntn_...
 obagent notion sync --dry-run            # preview
 obagent notion sync                      # reconcile vault <-> Notion (field edits)
 obagent notion sync --prune --dry-run    # preview deletions too

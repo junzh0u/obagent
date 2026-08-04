@@ -103,7 +103,7 @@ def make_ocr_command(*, pipeline):
     @click.command()
     @click.option(
         "--mistral-api-key",
-        envvar="MISTRAL_API_KEY",
+        envvar="OBAGENT_MISTRAL_API_KEY",
         required=True,
         help="Mistral API key for OCR processing.",
     )
@@ -122,7 +122,7 @@ def make_ocr_command(*, pipeline):
     )
     @click.option(
         "--openai-api-key",
-        envvar="OPENAI_API_KEY",
+        envvar="OBAGENT_OPENAI_API_KEY",
         required=False,
         help="OpenAI API key (required with --continue).",
     )
@@ -145,7 +145,7 @@ def make_ocr_command(*, pipeline):
     ):
         if continue_ and not openai_api_key:
             raise click.UsageError(
-                "--continue requires --openai-api-key or OPENAI_API_KEY env var."
+                "--continue requires --openai-api-key or OBAGENT_OPENAI_API_KEY env var."
             )
 
         vault = Path(ctx.obj["vault"])

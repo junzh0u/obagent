@@ -97,7 +97,7 @@ def make_llm_command(*, pipeline: Pipeline) -> click.Command:
     @click.command()
     @click.option(
         "--openai-api-key",
-        envvar="OPENAI_API_KEY",
+        envvar="OBAGENT_OPENAI_API_KEY",
         required=True,
         help="OpenAI API key for title extraction.",
     )

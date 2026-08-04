@@ -14,7 +14,7 @@
 #   OBAGENT_VAULT     vault dir (contains Receipts/, Documents/, ...)
 #   OBAGENT_CONSUME   inbox root (per-type subdirs)        -> `obagent consume`
 #   OBAGENT_EXPORT    Drive export root (Cloud-Synced)     -> `obagent export`
-#   NOTION_TOKEN, MISTRAL_API_KEY, OPENAI_API_KEY
+#   OBAGENT_NOTION_TOKEN, OBAGENT_MISTRAL_API_KEY, OBAGENT_OPENAI_API_KEY
 # Optional:
 #   OBAGENT_MIN_AGE       seconds a scan must be untouched before consuming (default 60)
 #   OBAGENT_PASS_LOG      pass-history file for scheduled runs: one line per clean

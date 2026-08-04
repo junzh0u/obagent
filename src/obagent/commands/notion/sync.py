@@ -570,7 +570,7 @@ def _client_and_ds() -> tuple[NotionClient, dict[str, str]]:
     data sources (raising a UsageError if either is missing)."""
     client = NotionClient()
     if not client.token:
-        raise click.UsageError("NOTION_TOKEN is not set.")
+        raise click.UsageError("OBAGENT_NOTION_TOKEN is not set.")
     ds = data_sources()
     if not ds:
         raise click.UsageError(

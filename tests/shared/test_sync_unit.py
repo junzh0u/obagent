@@ -243,7 +243,7 @@ def test_sync_command_invokes_run_sync(runner, monkeypatch):
         return {"unchanged": 3}
 
     monkeypatch.setattr(sync, "run_sync", fake_run_sync)
-    monkeypatch.setenv("NOTION_TOKEN", "t")
+    monkeypatch.setenv("OBAGENT_NOTION_TOKEN", "t")
     monkeypatch.setenv("OBAGENT_NOTION_RECEIPT_DS", "rds")
     monkeypatch.setenv("OBAGENT_NOTION_DOCUMENT_DS", "dds")
     result = runner.invoke(sync.sync_command, ["--dry-run"], obj={"vault": "/tmp"})
@@ -262,7 +262,7 @@ def test_sync_command_passes_prune(runner, monkeypatch):
         return {}
 
     monkeypatch.setattr(sync, "run_sync", fake_run_sync)
-    monkeypatch.setenv("NOTION_TOKEN", "t")
+    monkeypatch.setenv("OBAGENT_NOTION_TOKEN", "t")
     monkeypatch.setenv("OBAGENT_NOTION_RECEIPT_DS", "rds")
     result = runner.invoke(sync.sync_command, ["--prune"], obj={"vault": "/tmp"})
     assert result.exit_code == 0, result.output
@@ -277,7 +277,7 @@ def test_backfill_command_invokes_run_backfill(runner, monkeypatch):
         return {"linked": 1}
 
     monkeypatch.setattr(sync, "run_backfill", fake_run_backfill)
-    monkeypatch.setenv("NOTION_TOKEN", "t")
+    monkeypatch.setenv("OBAGENT_NOTION_TOKEN", "t")
     monkeypatch.setenv("OBAGENT_NOTION_RECEIPT_DS", "rds")
     monkeypatch.setenv("OBAGENT_NOTION_DOCUMENT_DS", "dds")
     result = runner.invoke(
@@ -290,15 +290,15 @@ def test_backfill_command_invokes_run_backfill(runner, monkeypatch):
 
 
 def test_sync_command_requires_token(runner, monkeypatch):
-    monkeypatch.delenv("NOTION_TOKEN", raising=False)
+    monkeypatch.delenv("OBAGENT_NOTION_TOKEN", raising=False)
     monkeypatch.setattr(sync, "run_sync", lambda *a, **k: {})
     result = runner.invoke(sync.sync_command, [], obj={"vault": "/tmp"})
     assert result.exit_code != 0
-    assert "NOTION_TOKEN" in result.output
+    assert "OBAGENT_NOTION_TOKEN" in result.output
 
 
 def test_sync_command_requires_data_sources(runner, monkeypatch):
-    monkeypatch.setenv("NOTION_TOKEN", "t")
+    monkeypatch.setenv("OBAGENT_NOTION_TOKEN", "t")
     monkeypatch.delenv("OBAGENT_NOTION_RECEIPT_DS", raising=False)
     monkeypatch.delenv("OBAGENT_NOTION_DOCUMENT_DS", raising=False)
     monkeypatch.setattr(sync, "run_sync", lambda *a, **k: {})

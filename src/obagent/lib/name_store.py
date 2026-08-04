@@ -311,7 +311,7 @@ def make_auto_rename_command(
     @group.command("auto-rename")
     @click.option(
         "--openai-api-key",
-        envvar="OPENAI_API_KEY",
+        envvar="OBAGENT_OPENAI_API_KEY",
         required=True,
         help="OpenAI API key.",
     )

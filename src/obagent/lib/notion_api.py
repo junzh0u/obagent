@@ -62,13 +62,13 @@ class NotionError(RuntimeError):
 class NotionClient:
     """Thin Notion HTTP client: auth header, throttle, retry, file upload.
 
-    The token defaults to ``$NOTION_TOKEN`` but may be injected (for tests).
+    The token defaults to ``$OBAGENT_NOTION_TOKEN`` but may be injected (for tests).
     """
 
     def __init__(
         self, token: str | None = None, *, version: str = NOTION_VERSION
     ) -> None:
-        self.token = (token or os.environ.get("NOTION_TOKEN", "")).strip()
+        self.token = (token or os.environ.get("OBAGENT_NOTION_TOKEN", "")).strip()
         self.version = version
         self._last_req = 0.0
 

@@ -422,7 +422,10 @@ def test_ocr_via_env_var(mock_mistral_cls, mock_openai_cls, runner, vault, sourc
             "consume",
             str(source_dir),
         ],
-        env={"MISTRAL_API_KEY": "sk-env-key", "OPENAI_API_KEY": "ok-env-key"},
+        env={
+            "OBAGENT_MISTRAL_API_KEY": "sk-env-key",
+            "OBAGENT_OPENAI_API_KEY": "ok-env-key",
+        },
     )
 
     assert result.exit_code == 0

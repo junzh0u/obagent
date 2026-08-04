@@ -296,13 +296,13 @@ def _api_and_model_options(f):
     )(f)
     f = click.option(
         "--openai-api-key",
-        envvar="OPENAI_API_KEY",
+        envvar="OBAGENT_OPENAI_API_KEY",
         required=True,
         help="OpenAI API key for title extraction.",
     )(f)
     f = click.option(
         "--mistral-api-key",
-        envvar="MISTRAL_API_KEY",
+        envvar="OBAGENT_MISTRAL_API_KEY",
         required=True,
         help="Mistral API key for OCR processing.",
     )(f)
