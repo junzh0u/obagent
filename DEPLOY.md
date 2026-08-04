@@ -36,7 +36,7 @@ uv python install 3.14
 ```
 
 ## 2. Clone the obagent repo + install the CLI
-Use **git clone** (not a folder-copy — a copy drags a foreign `.venv`/`.env` and
+Use **git clone** (not a folder-copy — a copy drags a foreign `.venv` and
 arch-mismatched binaries):
 ```sh
 git clone <your-obagent-remote> /volume1/paperless/obagent
@@ -115,8 +115,41 @@ export OBAGENT_OPENAI_API_KEY=…
 export OBAGENT_NOTION_RECEIPT_DS=…
 export OBAGENT_NOTION_DOCUMENT_DS=…
 ```
-(`.env.example` lists every var obagent reads. A type whose `..._DS` is unset is simply
-not synced.)
+Nothing loads a `.env` file — obagent and the scripts read the process environment only, so however you get these exported (shell rc, the entry script below, `systemd`'s `Environment=`) is up to you.
+
+### Every variable obagent reads
+
+Required — the pass aborts without them:
+
+| Variable | Purpose |
+|---|---|
+| `OBAGENT_VAULT` | vault dir (contains `Receipts/`, `Documents/`, …) |
+| `OBAGENT_CONSUME` | inbox root; the per-type subdir is auto-appended |
+| `OBAGENT_EXPORT` | Drive export root (Cloud-Synced) |
+| `OBAGENT_NOTION_TOKEN` | Notion internal-integration token |
+| `OBAGENT_MISTRAL_API_KEY` | OCR |
+| `OBAGENT_OPENAI_API_KEY` | LLM extraction, classification, merchant auto-rename |
+
+Notion data sources — env-only, no defaults. A type whose id is unset is simply not synced:
+
+| Variable | Purpose |
+|---|---|
+| `OBAGENT_NOTION_RECEIPT_DS` | 🧾 Receipts data-source id |
+| `OBAGENT_NOTION_DOCUMENT_DS` | 🗃️ Documents data-source id |
+
+Optional:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OBAGENT_MIN_AGE` | `60` in `run.sh` (the `--min-age` flag itself defaults to `0`) | consume skips files modified within N seconds |
+| `OBAGENT_CONSUME_PREHOOK` | — | shell command run before the consume loop (email sync, scanner pull, …) |
+| `OBAGENT_LOCK` | `$OBAGENT_VAULT/.obagent/run.lock` | `run.sh` no-overlap lockfile |
+| `OBAGENT_PASS_LOG` | `${XDG_STATE_HOME:-~/.local/state}/obagent/pass-history.log` | pass history for scheduled runs |
+| `OBAGENT_STATUS_DIR` | `$OBAGENT_EXPORT/../logs` | latest-outcome mirror; set empty to disable |
+| `OBAGENT_INSPECT_WINDOW_HOURS` | `24` | `inspect.sh` lookback window |
+| `OBAGENT_INSPECT_STALE_MINUTES` | `30` | `inspect.sh` treats an older log mtime as a dead schedule |
+| `OBAGENT_GIT_NAME` | `obagent` | `publish.sh` commit author — used only if the vault repo has no identity |
+| `OBAGENT_GIT_EMAIL` | `obagent@localhost` | `publish.sh` commit email — same condition |
 
 ## 8. The Task Scheduler entry script
 DSM Task Scheduler runs jobs with a **bare environment** — it does **not** source your

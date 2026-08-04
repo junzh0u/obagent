@@ -9,10 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
-# Local environment
+# Local environment. Nothing in the repo loads a .env — env comes from the
+# process environment (see DEPLOY.md §7) — but keep a stray one out of history.
 .env
-# Track the template (the global ignore has .env.*)
-!.env.example
 
 # Scratch reference (Notion upload core; lifted into lib/notion_api.py)
 reference_importer.py
