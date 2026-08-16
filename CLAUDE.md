@@ -170,7 +170,9 @@ OCR/LLM pipeline; Notion is an editable mobile view. Bank statements are not syn
   shadow, so losing the hints just triggers a self-healing `--full` pass.
   `--dry-run` reports without writing, with counters that mirror the real pass
   one-for-one (`would_update_vault`/`would_update_notion`/`would_push_files` ↔
-  `vault_updated`/`notion_updated`/`files_pushed`). Token from `OBAGENT_NOTION_TOKEN`; data-source ids
+  `vault_updated`/`notion_updated`/`files_pushed`); when run at a terminal and
+  changes are proposed, it then offers to apply them right away — the real pass
+  reuses the dry run's Notion scan (`pages_cache`), so no second full scan. Token from `OBAGENT_NOTION_TOKEN`; data-source ids
   from `OBAGENT_NOTION_<TYPE>_DS` (env-only, no defaults — an unset type is skipped).
 - **Deletions are not propagated by default** — the field merge only ever adopts/
   pushes values, never deletes (the vault is the source of truth and holds the

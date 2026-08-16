@@ -17,6 +17,7 @@ runs per type that has a configured data source (bank statements are skipped).
 import json
 import os
 import subprocess
+import sys
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -318,12 +319,20 @@ def run_sync(
     dry_run: bool = False,
     full: bool = False,
     prune: bool = False,
+    pages_cache: dict[str, list[dict]] | None = None,
 ) -> dict[str, int]:
     """One reconciliation pass. ``full`` ignores the watermark/commit hints and
     checks every linked record (self-healing). ``prune`` propagates deletions both
     ways (DESTRUCTIVE): a trashed Notion row deletes its linked vault note + source
     file, and a deleted vault note trashes its Notion row. ``prune`` forces a full
-    scan — the complete live-row set is needed to tell 'trashed' from 'unchanged'."""
+    scan — the complete live-row set is needed to tell 'trashed' from 'unchanged'.
+
+    ``pages_cache`` (type -> page list) skips the Notion scan for types already in
+    it and stores freshly fetched types back, so a dry-run pass can hand its scan
+    to an immediately following real pass (the confirm flow in ``sync_command``)
+    without re-querying Notion. Only valid back-to-back: the vault is re-scanned
+    either way, but Notion edits made after the cached scan won't be seen until
+    the next sync."""
     t_start = time.monotonic()
     shadow = load_shadow(vault)
     hints = load_hints(vault)
@@ -349,16 +358,24 @@ def run_sync(
     notion_props: dict[str, dict] = {}  # page id -> raw properties (for file sync)
     live_by_type: dict[str, set[str]] = {t: set() for t in ds_by_type}
     max_edited = watermark or ""
+    cached = 0
     for t, ds in ds_by_type.items():
-        flt = (
-            None
-            if full_scan
-            else {
-                "timestamp": "last_edited_time",
-                "last_edited_time": {"on_or_after": watermark},
-            }
-        )
-        for page in client.iter_pages(ds, filter=flt):
+        if pages_cache is not None and t in pages_cache:
+            pages: list[dict] = pages_cache[t]
+            cached += 1
+        else:
+            flt = (
+                None
+                if full_scan
+                else {
+                    "timestamp": "last_edited_time",
+                    "last_edited_time": {"on_or_after": watermark},
+                }
+            )
+            pages = list(client.iter_pages(ds, filter=flt))
+            if pages_cache is not None:
+                pages_cache[t] = pages
+        for page in pages:
             le = page.get("last_edited_time", "")
             notion_changed[page["id"]] = (
                 t,
@@ -368,7 +385,7 @@ def run_sync(
             notion_props[page["id"]] = page["properties"]
             live_by_type[t].add(page["id"])
             max_edited = max(max_edited, le)
-    scope = "FULL scan" if full_scan else f"since {watermark}"
+    scope = "cached" if cached else ("FULL scan" if full_scan else f"since {watermark}")
     print(
         f"  notion query [{scope}]: {len(notion_changed)} rows [{_dt(t0)}]", flush=True
     )
@@ -585,8 +602,18 @@ def notion():
     """Sync the vault with Notion (Receipts + Documents)."""
 
 
+def _interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
 @notion.command("sync")
-@click.option("--dry-run", is_flag=True, help="Report changes without writing.")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Report changes without writing. When run interactively and changes are "
+    "proposed, offers to apply them right away (reusing the scan — no second "
+    "full pass).",
+)
 @click.option(
     "--full", is_flag=True, help="Ignore the watermark; check every linked record."
 )
@@ -602,8 +629,37 @@ def notion():
 def sync_command(ctx, dry_run, full, prune):
     """Reconcile the vault and Notion two-way (3-way merge against the shadow)."""
     client, ds = _client_and_ds()
+    vault = Path(ctx.obj["vault"])
+    pages_cache: dict[str, list[dict]] | None = {} if dry_run else None
     stats = run_sync(
-        client, Path(ctx.obj["vault"]), ds, dry_run=dry_run, full=full, prune=prune
+        client,
+        vault,
+        ds,
+        dry_run=dry_run,
+        full=full,
+        prune=prune,
+        pages_cache=pages_cache,
+    )
+    summary = ", ".join(f"{v} {k}" for k, v in stats.items())
+    click.secho(summary or "nothing to do", bold=True)
+    # A dry run already did the expensive Notion scan; when it proposed changes and
+    # we're at a terminal, offer to apply them now on the cached scan instead of
+    # making the user re-run (and re-scan) without --dry-run.
+    if not (dry_run and any(k.startswith("would_") for k in stats) and _interactive()):
+        return
+    prompt = "Apply these changes now?"
+    if prune:
+        prompt = "Apply these changes now (DESTRUCTIVE: includes deletions)?"
+    if not click.confirm(prompt, default=False):
+        return
+    stats = run_sync(
+        client,
+        vault,
+        ds,
+        dry_run=False,
+        full=full,
+        prune=prune,
+        pages_cache=pages_cache,
     )
     summary = ", ".join(f"{v} {k}" for k, v in stats.items())
     click.secho(summary or "nothing to do", bold=True)

@@ -238,7 +238,7 @@ def test_write_back_does_not_rename_into_case_variant(tmp_path):
 def test_sync_command_invokes_run_sync(runner, monkeypatch):
     called = {}
 
-    def fake_run_sync(client, vault, ds, *, dry_run, full, prune):
+    def fake_run_sync(client, vault, ds, *, dry_run, full, prune, pages_cache=None):
         called.update(dry_run=dry_run, full=full, prune=prune, ds=ds)
         return {"unchanged": 3}
 
@@ -257,7 +257,7 @@ def test_sync_command_invokes_run_sync(runner, monkeypatch):
 def test_sync_command_passes_prune(runner, monkeypatch):
     called = {}
 
-    def fake_run_sync(client, vault, ds, *, dry_run, full, prune):
+    def fake_run_sync(client, vault, ds, *, dry_run, full, prune, pages_cache=None):
         called.update(prune=prune)
         return {}
 
@@ -267,6 +267,86 @@ def test_sync_command_passes_prune(runner, monkeypatch):
     result = runner.invoke(sync.sync_command, ["--prune"], obj={"vault": "/tmp"})
     assert result.exit_code == 0, result.output
     assert called["prune"] is True
+
+
+def _confirm_env(monkeypatch, fake_run_sync, *, interactive=True):
+    monkeypatch.setattr(sync, "run_sync", fake_run_sync)
+    monkeypatch.setattr(sync, "_interactive", lambda: interactive)
+    monkeypatch.setenv("OBAGENT_NOTION_TOKEN", "t")
+    monkeypatch.setenv("OBAGENT_NOTION_RECEIPT_DS", "rds")
+
+
+def test_sync_command_dry_run_confirm_applies_on_cache(runner, monkeypatch):
+    """An interactive dry run with proposals prompts; 'y' runs the real pass with
+    dry_run off, handing over the same pages_cache (no second Notion scan)."""
+    calls = []
+
+    def fake_run_sync(client, vault, ds, *, dry_run, full, prune, pages_cache=None):
+        calls.append((dry_run, full, pages_cache))
+        return {"would_update_notion": 1} if dry_run else {"notion_updated": 1}
+
+    _confirm_env(monkeypatch, fake_run_sync)
+    result = runner.invoke(
+        sync.sync_command, ["--full", "--dry-run"], obj={"vault": "/tmp"}, input="y\n"
+    )
+    assert result.exit_code == 0, result.output
+    assert [(d, f) for d, f, _ in calls] == [(True, True), (False, True)]
+    assert calls[0][2] is calls[1][2] and calls[0][2] is not None  # cache handed over
+    assert "notion_updated" in result.output
+
+
+def test_sync_command_dry_run_confirm_declined(runner, monkeypatch):
+    calls = []
+
+    def fake_run_sync(client, vault, ds, *, dry_run, full, prune, pages_cache=None):
+        calls.append(dry_run)
+        return {"would_update_vault": 2}
+
+    _confirm_env(monkeypatch, fake_run_sync)
+    result = runner.invoke(
+        sync.sync_command, ["--dry-run"], obj={"vault": "/tmp"}, input="n\n"
+    )
+    assert result.exit_code == 0, result.output
+    assert calls == [True]
+
+
+def test_sync_command_dry_run_no_prompt_without_proposals(runner, monkeypatch):
+    def fake_run_sync(client, vault, ds, *, dry_run, full, prune, pages_cache=None):
+        return {"unchanged": 5}
+
+    _confirm_env(monkeypatch, fake_run_sync)
+    result = runner.invoke(sync.sync_command, ["--dry-run"], obj={"vault": "/tmp"})
+    assert result.exit_code == 0, result.output
+    assert "Apply" not in result.output
+
+
+def test_sync_command_dry_run_no_prompt_when_not_interactive(runner, monkeypatch):
+    calls = []
+
+    def fake_run_sync(client, vault, ds, *, dry_run, full, prune, pages_cache=None):
+        calls.append(dry_run)
+        return {"would_update_notion": 1}
+
+    _confirm_env(monkeypatch, fake_run_sync, interactive=False)
+    result = runner.invoke(sync.sync_command, ["--dry-run"], obj={"vault": "/tmp"})
+    assert result.exit_code == 0, result.output
+    assert calls == [True]
+    assert "Apply" not in result.output
+
+
+def test_sync_command_prune_confirm_mentions_destructive(runner, monkeypatch):
+    def fake_run_sync(client, vault, ds, *, dry_run, full, prune, pages_cache=None):
+        return {"would_delete_vault": 1} if dry_run else {"vault_deleted": 1}
+
+    _confirm_env(monkeypatch, fake_run_sync)
+    result = runner.invoke(
+        sync.sync_command,
+        ["--prune", "--dry-run"],
+        obj={"vault": "/tmp"},
+        input="n\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert "DESTRUCTIVE" in result.output
 
 
 def test_backfill_command_invokes_run_backfill(runner, monkeypatch):
@@ -603,6 +683,36 @@ def test_sync_dry_run_counters_mirror_real_pass(tmp_path):
     real = sync.run_sync(client, tmp_path, {R: "rds"})
     assert real.get("notion_updated") == 1
     assert "vault_updated" not in real and "files_pushed" not in real
+
+
+def test_run_sync_pages_cache_skips_second_scan(tmp_path):
+    """A dry run fills pages_cache; the follow-up real pass reads it instead of
+    re-querying Notion, and still applies the change."""
+
+    class CountingClient(PruneClient):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self.scans = 0
+
+        def iter_pages(self, *a, **k):
+            self.scans += 1
+            return super().iter_pages(*a, **k)
+
+    rec = tmp_path / "Receipts"
+    rec.mkdir()
+    _linked_receipt(rec, "R", "a" * 64, "pg-1", front=dict(FRONT, merchant="Renamed"))
+    bf.save_shadow(tmp_path, {"pg-1": FRONT})  # vault moved, Notion still at base
+    page = _row_with_files("pg-1", "a" * 64, ["R.pdf"])
+    client = CountingClient({"rds": [page]})
+    cache: dict = {}
+
+    dry = sync.run_sync(client, tmp_path, {R: "rds"}, dry_run=True, pages_cache=cache)
+    assert dry.get("would_update_notion") == 1 and client.scans == 1
+    assert R in cache
+
+    real = sync.run_sync(client, tmp_path, {R: "rds"}, pages_cache=cache)
+    assert real.get("notion_updated") == 1
+    assert client.scans == 1  # second pass never re-queried Notion
 
 
 def test_sync_dry_run_reports_vault_adopt(tmp_path):
