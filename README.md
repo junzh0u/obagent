@@ -117,6 +117,7 @@ obagent bank unpin "Name"                 # unpin bank names
 # Merchant management (receipts only)
 obagent merchant list                     # list all unique merchant names
 obagent merchant rename "Old" "New"       # rename across all notes
+obagent -y merchant rename "Old" "New"    # ...and save the alias without prompting
 obagent merchant remap                    # batch rename from aliases file
 obagent merchant pin "Name"               # pin merchant names
 obagent merchant unpin "Name"             # unpin merchant names

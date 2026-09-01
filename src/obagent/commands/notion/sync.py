@@ -17,7 +17,6 @@ runs per type that has a configured data source (bank statements are skipped).
 import json
 import os
 import subprocess
-import sys
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -26,6 +25,7 @@ from pathlib import Path
 import click
 
 from obagent.commands.document.pipeline import DocumentFields
+from obagent.lib.prompt import interactive
 from obagent.commands.notion.backfill import (
     FOLDER,
     TITLE_FIELDS,
@@ -602,10 +602,6 @@ def notion():
     """Sync the vault with Notion (Receipts + Documents)."""
 
 
-def _interactive() -> bool:
-    return sys.stdin.isatty() and sys.stdout.isatty()
-
-
 @notion.command("sync")
 @click.option(
     "--dry-run",
@@ -645,7 +641,7 @@ def sync_command(ctx, dry_run, full, prune):
     # A dry run already did the expensive Notion scan; when it proposed changes and
     # we're at a terminal, offer to apply them now on the cached scan instead of
     # making the user re-run (and re-scan) without --dry-run.
-    if not (dry_run and any(k.startswith("would_") for k in stats) and _interactive()):
+    if not (dry_run and any(k.startswith("would_") for k in stats) and interactive()):
         return
     prompt = "Apply these changes now?"
     if prune:

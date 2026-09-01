@@ -44,10 +44,19 @@ def _vault_root(value: str) -> str:
     type=click.Path(exists=True, file_okay=False),
     help="Path to the vault directory.",
 )
+@click.option(
+    "-y",
+    "--yes",
+    is_flag=True,
+    help="Answer yes to every confirmation prompt (e.g. saving an alias after a "
+    "rename). Prompts are otherwise skipped, taking their default, when stdin is "
+    "not a terminal.",
+)
 @click.pass_context
-def cli(ctx, vault):
+def cli(ctx, vault, yes):
     ctx.ensure_object(dict)
     ctx.obj["vault"] = _vault_root(vault)
+    ctx.obj["yes"] = yes
 
 
 cli.add_command(receipt)

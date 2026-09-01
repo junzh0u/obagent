@@ -24,11 +24,8 @@ def _make_fm(*names):
 
 
 def _mock_confirm(answer):
-    """Return a patch that makes questionary.confirm().ask() return *answer*."""
-    return patch(
-        "obagent.commands.people.questionary.confirm",
-        return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
-    )
+    """Return a patch that makes the yes/no prompt answer *answer*."""
+    return patch("obagent.lib.prompt._ask", return_value=answer)
 
 
 def test_rename_person(runner, vault):
@@ -337,10 +334,8 @@ def test_remove_offers_to_pin_remaining(runner, vault):
     with (
         _mock_checkbox(["Alice"]),
         patch(
-            "obagent.commands.people.questionary.confirm",
-            side_effect=lambda *a, **kw: type(
-                "Q", (), {"ask": staticmethod(lambda: next(confirm_answers))}
-            )(),
+            "obagent.lib.prompt._ask",
+            side_effect=lambda *a, **kw: next(confirm_answers),
         ),
     ):
         result = runner.invoke(people, ["remove"], obj={"vault": str(vault)})
@@ -442,10 +437,8 @@ def test_pin_offers_to_remove_unpinned(runner, vault):
     with (
         _mock_checkbox(["Alice"]),
         patch(
-            "obagent.commands.people.questionary.confirm",
-            side_effect=lambda *a, **kw: type(
-                "Q", (), {"ask": staticmethod(lambda: next(confirm_answers))}
-            )(),
+            "obagent.lib.prompt._ask",
+            side_effect=lambda *a, **kw: next(confirm_answers),
         ),
     ):
         result = runner.invoke(people, ["pin"], obj={"vault": str(vault)})
@@ -501,10 +494,8 @@ def test_unpin_removes_from_notes(runner, vault):
     with (
         _mock_checkbox(["Bob"]),
         patch(
-            "obagent.commands.people.questionary.confirm",
-            side_effect=lambda *a, **kw: type(
-                "Q", (), {"ask": staticmethod(lambda: next(confirm_answers))}
-            )(),
+            "obagent.lib.prompt._ask",
+            side_effect=lambda *a, **kw: next(confirm_answers),
         ),
     ):
         result = runner.invoke(people, ["unpin"], obj={"vault": str(vault)})

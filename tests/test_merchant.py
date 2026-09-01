@@ -25,10 +25,7 @@ def _make_fm(merchant_name):
 
 
 def _mock_confirm(answer):
-    return patch(
-        "obagent.lib.name_store.questionary.confirm",
-        return_value=type("Q", (), {"ask": staticmethod(lambda: answer)})(),
-    )
+    return patch("obagent.lib.prompt._ask", return_value=answer)
 
 
 def _mock_select(answer):

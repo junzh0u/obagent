@@ -9,6 +9,7 @@ import click
 import questionary
 
 from obagent.lib.constants import AUTO_RENAME_MODEL
+from obagent.lib.prompt import confirm
 
 # TODO: Remove after questionary fixes the checkbox instruction text upstream.
 # Workaround for questionary bug: instruction text shows <ctrl-a> for both
@@ -124,10 +125,7 @@ def make_rename_command(
         click.secho(f"{len(modified)} file(s) updated", bold=True)
         if modified and on_rename:
             on_rename(vault, modified)
-        if (
-            modified
-            and questionary.confirm(f"Save to {aliases_label}?", default=False).ask()
-        ):
+        if modified and confirm(f"Save to {aliases_label}?"):
             save_aliases(vault, {old_name: new_name})
 
     return rename
@@ -402,10 +400,7 @@ def make_auto_rename_command(
         if modified and on_rename:
             on_rename(vault, modified)
 
-        if (
-            modified
-            and questionary.confirm(f"Save to {aliases_label}?", default=False).ask()
-        ):
+        if modified and confirm(f"Save to {aliases_label}?"):
             save_aliases(vault, accepted)
 
     return auto_rename

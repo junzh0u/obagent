@@ -4,6 +4,7 @@ from pathlib import Path
 import click
 import questionary
 
+from obagent.lib.prompt import confirm
 from obagent.lib.name_store import (
     _CHECKBOX_INSTRUCTION,
     iter_notes,
@@ -108,10 +109,7 @@ def _remove_names(vault: Path, names: set[str]) -> None:
             click.secho(f"  Updated: {md.relative_to(vault)}", fg="green")
             count += 1
     click.secho(f"{count} file(s) updated", bold=True)
-    if (
-        count > 0
-        and questionary.confirm("Save to people-aliases.json?", default=False).ask()
-    ):
+    if count > 0 and confirm("Save to people-aliases.json?"):
         _save_aliases(vault, mapping)
 
 
@@ -148,7 +146,7 @@ def remove(ctx, names):
     remaining = [n for n in _collect_names(vault) if n not in set(_load_pinned(vault))]
     if remaining:
         click.echo("Remaining unpinned names: " + ", ".join(remaining))
-        if questionary.confirm("Pin all?", default=False).ask():
+        if confirm("Pin all?"):
             existing = _load_pinned(vault)
             _save_pinned(vault, list(existing) + remaining)
             click.secho(f"Pinned: {', '.join(remaining)}", fg="green")
@@ -160,13 +158,13 @@ def _on_pin(vault: Path) -> None:
     unpinned = [n for n in _collect_names(vault) if n not in pinned]
     if unpinned:
         click.echo("Non-pinned names: " + ", ".join(unpinned))
-        if questionary.confirm("Remove all from vault notes?", default=False).ask():
+        if confirm("Remove all from vault notes?"):
             _remove_names(vault, set(unpinned))
 
 
 def _on_unpin(vault: Path, to_remove: set[str]) -> None:
     """Post-unpin hook: offer to remove unpinned names from vault notes."""
-    if questionary.confirm("Also remove from vault notes?", default=False).ask():
+    if confirm("Also remove from vault notes?"):
         _remove_names(vault, to_remove)
 
 

@@ -271,7 +271,7 @@ def test_sync_command_passes_prune(runner, monkeypatch):
 
 def _confirm_env(monkeypatch, fake_run_sync, *, interactive=True):
     monkeypatch.setattr(sync, "run_sync", fake_run_sync)
-    monkeypatch.setattr(sync, "_interactive", lambda: interactive)
+    monkeypatch.setattr(sync, "interactive", lambda: interactive)
     monkeypatch.setenv("OBAGENT_NOTION_TOKEN", "t")
     monkeypatch.setenv("OBAGENT_NOTION_RECEIPT_DS", "rds")
 

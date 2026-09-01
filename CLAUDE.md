@@ -13,11 +13,12 @@
 Everything importable lives under `src/obagent/`, so the wheel installs exactly one top-level
 package. Paths below are relative to that root.
 
-- `cli.py` — CLI entry point, click group with subgroups per document type; `--vault` is validated by the `.obagent/` marker (walking up git-style when pointed inside the vault) and rejected otherwise — `mkdir <vault>/.obagent` bootstraps a new vault
+- `cli.py` — CLI entry point, click group with subgroups per document type; `-y/--yes` answers every yes/no confirmation (see `lib/prompt.py`); `--vault` is validated by the `.obagent/` marker (walking up git-style when pointed inside the vault) and rejected otherwise — `mkdir <vault>/.obagent` bootstraps a new vault
 - `lib/` — shared infrastructure (not CLI commands)
   - `lib/fields.py` — `Fields[K]` ABC: dict-based field container with postprocess, defaults, title, and formatting
   - `lib/pipeline.py` — `Pipeline` ABC: orchestration (prompt, CLI command factories)
   - `lib/name_store.py` — shared JSON store helpers for aliases and pinned names
+  - `lib/prompt.py` — `confirm()` for yes/no prompts: yes under root `-y`, the default (no prompt, no abort) when stdin/stdout aren't terminals, else a questionary prompt. Choice prompts (select/checkbox) stay questionary-direct — their non-interactive path is passing arguments. `interactive()` is the shared tty check.
   - `lib/constants.py` — shared constants (OCR_MODEL, LLM_MODEL, ASSETS_DIR)
   - `lib/utils.py` — shared utilities (iter_entries, newest_file, source_file, `SHA_RE`)
   - `lib/notion_api.py` — Notion HTTP client (stdlib urllib): throttle, retry (429 / Cloudflare-WAF / 5xx / timeout), file upload, and data-source page/query wrappers. Pinned to API version `2025-09-03`.
