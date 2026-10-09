@@ -20,12 +20,16 @@ def ingest_source(
 ) -> Path | None:
     """Ingest a single source file into the vault.
 
-    Returns target_dir on success, None if duplicate skipped.
+    Returns target_dir on success, None if duplicate skipped. A skipped duplicate
+    is removed from the source (the vault already holds the same bytes) unless
+    keep_original — otherwise it would sit in the inbox, re-skipped every pass.
     """
     sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
     target_dir = vault / path / ASSETS_DIR / sha256
     if target_dir.exists() and not overwrite:
         click.secho(f"  Warning: already consumed ({sha256}), skipping", fg="yellow")
+        if not keep_original:
+            source.unlink()
         return None
     src_dir = target_dir / "src"
     src_dir.mkdir(parents=True, exist_ok=True)

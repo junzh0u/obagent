@@ -65,7 +65,7 @@ def test_original_file_is_moved(runner, vault, source_dir):
 
 
 def test_duplicate_is_skipped(runner, vault, source_dir):
-    """A PDF with the same hash as an existing entry is skipped."""
+    """A PDF with the same hash as an existing entry is skipped and removed."""
     content = b"duplicate content"
     sha256 = hashlib.sha256(content).hexdigest()
 
@@ -84,6 +84,27 @@ def test_duplicate_is_skipped(runner, vault, source_dir):
 
     assert result.exit_code == 0
     assert "Warning" in result.output
+    assert "skipping" in result.output
+    assert not pdf.exists()  # redundant inbox copy removed
+    assert (existing_dir / "src" / "original.pdf").read_bytes() == content
+
+
+def test_duplicate_kept_with_keep_original(runner, vault, source_dir):
+    """With --keep-original, a skipped duplicate stays in the source dir."""
+    content = b"duplicate content"
+    sha256 = hashlib.sha256(content).hexdigest()
+    (vault / "papers" / "_assets_" / sha256 / "src").mkdir(parents=True)
+
+    pdf = source_dir / "dup.pdf"
+    pdf.write_bytes(content)
+
+    result = runner.invoke(
+        ingest,
+        ["--keep-original", str(source_dir)],
+        obj={"vault": str(vault), "path": "papers"},
+    )
+
+    assert result.exit_code == 0
     assert "skipping" in result.output
     assert pdf.exists()
 
