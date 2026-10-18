@@ -55,9 +55,8 @@ the commit, so the next pass skips the redundant rebuild).
 ```sh
 git clone git@github.com:junzh0u/obsidian-vaults.git /volume1/paperless/obsidian-vaults
 cd /volume1/paperless/obsidian-vaults
-# origin fans out to both remotes (SSH URLs, so the deploy key authenticates):
-git remote set-url --add --push origin git@github.com:junzh0u/obsidian-vaults.git
-git remote set-url --add --push origin git@gitlab.com:junzhou/obsidian-vaults.git
+# origin pushes to GitHub only (SSH URL, so the deploy key authenticates); the GitLab
+# copy is mirrored from GitHub separately, not by obagent
 git config user.name "obagent"; git config user.email "obagent@junz.info"  # commit identity
 ```
 Confirm it's on `main` tracking `origin/main`.
@@ -70,12 +69,12 @@ same `HOME`):
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
 ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ""
 chmod 600 ~/.ssh/id_ed25519
-ssh-keyscan github.com gitlab.com >> ~/.ssh/known_hosts   # so the non-interactive push
-                                                          # doesn't hang on host verification
+ssh-keyscan github.com >> ~/.ssh/known_hosts   # so the non-interactive push
+                                                # doesn't hang on host verification
 cat ~/.ssh/id_ed25519.pub
 ```
-Add that public key as a **deploy key with write access** on **both** the GitHub and
-GitLab `obsidian-vaults` repos.
+Add that public key as a **deploy key with write access** on the GitHub
+`obsidian-vaults` repo.
 - **Gotcha:** the key must be mode `600` (ssh refuses a group/world-readable key) and
   `~/.ssh/known_hosts` must hold the host keys, or a scheduled (non-interactive) push
   hangs. Both handled above.

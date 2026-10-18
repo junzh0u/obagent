@@ -50,9 +50,10 @@ if ! git -C "$VAULT" diff --cached --quiet; then
 fi
 
 # --quiet: success is silent (no transfer spam); errors still surface on stderr.
-# Push failures retry with backoff: GitLab's SSH frontend intermittently drops
-# or rejects connections ("closed by remote host", spurious "Permission denied
-# (publickey)") — a blip every few hundred passes, each one an alert email.
+# Push failures retry with backoff: SSH frontends intermittently drop or reject
+# connections ("closed by remote host", spurious "Permission denied (publickey)";
+# first seen on GitLab, when the vault still pushed there) — a blip every few
+# hundred passes, each one an alert email.
 rc="$export_rc"
 for r in $(git -C "$VAULT" remote); do
     attempt=1
