@@ -14,9 +14,10 @@
 #     the vault has nothing left to push): same report, but exit 3 so the
 #     watchdog can headline it as "nothing currently broken"
 #
-# Runs daily as a deep inspector delegated from the dotfiles task-watchdog
-# (bin/junz-rs2423/task-watchdog, its own DSM Task Scheduler job) rather than
-# via a dedicated DSM task: the watchdog merges this report into its alert and
+# Runs as a deep inspector of the dotfiles task-watchdog
+# (bin/personal/task-watchdog, an hourly DSM Task Scheduler job), on its daily
+# summary pass or when OBAgent has a new problem, rather than via a dedicated
+# DSM task: the watchdog merges this report into its alert and
 # owns the notification email (same contract — non-zero exit means the report
 # must reach the operator, exit 0 means all quiet; 3 means the report should
 # still go out but every failure has since recovered).
