@@ -229,7 +229,9 @@ one pass on an interval. Step-by-step NAS setup is in **`DEPLOY.md`**.
     exit 0 silently; failed passes or a stale log (schedule died) → headless
     `claude -p` diagnoses, attempts a **trivial safe fix** (permissions, stale
     lock — never data deletion or code changes) and verifies with one pass, then
-    exits non-zero either way so the report always goes out. Runs as its own
+    exits non-zero either way so the report always goes out (3 = recovered: failed
+    passes were the only problem, the latest pass is clean and the vault is
+    pushed; 1 = still broken). Runs as its own
     daily DSM task with "email run details on abnormal termination", so the
     report arrives as a Synology notification email (DEPLOY.md §12).
   - `scripts/install.sh` — install/refresh the binary + record its commit; the

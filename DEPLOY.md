@@ -211,7 +211,9 @@ disable them) so pass health is visible from Drive. `scripts/inspect.sh`
 reads it and exits 0 when healthy; on failed passes or a stale log (= the 5-min
 schedule itself died) it has Claude (headless `claude -p`) diagnose, attempt a
 trivial safe fix (permissions, stale lock — never data deletion or code changes)
-and verify with one pass, then exits 1 either way so the report always goes out.
+and verify with one pass, then exits non-zero either way so the report always goes out:
+3 when failed passes were the only problem and the latest pass is clean with the
+vault pushed (recovered), 1 otherwise.
 
 Create a second entry script in your dotfiles (same env wrapper pattern as §8,
 `exec`ing `scripts/inspect.sh`), then a daily DSM task for it: **Task Scheduler →

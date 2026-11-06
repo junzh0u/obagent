@@ -10,17 +10,23 @@
 #     this repo's docs, attempt a trivial safe fix (permissions, stale lock —
 #     never data deletion or code changes) and verify with one pass, then print
 #     the report and exit 1 — the report goes out whether or not it auto-fixed
+#   - recovered (the only problem is failed passes, the latest pass is clean, and
+#     the vault has nothing left to push): same report, but exit 3 so the
+#     watchdog can headline it as "nothing currently broken"
 #
 # Runs daily as a deep inspector delegated from the dotfiles task-watchdog
 # (bin/junz-rs2423/task-watchdog, its own DSM Task Scheduler job) rather than
 # via a dedicated DSM task: the watchdog merges this report into its alert and
 # owns the notification email (same contract — non-zero exit means the report
-# must reach the operator, exit 0 means all quiet).
+# must reach the operator, exit 0 means all quiet; 3 means the report should
+# still go out but every failure has since recovered).
 #
 # Env (same wrapper as run.sh provides these):
 #   OBAGENT_PASS_LOG                    pass-history log; same default as run.sh
 #                                       ($XDG_STATE_HOME|~/.local/state)/obagent/
 #                                       pass-history.log
+#   OBAGENT_VAULT                       vault checkout; when set, "recovered" also
+#                                       requires it not to be ahead of its upstream
 # Optional:
 #   OBAGENT_INSPECT_WINDOW_HOURS        how far back to look (default 24)
 #   OBAGENT_INSPECT_STALE_MINUTES       log mtime older than this means the
@@ -46,16 +52,20 @@ if [ -f "$TEST_FLAG" ]; then
 fi
 
 problems=""
+other_problems=0  # problems besides failed passes; any of them rules out "recovered"
 add_problem() { problems="${problems}  - $1
 "; }
 
 recent=""
 if [ ! -f "$PASS_LOG" ]; then
     add_problem "pass-history log missing at $PASS_LOG — the pass schedule may not be running at all"
+    other_problems=1
 else
     age_min=$(( ($(date +%s) - $(stat -c %Y "$PASS_LOG")) / 60 ))
-    [ "$age_min" -gt "$STALE_MIN" ] \
-        && add_problem "pass-history log is stale (${age_min} min old; passes run every 5 min) — the schedule appears dead or stuck"
+    if [ "$age_min" -gt "$STALE_MIN" ]; then
+        add_problem "pass-history log is stale (${age_min} min old; passes run every 5 min) — the schedule appears dead or stuck"
+        other_problems=1
+    fi
 
     # Slice entries from the last WINDOW_H hours. Every entry starts with (or
     # contains, for failed-pass banners) an ISO-8601 UTC timestamp, so a string
@@ -71,8 +81,10 @@ else
     failed=$(printf '%s\n' "$recent" | grep -c 'pass FAILED' || true)
     ok=$(printf '%s\n' "$recent" | grep -c 'pass complete' || true)
     [ "$failed" -gt 0 ] && add_problem "$failed failed pass(es) in the last ${WINDOW_H}h (${ok} clean)"
-    [ "$failed" -eq 0 ] && [ "$ok" -eq 0 ] \
-        && add_problem "no completed passes in the last ${WINDOW_H}h"
+    if [ "$failed" -eq 0 ] && [ "$ok" -eq 0 ]; then
+        add_problem "no completed passes in the last ${WINDOW_H}h"
+        other_problems=1
+    fi
 fi
 
 if [ -z "$problems" ]; then
@@ -80,7 +92,27 @@ if [ -z "$problems" ]; then
     exit 0
 fi
 
-echo "obagent pipeline problems detected:"
+# Recovered: failed passes were the only problem, the newest pass outcome is
+# clean, and (when the vault is known) every commit has reached its upstream.
+rc=1
+if [ "$other_problems" -eq 0 ]; then
+    last_outcome=$(printf '%s\n' "$recent" | grep -E 'pass (complete|FAILED)' | tail -n 1)
+    unpushed=0
+    if [ -n "${OBAGENT_VAULT:-}" ]; then
+        unpushed=$(git -C "$OBAGENT_VAULT" rev-list --count '@{u}..HEAD' 2>/dev/null || echo unknown)
+    fi
+    case $last_outcome in
+        *'pass complete'*) [ "$unpushed" = 0 ] && rc=3 ;;
+    esac
+fi
+
+if [ "$rc" -eq 3 ]; then
+    vault_note=""
+    [ -n "${OBAGENT_VAULT:-}" ] && vault_note=" and the vault has nothing left to push"
+    echo "obagent pipeline recovered: the latest pass is clean${vault_note}; earlier problems:"
+else
+    echo "obagent pipeline problems detected:"
+fi
 printf '%s' "$problems"
 echo
 
@@ -122,4 +154,4 @@ else
     echo "(claude CLI not found; raw log follows)"
     printf '%s\n' "$recent" | tail -n 100
 fi
-exit 1
+exit "$rc"
