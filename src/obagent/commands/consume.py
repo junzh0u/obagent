@@ -14,6 +14,7 @@ from obagent.commands.classify import classify_document
 from obagent.commands.ingest import ingest_source, resolve_sources
 from obagent.commands.llm import extract_fields
 from obagent.commands.ocr import run_ocr
+from obagent.commands.quarantine import MAX_ATTEMPTS, Quarantine
 from obagent.commands.render import index_existing_notes, render_note
 from obagent.lib.constants import (
     ASSETS_DIR,
@@ -83,6 +84,7 @@ def _consume_path(
     llm_model: str,
     keep_original: bool,
     overwrite: bool,
+    quarantine: Quarantine | None = None,
 ) -> tuple[int, int, int]:
     """Run the consume pipeline for one vault subdir.
 
@@ -105,6 +107,8 @@ def _consume_path(
             rebuild = final.exists()
             if rebuild and not overwrite:
                 _drain_duplicate(source, sha, keep_original=keep_original)
+                if quarantine:
+                    quarantine.succeeded(sha)
                 skipped += 1
                 continue
             if rebuild:
@@ -127,14 +131,18 @@ def _consume_path(
                     pipeline=pipeline,
                 )
             except Exception as e:
-                if not rebuild:
-                    shutil.rmtree(target, ignore_errors=True)
                 click.secho(f"  Error: {step} failed: {e}", fg="red")
                 failed += 1
+                if not rebuild:  # (a rebuild already moved the source in)
+                    shutil.rmtree(target, ignore_errors=True)
+                    if quarantine:
+                        quarantine.failed(source, sha, f"{step} failed: {e}")
                 continue
             if not rebuild:
                 _commit(target, final, source, keep_original=keep_original)
                 target = final
+            if quarantine:
+                quarantine.succeeded(sha)
             try:
                 render_note(
                     target,
@@ -180,6 +188,7 @@ def _classify_and_consume_root(
     classify_model: str,
     keep_original: bool,
     overwrite: bool,
+    quarantine: Quarantine | None = None,
 ) -> tuple[int, int, int]:
     """OCR + LLM-classify loose root files, then run the matched type's llm→render.
 
@@ -200,6 +209,8 @@ def _classify_and_consume_root(
             sha = _sha256(source)
             if any((vault / t / ASSETS_DIR / sha).exists() for t in type_paths):
                 _drain_duplicate(source, sha, keep_original=keep_original)
+                if quarantine:
+                    quarantine.succeeded(sha)
                 skipped += 1
                 continue
             staging = _stage(source, vault)
@@ -229,9 +240,13 @@ def _classify_and_consume_root(
                 shutil.rmtree(staging, ignore_errors=True)
                 click.secho(f"  Error: {step} failed for {source.name}: {e}", fg="red")
                 failed += 1
+                if quarantine:
+                    quarantine.failed(source, sha, f"{step} failed: {e}")
                 continue
             final = vault / pipeline.default_path / ASSETS_DIR / sha
             _commit(staging, final, source, keep_original=keep_original)
+            if quarantine:
+                quarantine.succeeded(sha)
             try:
                 render_note(
                     final, overwrite=overwrite, note_index=None, pipeline=pipeline
@@ -309,35 +324,43 @@ def _is_truncated(source: Path) -> bool:
     return _PDF_EOF not in data.rstrip(_PDF_PADDING)[-_PDF_TAIL:]
 
 
-def _filter_intact(sources: list[Path]) -> tuple[list[Path], int]:
-    """Drop truncated PDFs, leaving them in the inbox. Returns (intact, n_truncated).
+def _filter_intact(
+    sources: list[Path], quarantine: Quarantine | None = None
+) -> tuple[list[Path], int]:
+    """Drop truncated PDFs. Returns (intact, n_truncated).
 
     A scanner can upload a cut-off PDF whose size never changes, so the
     ``--min-age`` gate can't catch it, and once ingested it would be moved out of
-    the inbox and OCR-rejected, losing the only copy. Skipping keeps it visible;
-    the caller fails the run so the operator rescans it.
+    the inbox and OCR-rejected, losing the only copy. No retry can fix it, so it
+    is quarantined at once (or, with quarantine off, left in the inbox); either
+    way the caller fails the run so the operator rescans it.
     """
     intact, truncated = [], 0
     for s in sources:
-        if _is_truncated(s):
-            click.secho(
-                f"  Error: {s} is truncated (no %%EOF) — left in the inbox; rescan it "
-                "and delete this copy.",
-                fg="red",
-            )
-            truncated += 1
-        else:
+        if not _is_truncated(s):
             intact.append(s)
+            continue
+        truncated += 1
+        reason = (
+            "truncated PDF (no %%EOF): the upload was cut off — rescan the original"
+        )
+        if not (quarantine and quarantine.reject(s, reason)):
+            click.secho(f"  Error: {s}: {reason}; left in the inbox.", fg="red")
     return intact, truncated
 
 
-def _fail_if_any(*, truncated: int, failed: int) -> None:
+def _fail_if_any(*, truncated: int, failed: int, quarantine: Quarantine) -> None:
     """Exit non-zero after the whole batch ran, so the pass reports it."""
     problems = []
     if truncated:
-        problems.append(f"{truncated} truncated source file(s) left in the inbox")
+        problems.append(f"{truncated} truncated source file(s)")
     if failed:
         problems.append(f"{failed} source file(s) failed")
+    if quarantine.moved:
+        problems.append(
+            f"{quarantine.moved} moved to {quarantine.dir} "
+            "(the .error.txt beside each says why)"
+        )
     if problems:
         raise click.ClickException("; ".join(problems) + " (see above)")
 
@@ -392,6 +415,15 @@ def _api_and_model_options(f):
         help="Mistral API key for OCR processing.",
     )(f)
     f = click.option(
+        "--max-attempts",
+        envvar="OBAGENT_CONSUME_MAX_ATTEMPTS",
+        type=click.IntRange(min=0),
+        default=MAX_ATTEMPTS,
+        show_default=True,
+        help="Move a source that failed this many runs in a row to {inbox}/_failed/ "
+        "(0 = never). Needs the --input-dir inbox; off for PATHS / --keep-original.",
+    )(f)
+    f = click.option(
         "--min-age",
         type=int,
         default=0,
@@ -423,6 +455,7 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
         keep_original,
         overwrite,
         min_age,
+        max_attempts,
         input_dir,
         paths,
     ):
@@ -431,7 +464,11 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
         sources = _resolve_consume_sources(paths, input_dir, path)
         if sources is None:
             return
-        sources, truncated = _filter_intact(_filter_stable(sources, min_age))
+        inbox_root = None if paths or keep_original else input_dir
+        quarantine = Quarantine(vault, inbox_root, max_attempts)
+        sources, truncated = _filter_intact(
+            _filter_stable(sources, min_age), quarantine
+        )
         with (
             Mistral(api_key=mistral_api_key) as mistral_client,
             OpenAI(api_key=openai_api_key) as openai_client,
@@ -447,9 +484,11 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
                 llm_model=llm_model,
                 keep_original=keep_original,
                 overwrite=overwrite,
+                quarantine=quarantine,
             )
+        quarantine.save()
         _print_summary(consumed, skipped, failed)
-        _fail_if_any(truncated=truncated, failed=failed)
+        _fail_if_any(truncated=truncated, failed=failed, quarantine=quarantine)
 
     consume.__doc__ = pipeline.help_consume
     return consume
@@ -493,6 +532,7 @@ def consume_all(
     keep_original,
     overwrite,
     min_age,
+    max_attempts,
     prehook,
     input_dir,
     classify,
@@ -515,6 +555,7 @@ def consume_all(
     vault = Path(ctx.obj["vault"])
     truncated = 0
     failed = 0
+    quarantine = Quarantine(vault, None if keep_original else input_dir, max_attempts)
     with (
         Mistral(api_key=mistral_api_key) as mistral_client,
         OpenAI(api_key=openai_api_key) as openai_client,
@@ -527,7 +568,8 @@ def consume_all(
                 click.secho(f"  No inbox at {type_inbox}, skipping.", fg="yellow")
                 continue
             sources, n = _filter_intact(
-                _filter_stable(resolve_sources((str(type_inbox),)), min_age)
+                _filter_stable(resolve_sources((str(type_inbox),)), min_age),
+                quarantine,
             )
             truncated += n
             consumed, skipped, n = _consume_path(
@@ -541,6 +583,7 @@ def consume_all(
                 llm_model=llm_model,
                 keep_original=keep_original,
                 overwrite=overwrite,
+                quarantine=quarantine,
             )
             failed += n
             _print_summary(consumed, skipped, n)
@@ -548,7 +591,7 @@ def consume_all(
         if classify:
             click.secho("\n=== Unsorted (classify) ===", bold=True)
             root_sources, n = _filter_intact(
-                _filter_stable(_root_loose_sources(input_dir), min_age)
+                _filter_stable(_root_loose_sources(input_dir), min_age), quarantine
             )
             truncated += n
             if not root_sources:
@@ -564,7 +607,9 @@ def consume_all(
                     classify_model=classify_model,
                     keep_original=keep_original,
                     overwrite=overwrite,
+                    quarantine=quarantine,
                 )
                 failed += n
                 _print_summary(consumed, skipped, n)
-    _fail_if_any(truncated=truncated, failed=failed)
+    quarantine.save()
+    _fail_if_any(truncated=truncated, failed=failed, quarantine=quarantine)

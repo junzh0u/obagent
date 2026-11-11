@@ -78,8 +78,9 @@ DIR/
 - **`obagent consume`** (top-level only) accepts `--prehook CMD` (env var: `OBAGENT_CONSUME_PREHOOK`). The shell command runs before the per-type loop and before API clients are opened; a non-zero exit aborts with `Prehook failed`. Useful for populating `$OBAGENT_CONSUME` from an outside source (email sync, scanner upload, etc.).
 - **Duplicates are drained**: a source whose sha is already in the vault is skipped *and removed* from the inbox (unless `--keep-original`) — in a type subdir as in the root — so a re-uploaded file doesn't sit there re-skipped every pass.
 - **`--min-age N`** (both consume entry points) skips files modified within the last N seconds — a stateless quiescence gate (mtime-based) so a slow scanner→inbox upload isn't grabbed mid-write. Default 0 (off).
-- **Truncated PDFs are refused** (both consume entry points): a `.pdf` with no `%%EOF` in its tail (after stripping NUL/whitespace padding, which some scanners add) is left in the inbox with an error, the rest of the batch is consumed, and the command exits non-zero so the pass fails until the file is rescanned and removed. A scanner can upload a cut-off file whose size never changes, so `--min-age` can't catch it.
-- **Staged commit** (both consume entry points): a new asset is built (src → ocr → llm) in `.obagent/staging` and only then renamed into `vault/{Type}/_assets_/<sha>/` (atomic — same filesystem), after which the inbox original is unlinked and the note rendered. So a type dir never holds a half-built asset — which sha dedup would skip forever — even across a crash: staging is cleared at the start and end of each consume. Failures are **isolated per file**: an OCR/LLM failure drops the staging asset, leaves the original in the inbox for a retry next pass, the rest of the batch runs, and the command exits non-zero. A render failure after the commit is only a warning (`obagent render` rebuilds it). `--overwrite` of an existing asset still rebuilds it in place. Recommend gitignoring `.obagent/staging/` in the vault.
+- **Truncated PDFs are refused** (both consume entry points): a `.pdf` with no `%%EOF` in its tail (after stripping NUL/whitespace padding, which some scanners add) is quarantined at once (no retry can fix it), the rest of the batch is consumed, and the command exits non-zero. A scanner can upload a cut-off file whose size never changes, so `--min-age` can't catch it.
+- **Staged commit** (both consume entry points): a new asset is built (src → ocr → llm) in `.obagent/staging` and only then renamed into `vault/{Type}/_assets_/<sha>/` (atomic — same filesystem), after which the inbox original is unlinked and the note rendered. So a type dir never holds a half-built asset — which sha dedup would skip forever — even across a crash: staging is cleared at the start and end of each consume. Failures are **isolated per file**: an OCR/LLM failure drops the staging asset, leaves the original in the inbox for a retry next pass (until quarantined), the rest of the batch runs, and the command exits non-zero. A render failure after the commit is only a warning (`obagent render` rebuilds it). `--overwrite` of an existing asset still rebuilds it in place. Recommend gitignoring `.obagent/staging/` in the vault.
+- **Quarantine** (`commands/quarantine.py`): a source that fails `--max-attempts` runs in a row (default 12 ≈ 1h of passes, env `OBAGENT_CONSUME_MAX_ATTEMPTS`, 0 = never) is moved to `{inbox}/_failed/` beside a `<name>.error.txt` note (reason, original path, sha, last error), so it isn't retried forever. Attempts are counted per sha in `{vault}/.obagent/consume-failures.json`; a success, a duplicate skip, or the move clears the entry, so a file moved back into the inbox starts afresh. `_failed/` is never scanned. Off for positional `PATHS` and `--keep-original` (no inbox to manage). The moving run prints a self-contained `Quarantined:` line and exits non-zero, and `scripts/inspect.sh` reports a non-empty `_failed/` (each note verbatim) as a standing problem until the operator moves the file back or deletes it.
 - **Smart inbox** (`obagent consume` only, default on; `--no-classify` to disable): files sitting **loose in the inbox root** (depth-1, not in a type subdir) are auto-routed. Each is staged and OCR'd once, then `classify_document` (`commands/classify.py`, model `CLASSIFY_MODEL`, `--classify-model`) asks the LLM which registered type it is — from each `Pipeline.classify_description`, defaulting to Documents — and that type's field extraction runs before the commit to `vault/{Type}/` (no re-OCR). sha dedup runs across all type dirs *before* OCR.
 
 ### Export specifics
@@ -228,14 +229,17 @@ one pass on an interval. Step-by-step NAS setup is in **`DEPLOY.md`**.
     overwritten not appended, so pass health is readable off-NAS without syncing
     the whole history. Best-effort: an unwritable dir warns.
   - `scripts/inspect.sh` — daily health check over that pass history: healthy →
-    exit 0 silently; failed passes or a stale log (schedule died) → headless
+    exit 0 silently; failed passes, a stale log (schedule died), or files
+    quarantined in `$OBAGENT_CONSUME/_failed/` (listed with their `.error.txt`
+    notes) → headless
     `claude -p` diagnoses, attempts a **trivial safe fix** (permissions, stale
     lock — never data deletion or code changes) and verifies with one pass, then
     exits non-zero either way so the report always goes out (3 = recovered: failed
     passes were the only problem, the latest pass is clean and the vault is
-    pushed; 1 = still broken). Runs as its own
-    daily DSM task with "email run details on abnormal termination", so the
-    report arrives as a Synology notification email (DEPLOY.md §12).
+    pushed; 1 = still broken — always the case while `_failed/` is non-empty).
+    Runs as the dotfiles task-watchdog's deep inspector for OBAgent (on its daily
+    summary, or when OBAgent has a new problem), which merges this report into
+    its email.
   - `scripts/install.sh` — install/refresh the binary + record its commit; the
     single install primitive shared by `just install` and `run.sh`'s guard.
   - `scripts/publish.sh` — `obagent export` (→ Drive via Cloud Sync) + a **guarded

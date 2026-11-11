@@ -141,6 +141,7 @@ Optional:
 | Variable | Default | Purpose |
 |---|---|---|
 | `OBAGENT_MIN_AGE` | `60` in `run.sh` (the `--min-age` flag itself defaults to `0`) | consume skips files modified within N seconds |
+| `OBAGENT_CONSUME_MAX_ATTEMPTS` | `12` | consume moves a source that failed this many runs in a row to `$OBAGENT_CONSUME/_failed/` (`0` = never); `inspect.sh` reports it |
 | `OBAGENT_CONSUME_PREHOOK` | — | shell command run before the consume loop (email sync, scanner pull, …) |
 | `OBAGENT_LOCK` | `$OBAGENT_VAULT/.obagent/run.lock` | `run.sh` no-overlap lockfile |
 | `OBAGENT_PASS_LOG` | `${XDG_STATE_HOME:-~/.local/state}/obagent/pass-history.log` | pass history for scheduled runs |

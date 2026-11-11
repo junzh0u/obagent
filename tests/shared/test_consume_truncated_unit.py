@@ -65,7 +65,7 @@ def test_filter_intact_keeps_truncated_in_place(tmp_path):
 def test_consume_all_fails_after_consuming_the_rest(
     mock_mistral, mock_openai, mock_consume, runner, vault, tmp_path
 ):
-    """A truncated scan doesn't block its batch, but the pass exits non-zero."""
+    """A truncated scan doesn't block its batch, is quarantined, and fails the run."""
     for mock in (mock_mistral, mock_openai):
         mock.return_value.__enter__ = lambda self: self
         mock.return_value.__exit__ = lambda self, *args: False
@@ -80,8 +80,11 @@ def test_consume_all_fails_after_consuming_the_rest(
     )
 
     assert result.exit_code == 1, result.output
-    # Count not pinned: other tests can register extra pipelines on the same dir.
-    assert "truncated source file(s) left in the inbox" in result.output
+    assert "1 truncated source file(s)" in result.output
     consumed = [s for c in mock_consume.call_args_list for s in c.args[2]]
     assert good in consumed and bad not in consumed
-    assert bad.exists()
+    # Unrecoverable, so quarantined at once rather than retried every pass.
+    assert not bad.exists()
+    assert (inbox / "_failed" / "bad.pdf").exists()
+    note = (inbox / "_failed" / "bad.pdf.error.txt").read_text()
+    assert "truncated PDF" in note and str(bad) in note

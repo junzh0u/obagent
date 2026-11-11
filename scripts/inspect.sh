@@ -28,6 +28,9 @@
 #                                       pass-history.log
 #   OBAGENT_VAULT                       vault checkout; when set, "recovered" also
 #                                       requires it not to be ahead of its upstream
+#   OBAGENT_CONSUME                     consume inbox; when set, files quarantined in
+#                                       its _failed/ are reported (with their
+#                                       .error.txt notes) until the operator clears it
 # Optional:
 #   OBAGENT_INSPECT_WINDOW_HOURS        how far back to look (default 24)
 #   OBAGENT_INSPECT_STALE_MINUTES       log mtime older than this means the
@@ -88,6 +91,33 @@ else
     fi
 fi
 
+# Quarantined inbox files: consume moves a source that keeps failing (or can
+# never succeed, e.g. a truncated scan) to $OBAGENT_CONSUME/_failed/ beside a
+# <name>.error.txt note. Only the operator can resolve one, so it's a standing
+# problem — never "recovered" — and the report carries each note verbatim.
+quarantine_dir="${OBAGENT_CONSUME:+$OBAGENT_CONSUME/_failed}"
+if [ -n "$quarantine_dir" ] && [ -d "$quarantine_dir" ]; then
+    quarantined=0
+    details=""
+    for f in "$quarantine_dir"/*; do
+        [ -f "$f" ] || continue
+        case $f in *.error.txt) continue ;; esac
+        quarantined=$((quarantined + 1))
+        if [ -f "$f.error.txt" ]; then
+            note=$(sed 's/^/        /' "$f.error.txt")
+        else
+            note="        (no .error.txt note)"
+        fi
+        details="${details}
+    * ${f##*/}
+${note}"
+    done
+    if [ "$quarantined" -gt 0 ]; then
+        add_problem "${quarantined} inbox file(s) quarantined in ${quarantine_dir} after failing consume — fix or rescan each, then move it back into the inbox to retry, or delete it (and its .error.txt) to give up:${details}"
+        other_problems=1
+    fi
+fi
+
 if [ -z "$problems" ]; then
     echo "healthy: ${ok} clean passes in the last ${WINDOW_H}h, no failures"
     exit 0
@@ -126,6 +156,10 @@ binary -> vault pull -> consume -> notion sync -> case-collision check ->
 publish); this repo's CLAUDE.md documents the architecture. Detected problems:
 
 ${problems}
+Files listed as quarantined were moved to the consume inbox's _failed/ folder by
+consume after repeated failures; their notes above say why. Diagnose each, but
+never move, rename or delete them — that is the operator's call.
+
 Below is the pass-history log for the last ${WINDOW_H}h (clean passes are one
 line, failed passes include their full output). Diagnose the most likely root
 cause: what failed, since when, why. You may Read/Grep this repo and the DSM
