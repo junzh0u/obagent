@@ -21,7 +21,9 @@ def _ingest_returns_target(call_count: list[int], vault: Path):
 
     def _side_effect(source, vault_arg, path, **kwargs):
         call_count[0] += 1
-        return vault_arg / path / f"sha-{call_count[0]}"
+        target = vault_arg / path / f"sha-{call_count[0]}"
+        target.mkdir(parents=True)  # consume renames the staged asset into place
+        return target
 
     return _side_effect
 

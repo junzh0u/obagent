@@ -59,7 +59,7 @@ def test_filter_intact_keeps_truncated_in_place(tmp_path):
     assert bad.exists()
 
 
-@patch("obagent.commands.consume._consume_path", return_value=(1, 0))
+@patch("obagent.commands.consume._consume_path", return_value=(1, 0, 0))
 @patch("obagent.commands.consume.OpenAI")
 @patch("obagent.commands.consume.Mistral")
 def test_consume_all_fails_after_consuming_the_rest(

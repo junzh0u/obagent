@@ -136,7 +136,7 @@ def test_already_consumed_root_file_is_skipped(
     result = _invoke(inbox, vault, runner)
 
     assert result.exit_code == 0, result.output
-    assert "Already consumed" in result.output
+    assert "already consumed" in result.output
     assert not pdf.exists()  # redundant inbox copy removed
     mock_ocr.assert_not_called()
     mock_classify.assert_not_called()
@@ -160,7 +160,7 @@ def test_ocr_failure_isolates_the_file(
     tmp_path,
     monkeypatch,
 ):
-    """OCR failure is isolated: warn + count, keep the file for retry, pass exits 0."""
+    """OCR failure is isolated: report + count, keep the file for retry, exit 1."""
     monkeypatch.delenv("OBAGENT_CONSUME_PREHOOK", raising=False)
     _setup_ctx_managers(mock_mistral, mock_openai)
     mock_ocr.side_effect = Exception("Status 502")
@@ -171,7 +171,7 @@ def test_ocr_failure_isolates_the_file(
 
     result = _invoke(inbox, vault, runner)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 1, result.output
     assert "classify failed" in result.output.lower()
     assert "1 failed" in result.output
     assert pdf.exists()  # kept for retry
@@ -213,7 +213,7 @@ def test_one_bad_file_does_not_block_the_batch(
 
     result = _invoke(inbox, vault, runner)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 1, result.output
     # the good file is classified, relocated, and its root original removed
     assert (
         vault / "Receipts" / ASSETS_DIR / sha_good / "src" / "original.pdf"

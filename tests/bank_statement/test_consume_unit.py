@@ -3,7 +3,7 @@ from unittest.mock import patch
 from obagent.commands.bank_statement.pipeline import bank_statement_pipeline
 from obagent.lib.constants import LLM_MODEL, OCR_MODEL
 
-from tests.conftest import BOTH_KEYS
+from tests.conftest import BOTH_KEYS, committed, staged
 
 
 def _setup_ctx_managers(mock_mistral, mock_openai):
@@ -35,7 +35,7 @@ def test_calls_all_four_steps(
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     target_dir = vault / "statements" / "sha"
-    mock_ingest.return_value = target_dir
+    mock_ingest.side_effect = staged(target_dir)
     result = runner.invoke(
         bank_statement_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
@@ -64,7 +64,7 @@ def test_calls_all_four_steps(
 @patch("obagent.commands.consume.ingest_source")
 @patch("obagent.commands.consume.OpenAI")
 @patch("obagent.commands.consume.Mistral")
-def test_skips_when_ingest_returns_none(
+def test_skips_already_consumed(
     mock_mistral,
     mock_openai,
     mock_ingest,
@@ -75,11 +75,11 @@ def test_skips_when_ingest_returns_none(
     vault,
     source_dir,
 ):
-    """When ingest_source returns None, OCR/LLM/render are skipped."""
+    """An already-consumed source is skipped before ingest, OCR, LLM, and render."""
     _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "dup.pdf"
     pdf.write_bytes(b"dup")
-    mock_ingest.return_value = None
+    committed(vault, "statements", b"dup").mkdir(parents=True)
 
     result = runner.invoke(
         bank_statement_pipeline.consume_command,
@@ -111,11 +111,11 @@ def test_aborts_on_ocr_exception(
     vault,
     source_dir,
 ):
-    """OCR exceptions abort the command."""
+    """An OCR exception fails the file and the command."""
     _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
-    mock_ingest.return_value = vault / "statements" / "sha"
+    mock_ingest.side_effect = staged(vault / "statements" / "sha")
     mock_ocr.side_effect = Exception("Status 502")
 
     result = runner.invoke(
@@ -151,7 +151,7 @@ def test_handles_render_warning(
     _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
-    mock_ingest.return_value = vault / "statements" / "sha"
+    mock_ingest.side_effect = staged(vault / "statements" / "sha")
     mock_render.side_effect = ValueError("Template error")
 
     result = runner.invoke(
@@ -187,7 +187,7 @@ def test_forwards_flags(
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     target_dir = vault / "statements" / "sha"
-    mock_ingest.return_value = target_dir
+    mock_ingest.side_effect = staged(target_dir)
 
     result = runner.invoke(
         bank_statement_pipeline.consume_command,

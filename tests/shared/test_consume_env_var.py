@@ -11,7 +11,7 @@ from obagent.commands.bank_statement.pipeline import bank_statement_pipeline
 from obagent.commands.document.pipeline import document_pipeline
 from obagent.commands.receipt.pipeline import receipt_pipeline
 
-from tests.conftest import BOTH_KEYS
+from tests.conftest import BOTH_KEYS, staged
 
 
 def _setup_ctx_managers(mock_mistral, mock_openai):
@@ -54,7 +54,7 @@ def test_env_var_supplies_input_dir_when_paths_omitted(
     inbox = tmp_path / "inbox" / path
     inbox.mkdir(parents=True)
     (inbox / "scan.pdf").write_bytes(b"data")
-    mock_ingest.return_value = vault / path / "sha"
+    mock_ingest.side_effect = staged(vault / path / "sha")
     monkeypatch.setenv("OBAGENT_CONSUME", str(tmp_path / "inbox"))
 
     result = runner.invoke(
@@ -103,7 +103,7 @@ def test_positional_paths_win_over_env_var(
     real = tmp_path / "real-inbox"
     real.mkdir()
     (real / "scan.pdf").write_bytes(b"real")
-    mock_ingest.return_value = vault / path / "sha"
+    mock_ingest.side_effect = staged(vault / path / "sha")
 
     result = runner.invoke(
         pipeline.consume_command,

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 from pathlib import Path
@@ -7,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
-from obagent.lib.constants import OCR_MODEL
+from obagent.lib.constants import ASSETS_DIR, OCR_MODEL
 
 BOTH_KEYS = ["--mistral-api-key", "test-key", "--openai-api-key", "test-oai-key"]
 
@@ -41,6 +42,26 @@ def _accept_fake_pdfs(request, monkeypatch):
         monkeypatch.setattr(
             "obagent.commands.consume._is_truncated", lambda _source: False
         )
+
+
+def staged(*targets: Path):
+    """``side_effect`` for a mocked ``ingest_source``: hand out ``targets`` in turn
+    (the last one repeats), creating each — consume renames the staged asset dir
+    into place, so it must exist."""
+    it = iter(targets)
+    last = targets[-1]
+
+    def _ingest(*_args, **_kwargs) -> Path:
+        target = next(it, last)
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+
+    return _ingest
+
+
+def committed(vault: Path, path: str, data: bytes) -> Path:
+    """Where consume commits the asset for a source holding ``data``."""
+    return vault / path / ASSETS_DIR / hashlib.sha256(data).hexdigest()
 
 
 @pytest.fixture

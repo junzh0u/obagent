@@ -3,7 +3,7 @@ from unittest.mock import patch
 from obagent.commands.receipt.pipeline import receipt_pipeline
 from obagent.lib.constants import LLM_MODEL, OCR_MODEL
 
-from tests.conftest import BOTH_KEYS
+from tests.conftest import BOTH_KEYS, committed, staged
 
 
 def _setup_ctx_managers(mock_mistral, mock_openai):
@@ -35,7 +35,7 @@ def test_calls_all_four_steps(
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     target_dir = vault / "papers" / "sha"
-    mock_ingest.return_value = target_dir
+    mock_ingest.side_effect = staged(target_dir)
     result = runner.invoke(
         receipt_pipeline.consume_command,
         [*BOTH_KEYS, str(source_dir)],
@@ -58,7 +58,7 @@ def test_calls_all_four_steps(
         pipeline=receipt_pipeline,
     )
     mock_render.assert_called_once_with(
-        target_dir,
+        committed(vault, "papers", b"test"),
         overwrite=False,
         note_index=None,
         pipeline=receipt_pipeline,
@@ -72,7 +72,7 @@ def test_calls_all_four_steps(
 @patch("obagent.commands.consume.ingest_source")
 @patch("obagent.commands.consume.OpenAI")
 @patch("obagent.commands.consume.Mistral")
-def test_skips_ocr_llm_render_when_ingest_returns_none(
+def test_skips_already_consumed(
     mock_mistral,
     mock_openai,
     mock_ingest,
@@ -83,11 +83,11 @@ def test_skips_ocr_llm_render_when_ingest_returns_none(
     vault,
     source_dir,
 ):
-    """When ingest_source returns None (duplicate), OCR, LLM, and render are skipped."""
+    """An already-consumed source is skipped before ingest, OCR, LLM, and render."""
     _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "dup.pdf"
     pdf.write_bytes(b"dup")
-    mock_ingest.return_value = None
+    committed(vault, "papers", b"dup").mkdir(parents=True)
 
     result = runner.invoke(
         receipt_pipeline.consume_command,
@@ -96,7 +96,7 @@ def test_skips_ocr_llm_render_when_ingest_returns_none(
     )
 
     assert result.exit_code == 0
-    mock_ingest.assert_called_once()
+    mock_ingest.assert_not_called()
     mock_ocr.assert_not_called()
     mock_llm.assert_not_called()
     mock_render.assert_not_called()
@@ -120,11 +120,11 @@ def test_aborts_on_ocr_exception(
     vault,
     source_dir,
 ):
-    """OCR exceptions abort the command."""
+    """An OCR exception fails the file and the command."""
     _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
-    mock_ingest.return_value = vault / "papers" / "sha"
+    mock_ingest.side_effect = staged(vault / "papers" / "sha")
 
     mock_ocr.side_effect = Exception("Status 502")
 
@@ -157,11 +157,11 @@ def test_aborts_on_llm_exception(
     vault,
     source_dir,
 ):
-    """LLM exceptions abort the command."""
+    """An LLM exception fails the file and the command."""
     _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
-    mock_ingest.return_value = vault / "papers" / "sha"
+    mock_ingest.side_effect = staged(vault / "papers" / "sha")
 
     mock_llm.side_effect = ValueError("API error")
 
@@ -197,7 +197,7 @@ def test_handles_render_exception(
     _setup_ctx_managers(mock_mistral, mock_openai)
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
-    mock_ingest.return_value = vault / "papers" / "sha"
+    mock_ingest.side_effect = staged(vault / "papers" / "sha")
 
     mock_render.side_effect = ValueError("Template error")
 
@@ -234,7 +234,7 @@ def test_forwards_flags(
     pdf = source_dir / "doc.pdf"
     pdf.write_bytes(b"test")
     target_dir = vault / "papers" / "sha"
-    mock_ingest.return_value = target_dir
+    mock_ingest.side_effect = staged(target_dir)
 
     result = runner.invoke(
         receipt_pipeline.consume_command,
@@ -267,7 +267,7 @@ def test_forwards_flags(
         pipeline=receipt_pipeline,
     )
     mock_render.assert_called_once_with(
-        target_dir,
+        committed(vault, "papers", b"test"),
         overwrite=True,
         note_index={},
         pipeline=receipt_pipeline,
@@ -297,7 +297,7 @@ def test_processes_multiple_files(
         (source_dir / name).write_bytes(name.encode())
 
     dirs = [vault / "papers" / f"sha_{i}" for i in range(3)]
-    mock_ingest.side_effect = dirs
+    mock_ingest.side_effect = staged(*dirs)
 
     result = runner.invoke(
         receipt_pipeline.consume_command,

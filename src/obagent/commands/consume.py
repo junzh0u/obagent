@@ -2,7 +2,8 @@ import hashlib
 import shutil
 import subprocess
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import click
@@ -24,10 +25,50 @@ from obagent.lib.constants import (
 from obagent.lib.pipeline import Pipeline
 from obagent.lib.utils import interruptible, newest_file
 
-# Loose files in the consume root are OCR'd + classified into a neutral staging
-# asset dir here (same filesystem as the type dirs → the post-classify relocate is
-# an atomic rename), then moved to vault/{Type}/. Transient: cleared each pass.
+# New assets are built here (src → ocr → llm) and renamed into vault/{Type}/ only
+# once complete — same filesystem as the type dirs, so the rename is atomic and a
+# type dir never holds a half-built asset, even across a crash. Transient: cleared
+# at the start and end of each consume.
 STAGING_PATH = ".obagent/staging"
+
+
+@contextmanager
+def _staging_area(vault: Path) -> Iterator[None]:
+    root = vault / STAGING_PATH
+    shutil.rmtree(root, ignore_errors=True)  # a crashed run's leftovers
+    try:
+        yield
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def _stage(source: Path, vault: Path) -> Path:
+    """Copy ``source`` into a fresh staging asset; the inbox original stays put."""
+    staging = ingest_source(
+        source, vault, STAGING_PATH, keep_original=True, overwrite=True
+    )
+    assert staging is not None  # overwrite=True never dedups
+    return staging
+
+
+def _commit(staging: Path, final: Path, source: Path, *, keep_original: bool) -> None:
+    """Rename a complete staging asset into place, then drain the inbox original."""
+    final.parent.mkdir(parents=True, exist_ok=True)
+    staging.rename(final)  # atomic; refuses to land inside an existing asset
+    if not keep_original:
+        source.unlink()  # committed to the vault — host delete drains Drive
+
+
+def _drain_duplicate(source: Path, sha: str, *, keep_original: bool) -> None:
+    """Skip a source the vault already holds, removing it so it isn't re-skipped
+    every pass (unless keep_original)."""
+    click.secho(f"  Warning: already consumed ({sha}), skipping", fg="yellow")
+    if not keep_original:
+        source.unlink()
+
+
+def _sha256(source: Path) -> str:
+    return hashlib.sha256(source.read_bytes()).hexdigest()
 
 
 def _consume_path(
@@ -42,50 +83,69 @@ def _consume_path(
     llm_model: str,
     keep_original: bool,
     overwrite: bool,
-) -> tuple[int, int]:
-    """Run the consume pipeline for one vault subdir. Returns (consumed, skipped)."""
+) -> tuple[int, int, int]:
+    """Run the consume pipeline for one vault subdir.
+
+    A new source is built in staging and committed only once OCR and field
+    extraction succeed; a failure drops the staging asset and leaves the original
+    in the inbox for a retry next pass. Failures are **isolated per file** (report,
+    count, continue). ``--overwrite`` of an existing asset rebuilds it in place.
+    Returns (consumed, skipped, failed).
+    """
     pipeline.prepare_context(vault)
     note_index = index_existing_notes(vault / path) if overwrite else None
     consumed = 0
     skipped = 0
-    for source in interruptible(sources):
-        click.secho(f"Consume: {source}", bold=True)
-        target_dir = ingest_source(
-            source,
-            vault,
-            path,
-            keep_original=keep_original,
-            overwrite=overwrite,
-        )
-        if target_dir is None:
-            skipped += 1
-            continue
-        try:
-            run_ocr(target_dir, mistral_client, model=ocr_model, overwrite=overwrite)
-        except Exception as e:
-            raise click.ClickException(f"OCR failed: {e}") from e
-        try:
-            extract_fields(
-                target_dir,
-                openai_client,
-                path,
-                model=llm_model,
-                overwrite=overwrite,
-                pipeline=pipeline,
-            )
-        except Exception as e:
-            raise click.ClickException(f"Field extraction failed: {e}") from e
-        try:
-            render_note(
-                target_dir,
-                overwrite=overwrite,
-                note_index=note_index,
-                pipeline=pipeline,
-            )
-        except Exception as e:
-            click.secho(f"  Warning: note rendering failed: {e}", fg="red")
-        consumed += 1
-    return consumed, skipped
+    failed = 0
+    with _staging_area(vault):
+        for source in interruptible(sources):
+            click.secho(f"Consume: {source}", bold=True)
+            sha = _sha256(source)
+            final = vault / path / ASSETS_DIR / sha
+            rebuild = final.exists()
+            if rebuild and not overwrite:
+                _drain_duplicate(source, sha, keep_original=keep_original)
+                skipped += 1
+                continue
+            if rebuild:
+                target = ingest_source(
+                    source, vault, path, keep_original=keep_original, overwrite=True
+                )
+                assert target is not None
+            else:
+                target = _stage(source, vault)
+            step = "OCR"
+            try:
+                run_ocr(target, mistral_client, model=ocr_model, overwrite=overwrite)
+                step = "Field extraction"
+                extract_fields(
+                    target,
+                    openai_client,
+                    path,
+                    model=llm_model,
+                    overwrite=overwrite,
+                    pipeline=pipeline,
+                )
+            except Exception as e:
+                if not rebuild:
+                    shutil.rmtree(target, ignore_errors=True)
+                click.secho(f"  Error: {step} failed: {e}", fg="red")
+                failed += 1
+                continue
+            if not rebuild:
+                _commit(target, final, source, keep_original=keep_original)
+                target = final
+            try:
+                render_note(
+                    target,
+                    overwrite=overwrite,
+                    note_index=note_index,
+                    pipeline=pipeline,
+                )
+            except Exception as e:
+                click.secho(f"  Warning: note rendering failed: {e}", fg="red")
+            consumed += 1
+    return consumed, skipped, failed
 
 
 def _default_pipeline() -> Pipeline:
@@ -123,38 +183,27 @@ def _classify_and_consume_root(
 ) -> tuple[int, int, int]:
     """OCR + LLM-classify loose root files, then run the matched type's llm→render.
 
-    Each file is copied into a neutral staging asset dir, OCR'd once, classified,
-    then the asset is relocated to ``vault/{Type}/`` (so llm/render skip OCR).
-    Failures are **isolated per file** (warn, count, continue) so one bad scan does
-    not abort the batch. An OCR/classify failure cleans staging and leaves the root
-    original for a clean retry; a post-relocate failure leaves the committed asset
-    for a manual ``obagent {type} llm|render <sha>``. Returns (consumed, skipped,
-    failed).
+    Each file is copied into a staging asset, OCR'd once, classified, field-
+    extracted, then renamed into ``vault/{Type}/`` (so nothing is re-OCR'd).
+    Failures are **isolated per file** (report, count, continue): any failure
+    before the rename drops the staging asset and leaves the root original for a
+    clean retry. Returns (consumed, skipped, failed).
     """
     default_pipeline = _default_pipeline()
     type_paths = [p.default_path for p in Pipeline._registry]
-    staging_root = vault / STAGING_PATH
     consumed = 0
     skipped = 0
     failed = 0
-    shutil.rmtree(staging_root, ignore_errors=True)  # clear any crashed-run leftovers
-    try:
+    with _staging_area(vault):
         for source in interruptible(sources):
             click.secho(f"Classify: {source}", bold=True)
-            sha = hashlib.sha256(source.read_bytes()).hexdigest()
+            sha = _sha256(source)
             if any((vault / t / ASSETS_DIR / sha).exists() for t in type_paths):
-                click.secho(f"  Already consumed ({sha}), skipping", fg="yellow")
-                if not keep_original:
-                    source.unlink()
+                _drain_duplicate(source, sha, keep_original=keep_original)
                 skipped += 1
                 continue
-            staging = ingest_source(
-                source, vault, STAGING_PATH, keep_original=True, overwrite=True
-            )
-            if staging is None:  # unreachable with overwrite=True
-                continue
-            # OCR → classify → relocate. A failure here drops the staging asset and
-            # leaves the root original in place for a clean retry next pass.
+            staging = _stage(source, vault)
+            step = "classify"
             try:
                 run_ocr(staging, mistral_client, model=ocr_model, overwrite=overwrite)
                 txt = newest_file(staging / "ocr", "*.txt")
@@ -165,25 +214,11 @@ def _classify_and_consume_root(
                     default_pipeline=default_pipeline,
                     model=classify_model,
                 )
-                final = vault / pipeline.default_path / ASSETS_DIR / sha
-                final.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(staging), str(final))
-            except Exception as e:
-                shutil.rmtree(staging, ignore_errors=True)
-                click.secho(
-                    f"  Warning: classify failed for {source.name}: {e}", fg="red"
-                )
-                failed += 1
-                continue
-            click.secho(f"  Classified as {pipeline.default_path}", fg="green")
-            if not keep_original:
-                source.unlink()  # committed to the vault — host delete drains Drive
-            # The asset is now committed; a post-relocate failure leaves it for a
-            # manual re-run (dedup skips it next pass), so isolate rather than abort.
-            pipeline.prepare_context(vault)
-            try:
+                click.secho(f"  Classified as {pipeline.default_path}", fg="green")
+                step = "field extraction"
+                pipeline.prepare_context(vault)
                 extract_fields(
-                    final,
+                    staging,
                     openai_client,
                     pipeline.default_path,
                     model=llm_model,
@@ -191,12 +226,12 @@ def _classify_and_consume_root(
                     pipeline=pipeline,
                 )
             except Exception as e:
-                click.secho(
-                    f"  Warning: field extraction failed for {source.name}: {e}",
-                    fg="red",
-                )
+                shutil.rmtree(staging, ignore_errors=True)
+                click.secho(f"  Error: {step} failed for {source.name}: {e}", fg="red")
                 failed += 1
                 continue
+            final = vault / pipeline.default_path / ASSETS_DIR / sha
+            _commit(staging, final, source, keep_original=keep_original)
             try:
                 render_note(
                     final, overwrite=overwrite, note_index=None, pipeline=pipeline
@@ -204,8 +239,6 @@ def _classify_and_consume_root(
             except Exception as e:
                 click.secho(f"  Warning: note rendering failed: {e}", fg="red")
             consumed += 1
-    finally:
-        shutil.rmtree(staging_root, ignore_errors=True)  # leave nothing behind
     return consumed, skipped, failed
 
 
@@ -298,11 +331,15 @@ def _filter_intact(sources: list[Path]) -> tuple[list[Path], int]:
     return intact, truncated
 
 
-def _fail_on_truncated(truncated: int) -> None:
+def _fail_if_any(*, truncated: int, failed: int) -> None:
+    """Exit non-zero after the whole batch ran, so the pass reports it."""
+    problems = []
     if truncated:
-        raise click.ClickException(
-            f"{truncated} truncated source file(s) left in the inbox (see above)"
-        )
+        problems.append(f"{truncated} truncated source file(s) left in the inbox")
+    if failed:
+        problems.append(f"{failed} source file(s) failed")
+    if problems:
+        raise click.ClickException("; ".join(problems) + " (see above)")
 
 
 def _print_summary(consumed: int, skipped: int, failed: int = 0) -> None:
@@ -399,7 +436,7 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
             Mistral(api_key=mistral_api_key) as mistral_client,
             OpenAI(api_key=openai_api_key) as openai_client,
         ):
-            consumed, skipped = _consume_path(
+            consumed, skipped, failed = _consume_path(
                 vault,
                 path,
                 sources,
@@ -411,8 +448,8 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
                 keep_original=keep_original,
                 overwrite=overwrite,
             )
-        _print_summary(consumed, skipped)
-        _fail_on_truncated(truncated)
+        _print_summary(consumed, skipped, failed)
+        _fail_if_any(truncated=truncated, failed=failed)
 
     consume.__doc__ = pipeline.help_consume
     return consume
@@ -477,6 +514,7 @@ def consume_all(
             ) from e
     vault = Path(ctx.obj["vault"])
     truncated = 0
+    failed = 0
     with (
         Mistral(api_key=mistral_api_key) as mistral_client,
         OpenAI(api_key=openai_api_key) as openai_client,
@@ -492,7 +530,7 @@ def consume_all(
                 _filter_stable(resolve_sources((str(type_inbox),)), min_age)
             )
             truncated += n
-            consumed, skipped = _consume_path(
+            consumed, skipped, n = _consume_path(
                 vault,
                 path,
                 sources,
@@ -504,7 +542,8 @@ def consume_all(
                 keep_original=keep_original,
                 overwrite=overwrite,
             )
-            _print_summary(consumed, skipped)
+            failed += n
+            _print_summary(consumed, skipped, n)
 
         if classify:
             click.secho("\n=== Unsorted (classify) ===", bold=True)
@@ -515,7 +554,7 @@ def consume_all(
             if not root_sources:
                 click.secho("  No loose files in the inbox root.", fg="yellow")
             else:
-                consumed, skipped, failed = _classify_and_consume_root(
+                consumed, skipped, n = _classify_and_consume_root(
                     vault,
                     root_sources,
                     mistral_client=mistral_client,
@@ -526,5 +565,6 @@ def consume_all(
                     keep_original=keep_original,
                     overwrite=overwrite,
                 )
-                _print_summary(consumed, skipped, failed)
-    _fail_on_truncated(truncated)
+                failed += n
+                _print_summary(consumed, skipped, n)
+    _fail_if_any(truncated=truncated, failed=failed)
