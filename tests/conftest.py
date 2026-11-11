@@ -44,6 +44,17 @@ def _accept_fake_pdfs(request, monkeypatch):
         )
 
 
+@pytest.fixture(autouse=True)
+def _restore_pipeline_registry():
+    """Constructing a Pipeline registers it globally; undo any a test adds, so
+    consume doesn't run the same type dir twice in later tests."""
+    from obagent.lib.pipeline import Pipeline
+
+    saved = list(Pipeline._registry)
+    yield
+    Pipeline._registry[:] = saved
+
+
 def staged(*targets: Path):
     """``side_effect`` for a mocked ``ingest_source``: hand out ``targets`` in turn
     (the last one repeats), creating each — consume renames the staged asset dir

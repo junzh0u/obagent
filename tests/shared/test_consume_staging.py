@@ -63,9 +63,7 @@ def test_typed_failure_leaves_no_asset_and_keeps_the_source(
     result = _invoke(runner, vault, tmp_path / "inbox", "--no-classify")
 
     assert result.exit_code == 1, result.output
-    assert (
-        "source file(s) failed" in result.output
-    )  # count not pinned: other tests register extra pipelines
+    assert "1 source file(s) failed" in result.output
     assert src.exists()
     assert not _asset(vault, "Documents", b"scan").exists()
     assert not (vault / STAGING_PATH).exists()
