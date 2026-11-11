@@ -257,6 +257,54 @@ def _filter_stable(sources: list[Path], min_age: int) -> list[Path]:
     return stable
 
 
+# A complete PDF ends with %%EOF. Readers tolerate trailing junk, and some
+# scanners pad the file with hundreds of KB of NULs after it, so strip padding
+# and look in the tail rather than demanding %%EOF as the last bytes.
+_PDF_EOF = b"%%EOF"
+_PDF_TAIL = 1024
+_PDF_PADDING = b"\x00\t\n\r\f "
+
+
+def _is_truncated(source: Path) -> bool:
+    """True when ``source`` is a PDF missing its ``%%EOF`` trailer (cut-off upload)."""
+    if source.suffix.lower() != ".pdf":
+        return False
+    try:
+        data = source.read_bytes()  # scans are ~1 MB; ingest reads it all anyway
+    except OSError:
+        return False  # unreadable: let ingest surface the real error
+    return _PDF_EOF not in data.rstrip(_PDF_PADDING)[-_PDF_TAIL:]
+
+
+def _filter_intact(sources: list[Path]) -> tuple[list[Path], int]:
+    """Drop truncated PDFs, leaving them in the inbox. Returns (intact, n_truncated).
+
+    A scanner can upload a cut-off PDF whose size never changes, so the
+    ``--min-age`` gate can't catch it, and once ingested it would be moved out of
+    the inbox and OCR-rejected, losing the only copy. Skipping keeps it visible;
+    the caller fails the run so the operator rescans it.
+    """
+    intact, truncated = [], 0
+    for s in sources:
+        if _is_truncated(s):
+            click.secho(
+                f"  Error: {s} is truncated (no %%EOF) — left in the inbox; rescan it "
+                "and delete this copy.",
+                fg="red",
+            )
+            truncated += 1
+        else:
+            intact.append(s)
+    return intact, truncated
+
+
+def _fail_on_truncated(truncated: int) -> None:
+    if truncated:
+        raise click.ClickException(
+            f"{truncated} truncated source file(s) left in the inbox (see above)"
+        )
+
+
 def _print_summary(consumed: int, skipped: int, failed: int = 0) -> None:
     total = consumed + skipped + failed
     summary = f"{consumed} consumed, {skipped} already in vault"
@@ -346,7 +394,7 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
         sources = _resolve_consume_sources(paths, input_dir, path)
         if sources is None:
             return
-        sources = _filter_stable(sources, min_age)
+        sources, truncated = _filter_intact(_filter_stable(sources, min_age))
         with (
             Mistral(api_key=mistral_api_key) as mistral_client,
             OpenAI(api_key=openai_api_key) as openai_client,
@@ -364,6 +412,7 @@ def make_consume_command(*, pipeline: Pipeline) -> click.Command:
                 overwrite=overwrite,
             )
         _print_summary(consumed, skipped)
+        _fail_on_truncated(truncated)
 
     consume.__doc__ = pipeline.help_consume
     return consume
@@ -427,6 +476,7 @@ def consume_all(
                 f"Prehook failed with exit code {e.returncode}"
             ) from e
     vault = Path(ctx.obj["vault"])
+    truncated = 0
     with (
         Mistral(api_key=mistral_api_key) as mistral_client,
         OpenAI(api_key=openai_api_key) as openai_client,
@@ -438,7 +488,10 @@ def consume_all(
             if not type_inbox.is_dir():
                 click.secho(f"  No inbox at {type_inbox}, skipping.", fg="yellow")
                 continue
-            sources = _filter_stable(resolve_sources((str(type_inbox),)), min_age)
+            sources, n = _filter_intact(
+                _filter_stable(resolve_sources((str(type_inbox),)), min_age)
+            )
+            truncated += n
             consumed, skipped = _consume_path(
                 vault,
                 path,
@@ -455,7 +508,10 @@ def consume_all(
 
         if classify:
             click.secho("\n=== Unsorted (classify) ===", bold=True)
-            root_sources = _filter_stable(_root_loose_sources(input_dir), min_age)
+            root_sources, n = _filter_intact(
+                _filter_stable(_root_loose_sources(input_dir), min_age)
+            )
+            truncated += n
             if not root_sources:
                 click.secho("  No loose files in the inbox root.", fg="yellow")
             else:
@@ -471,3 +527,4 @@ def consume_all(
                     overwrite=overwrite,
                 )
                 _print_summary(consumed, skipped, failed)
+    _fail_on_truncated(truncated)

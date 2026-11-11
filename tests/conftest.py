@@ -27,6 +27,22 @@ needs_case_sensitive_fs = pytest.mark.skipif(
 )
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "real_pdf_check: run consume's truncated-PDF check unstubbed"
+    )
+
+
+@pytest.fixture(autouse=True)
+def _accept_fake_pdfs(request, monkeypatch):
+    """Consume tests write placeholder bytes (``b"data"``) to ``*.pdf`` files, which
+    the truncated-PDF check would reject; stub it unless a test opts in."""
+    if request.node.get_closest_marker("real_pdf_check") is None:
+        monkeypatch.setattr(
+            "obagent.commands.consume._is_truncated", lambda _source: False
+        )
+
+
 @pytest.fixture
 def runner():
     return CliRunner()
