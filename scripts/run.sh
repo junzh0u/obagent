@@ -8,7 +8,10 @@
 # Steps are isolated (one failing does not abort the others). Each is framed with
 # a ▶ start / ✓ done / ✗ FAILED marker + elapsed time; sub-output is indented and
 # de-noised. A pass with any failed step prints a ✗ summary and exits non-zero, so
-# problems are easy to spot in the log.
+# problems are easy to spot in the log. A clean pass that leaves files quarantined
+# in the inbox's _failed/ ends on a ⚠ line saying how many and exits 3: nothing
+# failed, but someone has to look. A scheduler wrapper can report that status as
+# a warning rather than a failure.
 #
 # Required env:
 #   OBAGENT_VAULT     vault dir (contains Receipts/, Documents/, ...)
@@ -126,6 +129,13 @@ if command -v flock >/dev/null 2>&1; then
     flock -n 9 || { printf '%s  skipped — another run in progress\n' "$(ts)"; exit 0; }
 fi
 
+# Files consume quarantined in the inbox's _failed/, not counting their .error.txt
+# notes (or Synology's @eaDir metadata).
+quarantined() {
+    [ -n "${OBAGENT_CONSUME:-}" ] && [ -d "$OBAGENT_CONSUME/_failed" ] || { echo 0; return 0; }
+    find "$OBAGENT_CONSUME/_failed" -type f ! -name '*.error.txt' ! -path '*/@eaDir/*' | wc -l | tr -d ' '
+}
+
 run_pass() {
     pass_start=$(date +%s)
     printf '\n%s──────── %s ────────%s\n' "$C_B" "$(ts)" "$C_0"
@@ -142,6 +152,12 @@ run_pass() {
         printf '  %s✗ pass FAILED: %s (%ss)%s\n' "$C_R" "$FAILED" "$el" "$C_0"
         return 1
     fi
+    n=$(quarantined)
+    if [ "$n" -gt 0 ]; then
+        printf '  ✓ pass complete (%ss)\n' "$el"
+        printf '⚠ %s file(s) quarantined in %s/_failed/\n' "$n" "$OBAGENT_CONSUME"
+        return 3
+    fi
     printf '  %s✓ pass complete (%ss)%s\n' "$C_G" "$el" "$C_0"
     return 0
 }
@@ -149,9 +165,9 @@ run_pass() {
 # Pass history: scheduled (non-tty) runs also record themselves to $PASS_LOG —
 # a clean pass appends one summary line, a failed pass appends its full output —
 # so failures are diagnosable after DSM's per-run logs rotate away. It is
-# machine-local state (XDG state dir), not vault or Drive content: inspect.sh
-# reads it on the same host, and syncing a file rewritten every 5 min to Drive
-# only churned Cloud Sync. Interactive runs skip it: the operator is watching,
+# machine-local state (XDG state dir), not vault or Drive content: it is read on
+# the same host, and syncing a file rewritten every 5 min to Drive only churned
+# Cloud Sync. Interactive runs skip it: the operator is watching,
 # and the output would carry color codes.
 PASS_LOG="${OBAGENT_PASS_LOG:-${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}/obagent/pass-history.log}"
 if [ -z "${PASS_LOG:-}" ] || [ -t 1 ]; then
@@ -184,7 +200,7 @@ mkdir -p "$(dirname "$PASS_LOG")"
 pass_out="$(mktemp)"; pass_rcf="$(mktemp)"  # names must not collide with step()'s locals
 { run_pass; echo $? >"$pass_rcf"; } 2>&1 | tee "$pass_out"
 rc=$(cat "$pass_rcf")
-if [ "$rc" -eq 0 ]; then
+if [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]; then  # 3: clean, files quarantined
     printf '%s %s\n' "$(ts)" "$(tail -n 1 "$pass_out")" >>"$PASS_LOG"
     snapshot obagent-last-success.log <"$pass_out"
 else

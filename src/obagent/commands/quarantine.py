@@ -6,8 +6,9 @@ every pass forever, so after ``max_attempts`` consecutive failures of the same
 bytes (by sha) — or at once, for a file known to be unrecoverable — it is moved to
 ``{inbox root}/_failed/`` beside a ``.error.txt`` note saying why. Consume never
 scans ``_failed/`` (it reads only loose root files and the type subdirs), and
-``scripts/inspect.sh`` reports a non-empty one to the operator, who moves a file
-back into the inbox to retry it or deletes it to give up.
+``scripts/run.sh`` ends each clean pass on exit 3 while it is non-empty, so the
+operator hears of it and moves a file back into the inbox to retry it or deletes
+it to give up.
 
 Attempt counts live in ``{vault}/.obagent/consume-failures.json``, keyed by sha;
 a success, a duplicate skip, or the move itself clears the entry, so a file moved

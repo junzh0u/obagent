@@ -141,13 +141,11 @@ Optional:
 | Variable | Default | Purpose |
 |---|---|---|
 | `OBAGENT_MIN_AGE` | `60` in `run.sh` (the `--min-age` flag itself defaults to `0`) | consume skips files modified within N seconds |
-| `OBAGENT_CONSUME_MAX_ATTEMPTS` | `12` | consume moves a source that failed this many runs in a row to `$OBAGENT_CONSUME/_failed/` (`0` = never); `inspect.sh` reports it |
+| `OBAGENT_CONSUME_MAX_ATTEMPTS` | `12` | consume moves a source that failed this many runs in a row to `$OBAGENT_CONSUME/_failed/` (`0` = never); a clean pass then exits 3 |
 | `OBAGENT_CONSUME_PREHOOK` | — | shell command run before the consume loop (email sync, scanner pull, …) |
 | `OBAGENT_LOCK` | `$OBAGENT_VAULT/.obagent/run.lock` | `run.sh` no-overlap lockfile |
 | `OBAGENT_PASS_LOG` | `${XDG_STATE_HOME:-~/.local/state}/obagent/pass-history.log` | pass history for scheduled runs |
 | `OBAGENT_STATUS_DIR` | `$OBAGENT_EXPORT/../logs` | latest-outcome mirror; set empty to disable |
-| `OBAGENT_INSPECT_WINDOW_HOURS` | `24` | `inspect.sh` lookback window |
-| `OBAGENT_INSPECT_STALE_MINUTES` | `30` | `inspect.sh` treats an older log mtime as a dead schedule |
 | `OBAGENT_GIT_NAME` | `obagent` | `publish.sh` commit author — used only if the vault repo has no identity |
 | `OBAGENT_GIT_EMAIL` | `obagent@localhost` | `publish.sh` commit email — same condition |
 
@@ -202,32 +200,19 @@ to the Drive `consume/` folder id and run `install()` once (creates the labels +
 `consume/{Receipts,Documents}/`, which this same Cloud Sync pulls down. See
 `plans/2026-06-29-email-ingest.md`.
 
-## 12. (Optional) Daily health inspection
+## 12. Pass health
 Scheduled runs of `run.sh` append a pass history to
 `~/.local/state/obagent/pass-history.log` (machine-local state — one line per clean
 pass, full output per failed one; override with `OBAGENT_PASS_LOG`), and mirror the
 latest outcome to `$OBAGENT_EXPORT/../logs/obagent-last-{success,failure}.log`
 (full output of that pass, overwritten each time; `OBAGENT_STATUS_DIR` to move or
-disable them) so pass health is visible from Drive. `scripts/inspect.sh`
-reads it and exits 0 when healthy; on failed passes or a stale log (= the 5-min
-schedule itself died) it has Claude (headless `claude -p`) diagnose, attempt a
-trivial safe fix (permissions, stale lock — never data deletion or code changes)
-and verify with one pass, then exits non-zero either way so the report always goes out:
-3 when failed passes were the only problem and the latest pass is clean with the
-vault pushed (recovered), 1 otherwise.
+disable them) so pass health is visible from Drive.
 
-Create a second entry script in your dotfiles (same env wrapper pattern as §8,
-`exec`ing `scripts/inspect.sh`), then a daily DSM task for it: **Task Scheduler →
-Create → Scheduled Task → User-defined script**, **User** = you, **Schedule** =
-daily (e.g. 8:45), **Run command** = the entry script, and under **Settings** check
-**Send run details by email** + **only when the script terminates abnormally**
-(requires Control Panel → Notification → Email to be configured). The non-zero
-exit is what turns the diagnosis into an email — a quiet day sends nothing.
-
-To test the channel end to end: `touch <repo>/.inspect-test-notification`, then
-run the task once from Task Scheduler (**Run**) — the script exits 1 immediately
-with a test message as the body (the flag self-clears), so a test email arrives
-without a real failure or a Claude run.
+`run.sh` exits non-zero when a step failed, and 3 when the pass was clean but
+files sit quarantined in `$OBAGENT_CONSUME/_failed/` (its last line says how
+many). With the DSM task's **Send run details by email** + **only when the script
+terminates abnormally**, a failed pass mails you. A standing quarantine would too,
+every 5 minutes: have the entry script report exit 3 as a warning, or map it to 0.
 
 ## Updating later
 Nothing to do: each pass fast-forwards this checkout from its upstream (`code
